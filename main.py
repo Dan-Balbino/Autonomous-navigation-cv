@@ -1,5 +1,4 @@
 import threading
-
 import cv2
 import numpy as np
 import serial
@@ -30,6 +29,25 @@ def pidHub(erro, pid_straight, pid_curve, dt=0.2):
     if -panel.get("IMAGEM", "Erro de transição") < erro < panel.get("IMAGEM", "Erro de transição"):
         return pid_straight.update(erro, dt=dt)
     return pid_curve.update(erro, dt=dt)
+
+def processLane(roi_h, roi_w, limiar, limiar_bgr):
+    error = 0
+    mid_y         = ROI_H // 2
+    row           = limiar[mid_y]
+    left_indices  = np.where(row[:ROI_W // 2] == 255)[0]
+    right_indices = np.where(row[ROI_W // 2:] == 255)[0]
+
+    if len(left_indices) > 0 and len(right_indices) > 0:
+        left_x  = left_indices[-1]
+        right_x = right_indices[0] + (ROI_W // 2)
+        mid_x   = (left_x + right_x) // 2
+        error    = mid_x - (ROI_W // 2)
+
+        cv2.line(limiar_bgr, (left_x, mid_y), (right_x, mid_y), (100, 100, 100), 2)
+        cv2.circle(limiar_bgr, (mid_x, mid_y), 5, (0, 255, 0), -1)
+        cv2.circle(limiar_bgr, (ROI_W // 2, round(ROI_H * 0.9)), 5, (0, 0, 255), -1)
+        
+    return error, limiar_bgr
 
 
 def main_loop():
@@ -104,20 +122,7 @@ def main_loop():
         _, limiar = cv2.threshold(gray, limiar_value, 255, cv2.THRESH_BINARY)
         limiar_bgr = cv2.cvtColor(limiar, cv2.COLOR_GRAY2BGR)
 
-        mid_y         = ROI_H // 2
-        row           = limiar[mid_y]
-        left_indices  = np.where(row[:ROI_W // 2] == 255)[0]
-        right_indices = np.where(row[ROI_W // 2:] == 255)[0]
-
-        if len(left_indices) > 0 and len(right_indices) > 0:
-            left_x  = left_indices[-1]
-            right_x = right_indices[0] + (ROI_W // 2)
-            mid_x   = (left_x + right_x) // 2
-            error    = mid_x - (ROI_W // 2)
-
-            cv2.line(limiar_bgr, (left_x, mid_y), (right_x, mid_y), (100, 100, 100), 2)
-            cv2.circle(limiar_bgr, (mid_x, mid_y), 5, (0, 255, 0), -1)
-            cv2.circle(limiar_bgr, (ROI_W // 2, round(ROI_H * 0.9)), 5, (0, 0, 255), -1)
+        error, limiar_bgr = processLane(ROI_H, ROI_W, limiar, limiar_bgr)
 
         # ── Envio de dados para o Arduino ─────────────────────────────
         if run:
@@ -214,4 +219,3 @@ t = threading.Thread(target=main_loop, daemon=True)
 t.start()
 
 panel.run()
-
