@@ -30,6 +30,7 @@ class ControlPanel:
     def _parar(self):
         self.running = False
         print("[LOG] Parando movimento")
+        
     def _salvar(self):
         with open("config.json", "w") as f:
             json.dump({k: var.get() for k, var in self.vars.items()}, f, indent=4)

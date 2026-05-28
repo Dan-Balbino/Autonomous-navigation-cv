@@ -7,6 +7,7 @@ from PID import PID
 import time
 from CtrlPanel import ControlPanel
 import threading
+from imageProcess import processLane
 
 
 def getFrameDimensions(frame, prop):
@@ -29,25 +30,6 @@ def pidHub(erro, pid_straight, pid_curve, dt=0.2):
     if -panel.get("IMAGEM", "Erro de transição") < erro < panel.get("IMAGEM", "Erro de transição"):
         return pid_straight.update(erro, dt=dt)
     return pid_curve.update(erro, dt=dt)
-
-def processLane(roi_h, roi_w, limiar, limiar_bgr):
-    error = 0
-    mid_y         = ROI_H // 2
-    row           = limiar[mid_y]
-    left_indices  = np.where(row[:ROI_W // 2] == 255)[0]
-    right_indices = np.where(row[ROI_W // 2:] == 255)[0]
-
-    if len(left_indices) > 0 and len(right_indices) > 0:
-        left_x  = left_indices[-1]
-        right_x = right_indices[0] + (ROI_W // 2)
-        mid_x   = (left_x + right_x) // 2
-        error    = mid_x - (ROI_W // 2)
-
-        cv2.line(limiar_bgr, (left_x, mid_y), (right_x, mid_y), (100, 100, 100), 2)
-        cv2.circle(limiar_bgr, (mid_x, mid_y), 5, (0, 255, 0), -1)
-        cv2.circle(limiar_bgr, (ROI_W // 2, round(ROI_H * 0.9)), 5, (0, 0, 255), -1)
-        
-    return error, limiar_bgr
 
 
 def main_loop():
@@ -142,9 +124,21 @@ def main_loop():
                 "M3":        vel,
                 "M4":        vel,
             }
-
-            msg = json.dumps(data) + '\n'
-            ser.write(msg.encode('utf-8'))
+        else:
+            data = {
+                "DEVIATION": False,
+                "STOP":      False,
+                "SG":        False,
+                "SV":        False,
+                "SERVO":     90,
+                "M1":        0,
+                "M2":        0,
+                "M3":        0,
+                "M4":        0,
+            }
+        
+        msg = json.dumps(data) + '\n'
+        ser.write(msg.encode('utf-8'))
 
         if ser.in_waiting:
             response = ser.readline().decode('utf-8', errors='ignore').strip()
@@ -168,19 +162,19 @@ def main_loop():
         cv2.putText(info, f"Vel:   {vel}",               (20, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
 
         # ── coluna 2 — PID reta ──
-        cv2.putText(info, "PID RETA",                                                    (340, 25),  cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 1)
-        cv2.putText(info, f"Kp: {kp_straight:.2f}",                                         (340, 55),  cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-        cv2.putText(info, f"Ki: {ki_straight:.3f}",                                         (340, 85),  cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-        cv2.putText(info, f"Kd: {kd_straight:.2f}",                                         (340, 115), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+        cv2.putText(info, "PID RETA", (340, 25),  cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 1)
+        cv2.putText(info, f"Kp: {kp_straight:.2f}", (340, 55),  cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+        cv2.putText(info, f"Ki: {ki_straight:.3f}", (340, 85),  cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+        cv2.putText(info, f"Kd: {kd_straight:.2f}", (340, 115), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
 
         # ── coluna 3 — PID curva ──
-        cv2.putText(info, "PID CURVA",                                                   (580, 25),  cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 1)
-        cv2.putText(info, f"Kp: {kp_curve:.2f}",                                        (580, 55),  cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-        cv2.putText(info, f"Ki: {ki_curve:.3f}",                                        (580, 85),  cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-        cv2.putText(info, f"Kd: {kd_curve:.2f}",                                        (580, 115), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+        cv2.putText(info, "PID CURVA", (580, 25),  cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 1)
+        cv2.putText(info, f"Kp: {kp_curve:.2f}", (580, 55),  cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+        cv2.putText(info, f"Ki: {ki_curve:.3f}", (580, 85),  cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+        cv2.putText(info, f"Kd: {kd_curve:.2f}", (580, 115), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
         # ── coluna 4 — RX Arduino ──
-        cv2.putText(info, "RX ARDUINO",  (790, 25),  cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 180, 180), 1)
+        cv2.putText(info, "RX ARDUINO", (790, 25),  cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 180, 180), 1)
         cv2.putText(info, last_rx[:20], (790, 65),  cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 128),   2)
         cv2.putText(info, "STATUS ", (790, 105), cv2.FONT_HERSHEY_SIMPLEX,  0.6, (180, 180, 180), 1)
         cv2.putText(info, "RUNNING" if run else "STOPPED", (790, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 128) if run else (0, 0, 255), 2)
@@ -212,7 +206,7 @@ pid_curve = PID(Kp=0, Ki=0, Kd=0, output_limit=90.0)
 
 ROI_W = 320
 ROI_H = 240
-COM = "COM5"
+COM = "COM20"
 
 panel = ControlPanel()
 t = threading.Thread(target=main_loop, daemon=True)

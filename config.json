@@ -5,10 +5,10 @@
     "ROI_Altura inf": 541,
     "IMAGEM_Limiar": 195,
     "IMAGEM_Erro de transi\u00e7\u00e3o": 12,
-    "RETA_Kp": 200,
+    "RETA_Kp": 150,
     "RETA_Ki": 0,
     "RETA_Kd": 5,
-    "CURVA_Kp": 650,
+    "CURVA_Kp": 300,
     "CURVA_Ki": 0,
     "CURVA_Kd": 0,
     "PAR\u00c2METROS DO CARRO_Vel": 30
