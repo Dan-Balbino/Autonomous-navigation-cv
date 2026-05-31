@@ -8,13 +8,8 @@ import serial
 
 from PID import PID
 from CtrlPanel import ControlPanel
-from imageProcess import processLane
+from imageProcess import laneDetectionPipeline, getFrameDimensions
 from hud import drawDots, addInfo
-
-
-def getFrameDimensions(frame, prop):
-    height, width = round(frame.shape[0] / prop), round(frame.shape[1] / prop)
-    return height, width
 
 
 def pidHub(erro, pid_straight, pid_curve, dt=0.2):
@@ -96,7 +91,7 @@ def mainLoop():
         _, limiar = cv2.threshold(gray, limiar_value, 255, cv2.THRESH_BINARY)
         limiar_bgr = cv2.cvtColor(limiar, cv2.COLOR_GRAY2BGR)
 
-        error, limiar_bgr = processLane(ROI_H, ROI_W, limiar, limiar_bgr, last_error=error)
+        error, limiar_bgr = laneDetectionPipeline(ROI_H, ROI_W, limiar, limiar_bgr, last_error=error)
 
         # ── Envio de dados para o Arduino ─────────────────────────────
         if run:
