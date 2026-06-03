@@ -6,6 +6,7 @@ import time
 
 class ControlPanel:
     def __init__(self, width, height):
+        self.config_path = "config/config.json"
         self.root = tk.Tk()
         self.root.title("Controles")
         self.root.configure(bg="#1e1e2e")
@@ -34,12 +35,12 @@ class ControlPanel:
         self.log("[CONTROLE MANUAL] veículo parado pelo painel de controle", "warn")
 
     def _salvar(self):
-        with open("config.json", "w") as f:
+        with open(self.config_path, "w") as f:
             json.dump({k: var.get() for k, var in self.vars.items()}, f, indent=4)
         self.log("[PAINEL] Configurações salvas", "info")
 
     def _resetar(self):
-        config_path = "config.json"
+        config_path = self.config_path
         if not os.path.exists(config_path):
             self.log("[PAINEL] Nenhum config.json encontrado", "error")
             return
@@ -59,7 +60,7 @@ class ControlPanel:
         self.on("salvar",   self._salvar)
 
     def _build_ui(self):
-        config_path = "config.json"
+        config_path = self.config_path
         config = {}
         if os.path.exists(config_path):
             with open(config_path, "r") as f:

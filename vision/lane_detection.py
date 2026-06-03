@@ -3,7 +3,7 @@ import numpy as np
 
 track_size = 200
 
-def laneDetectionPipeline(roi_h, roi_w, limiar, limiar_bgr, last_error=0):
+def lane_detection_pipeline(roi_h, roi_w, limiar, limiar_bgr, last_error=0):
     global track_size
     
     # Inicializa o centro da pista e o erro
@@ -18,17 +18,17 @@ def laneDetectionPipeline(roi_h, roi_w, limiar, limiar_bgr, last_error=0):
     # left_lane, right_lane, left_valid, right_valid = detectLanes(limiar, roi_h // 2, roi_w, minimum_limit, True)
     
     # Realiza uma busca por janelas deslizantes para detectar as faixas na imagem limiarizada
-    left_lane, right_lane, left_valid, right_valid = slidingWindowSearch(limiar, roi_h // 2, roi_w, minimum_limit, num_windows=3)
+    left_lane, right_lane, left_valid, right_valid = sliding_window_search(limiar, roi_h // 2, roi_w, minimum_limit, num_windows=3)
     
     if track_size == 0:
         track_size = right_lane - left_lane
     
     # Processa a detecção das faixas e calcula o erro de acordo com os casos possíveis
-    error, limiar_bgr, lane_state, track_size, track_center =  processLanes(left_lane, right_lane, left_valid, right_valid, roi_w, reference_line_y, limiar_bgr, last_error, track_size)
+    error, limiar_bgr, lane_state, track_size, track_center =  process_lanes(left_lane, right_lane, left_valid, right_valid, roi_w, reference_line_y, limiar_bgr, last_error, track_size)
     
     # Desenha um círculo verde no centro da pista 
     if(track_center != 0):
-        cv2.circle(limiar_bgr, (track_center, mid_y + (mid_y // 2)), 5, (0, 255, 0), -1)
+        cv2.circle(limiar_bgr, (track_center, reference_line_y), 5, (0, 255, 0), -1)
     
     # Desenha um círculo vermelho no ponto de referência para o cálculo do erro
     cv2.circle(limiar_bgr, (roi_w // 2, round(roi_h * 0.9)), 5, (0, 0, 255), -1)
@@ -36,7 +36,7 @@ def laneDetectionPipeline(roi_h, roi_w, limiar, limiar_bgr, last_error=0):
     return error, limiar_bgr, lane_state
 
 
-def slidingWindowSearch(limiar, height, width, limit, num_windows=1):
+def sliding_window_search(limiar, height, width, limit, num_windows=1):
     # Realiza uma busca por janelas deslizantes para detectar as faixas na imagem limiarizada, retornando a posição média das faixas detectadas e se cada uma é válida ou não
     right_lanes_pos = []
     left_lanes_pos = []
@@ -49,7 +49,7 @@ def slidingWindowSearch(limiar, height, width, limit, num_windows=1):
         start_y = height - (window + 1) * window_height
         end_y = height - window * window_height
         
-        left_lane, right_lane, left_valid, right_valid = detectLanes(limiar[start_y:end_y], window_height, width, limit)
+        left_lane, right_lane, left_valid, right_valid = detect_lanes(limiar[start_y:end_y], window_height, width, limit)
  
         if left_valid:
             left_lanes_pos.append(left_lane)
@@ -61,7 +61,7 @@ def slidingWindowSearch(limiar, height, width, limit, num_windows=1):
     return int(np.mean(left_lanes_pos)) if left_lanes_pos else 0, int(np.mean(right_lanes_pos)) if right_lanes_pos else width, bool(left_lanes_pos), bool(right_lanes_pos)
 
 
-def detectLanes(limiar, height, width, limit, slice_image=False):
+def detect_lanes(limiar, height, width, limit, slice_image=False):
     # Conta o número de pixels brancos em cada coluna da imagem limiarizada a partir da metade inferior da ROI
     if slice_image:
         white_pixels_per_column = [cv2.countNonZero(limiar[height:, i]) for i in range(width)]
@@ -83,7 +83,7 @@ def detectLanes(limiar, height, width, limit, slice_image=False):
     return left_lane, right_lane, left_valid, right_valid
 
 
-def processLanes(left_lane, right_lane, left_valid, right_valid, roi_w, reference_line_y, limiar_bgr, last_error, track_size=0):
+def process_lanes(left_lane, right_lane, left_valid, right_valid, roi_w, reference_line_y, limiar_bgr, last_error, track_size=0):
     track_center = 0
     
     # Caso 1 - Duas faixas detectadas
@@ -130,7 +130,9 @@ def processLanes(left_lane, right_lane, left_valid, right_valid, roi_w, referenc
     return error, limiar_bgr, lane_state, track_size, track_center
 
 
-def getFrameDimensions(frame, prop):
+def get_frame_dimensions(frame, prop):
     # Retorna as dimensões da imagem
     height, width = round(frame.shape[0] / prop), round(frame.shape[1] / prop)
     return height, width
+
+

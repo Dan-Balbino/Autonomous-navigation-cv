@@ -6,10 +6,11 @@ import cv2
 import numpy as np
 import serial
 
-from PID import PID
-from CtrlPanel import ControlPanel
-from imageProcess import laneDetectionPipeline, getFrameDimensions
+from pid import PID
+from ctrl_panel import ControlPanel
+from vision.lane_detection import lane_detection_pipeline, get_frame_dimensions
 from hud import drawDots, addInfo
+from vision.calibration import FisheyeCorrector
 
 
 def pidHub(erro, pid_straight, pid_curve, dt=0.2):
@@ -36,6 +37,7 @@ def mainLoop():
         if not ret:
             break
 
+        frame = corrector.correct(frame)
         img = frame.copy()
 
         # ── Leitura dos controles ─────────────────────────────
@@ -91,7 +93,7 @@ def mainLoop():
         _, limiar = cv2.threshold(gray, limiar_value, 255, cv2.THRESH_BINARY)
         limiar_bgr = cv2.cvtColor(limiar, cv2.COLOR_GRAY2BGR)
 
-        error, limiar_bgr, lane_state = laneDetectionPipeline(ROI_H, ROI_W, limiar, limiar_bgr, last_error=error)
+        error, limiar_bgr, lane_state = lane_detection_pipeline(ROI_H, ROI_W, limiar, limiar_bgr, last_error=error)
 
         # ── Envio de dados para o Arduino ─────────────────────────────
         if run:
@@ -158,8 +160,6 @@ def mainLoop():
     cv2.destroyAllWindows()
 
 cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
 ret, frame = cap.read()
 
@@ -167,14 +167,16 @@ if not ret:
     print("[ERRO] Erro ao abrir câmera.")
     exit()
 
-height, width = getFrameDimensions(frame, 1)
+height, width = get_frame_dimensions(frame, 1)
 
 pid_straight  = PID(Kp=0, Ki=0, Kd=0, output_limit=90.0)
 pid_curve = PID(Kp=0, Ki=0, Kd=0, output_limit=90.0)
 
 ROI_W = 320
 ROI_H = 240
-COM = "COM5"
+COM = "COM3"
+
+corrector = FisheyeCorrector("calibration/fisheye_calibration.npz", width, height, balance=0.5)
 
 panel = ControlPanel(width, height)
 t = threading.Thread(target=mainLoop, daemon=True)

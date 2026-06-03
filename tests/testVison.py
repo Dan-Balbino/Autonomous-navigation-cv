@@ -9,7 +9,7 @@ sys.path.append(
     )
 )
 
-from imageProcess import laneDetectionPipeline
+from vision.lane_detection import lane_detection_pipeline
 
 
 def nothing(x):
@@ -62,7 +62,7 @@ while True:
     bird = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
 
 
-    erro, bird, lane_state = laneDetectionPipeline(ROI_H, ROI_W, thresh, bird, last_error=0)
+    erro, bird, lane_state = lane_detection_pipeline(ROI_H, ROI_W, thresh, bird, last_error=0)
 
     cv2.putText(bird, f"Erro: {erro}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
     cv2.putText(bird, f"Estado da pista: {lane_state}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
