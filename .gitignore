@@ -1,6 +1,8 @@
 # ── Repositórios embutidos (projetos separados) ───────────────────────────────
 AutoCar-DigitalTwin/
 AutoCar-Front/
+eyes-front/
+digital-twin/
 
 # ── Claude / IDE ──────────────────────────────────────────────────────────────
 .claude/
