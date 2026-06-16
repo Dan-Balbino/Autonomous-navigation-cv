@@ -39,7 +39,10 @@ _config: dict = {
     "CURVA_Ki":                       0,
     "CURVA_Kd":                       0,
     "PARÂMETROS DO CARRO_PWM":       30,
-    "DETECTOR_Confiança mín":        40,
+    "DETECTOR_Conf STOP":            40,
+    "DETECTOR_Conf Verde":           40,
+    "DETECTOR_Conf Vermelho":        40,
+    "DETECTOR_Box diagonal":          0,
     "running":                    False,
 }
 _config_updated = False
@@ -329,7 +332,10 @@ const SECTIONS=[
     {key:"PARÂMETROS DO CARRO_PWM",label:"PWM",min:0,max:255},
   ]},
   {title:"DETECTOR",controls:[
-    {key:"DETECTOR_Confiança mín",label:"Confiança mín (%)",min:0,max:100},
+    {key:"DETECTOR_Conf STOP",    label:"Conf STOP (%)",    min:0,max:100},
+    {key:"DETECTOR_Conf Verde",   label:"Conf Verde (%)",   min:0,max:100},
+    {key:"DETECTOR_Conf Vermelho",label:"Conf Vermelho (%)",min:0,max:100},
+    {key:"DETECTOR_Box diagonal", label:"Box diagonal (px)",min:0,max:300},
   ]},
 ];
 

@@ -11,7 +11,10 @@ class SignDetector:
         self._boxes: list     = []
         self._counter         = 0
         self._stop_timer      = 0
-        self._conf_threshold  = max(0.0, min(1.0, conf_threshold))
+        self._conf_stop  = max(0.0, min(1.0, conf_threshold))
+        self._conf_sg    = max(0.0, min(1.0, conf_threshold))
+        self._conf_sv    = max(0.0, min(1.0, conf_threshold))
+        self._min_diag   = 0  # px; 0 = sem filtro
 
         try:
             from ultralytics import YOLO
@@ -26,7 +29,20 @@ class SignDetector:
             print("[Sinais] ultralytics nao instalado: pip install ultralytics==8.3.5")
 
     def set_conf(self, value: float) -> None:
-        self._conf_threshold = max(0.0, min(1.0, value))
+        v = max(0.0, min(1.0, value))
+        self._conf_stop = self._conf_sg = self._conf_sv = v
+
+    def set_conf_stop(self, value: float) -> None:
+        self._conf_stop = max(0.0, min(1.0, value))
+
+    def set_conf_sg(self, value: float) -> None:
+        self._conf_sg = max(0.0, min(1.0, value))
+
+    def set_conf_sv(self, value: float) -> None:
+        self._conf_sv = max(0.0, min(1.0, value))
+
+    def set_min_diag(self, value: int) -> None:
+        self._min_diag = max(0, int(value))
 
     # ── API pública ───────────────────────────────────────────────────────
 
@@ -79,11 +95,26 @@ class SignDetector:
     # ── Interno ───────────────────────────────────────────────────────────
 
     def _predict(self, frame) -> list:
+        base_conf = min(self._conf_stop, self._conf_sg, self._conf_sv)
         out = []
-        for r in self._model.predict(frame, verbose=False, conf=self._conf_threshold):
+        for r in self._model.predict(frame, verbose=False, conf=base_conf):
             for box in r.boxes:
                 x1, y1, x2, y2 = (int(v) for v in box.xyxy[0])
                 label = r.names[int(box.cls[0])]
                 conf  = float(box.conf[0])
+                lbl   = label.lower()
+
+                if "stop" in lbl and conf < self._conf_stop:
+                    continue
+                if "green" in lbl and conf < self._conf_sg:
+                    continue
+                if ("red" in lbl or "yellow" in lbl) and conf < self._conf_sv:
+                    continue
+
+                if self._min_diag > 0:
+                    diag = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
+                    if diag < self._min_diag:
+                        continue
+
                 out.append((x1, y1, x2, y2, label, conf))
         return out

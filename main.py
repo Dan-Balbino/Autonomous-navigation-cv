@@ -106,7 +106,10 @@ def mainLoop():
         y_bot        = panel.get("ROI", "Altura inf")
         limiar_value = panel.get("IMAGEM", "Limiar")
         pwm          = panel.get("PARÂMETROS DO CARRO", "PWM")
-        sign_det.set_conf(panel.get("DETECTOR", "Confiança mín") / 100.0)
+        sign_det.set_conf_stop(panel.get("DETECTOR", "Conf STOP")     / 100.0)
+        sign_det.set_conf_sg(  panel.get("DETECTOR", "Conf Verde")    / 100.0)
+        sign_det.set_conf_sv(  panel.get("DETECTOR", "Conf Vermelho") / 100.0)
+        sign_det.set_min_diag( panel.get("DETECTOR", "Box diagonal"))
 
         kp_straight = panel.get("RETA", "Kp") / 100.0
         ki_straight = panel.get("RETA", "Ki") / 1000.0
@@ -205,8 +208,8 @@ def mainLoop():
                 else:
                     panel.log(f"[TESTE] TX → {msg.strip()}", "tx")
                 panel.log("[CONTROLE MANUAL] veículo parado pelo painel de controle", "warn")
-                last_run = False
-        
+            
+        last_run = run
 
         if ser is not None:
             try:

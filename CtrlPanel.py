@@ -198,7 +198,10 @@ class ControlPanel:
                 ("PWM", config.get("PARÂMETROS DO CARRO_PWM", 40), 0, 255),
             ]),
             ("DETECTOR", [
-                ("Confiança mín", config.get("DETECTOR_Confiança mín", 40), 0, 100),
+                ("Conf STOP",     config.get("DETECTOR_Conf STOP",     40), 0, 100),
+                ("Conf Verde",    config.get("DETECTOR_Conf Verde",    40), 0, 100),
+                ("Conf Vermelho", config.get("DETECTOR_Conf Vermelho", 40), 0, 100),
+                ("Box diagonal",  config.get("DETECTOR_Box diagonal",   0), 0, 300),
             ]),
         ]
 
