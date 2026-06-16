@@ -1,0 +1,15 @@
+{
+    "ROI_Linha superior": 525,
+    "ROI_Linha inferior": 385,
+    "ROI_Altura sup": 192,
+    "ROI_Altura inf": 286,
+    "IMAGEM_Limiar": 217,
+    "IMAGEM_Erro de transi\u00e7\u00e3o": 12,
+    "RETA_Kp": 150,
+    "RETA_Ki": 0,
+    "RETA_Kd": 0,
+    "CURVA_Kp": 207,
+    "CURVA_Ki": 0,
+    "CURVA_Kd": 0,
+    "PAR\u00c2METROS DO CARRO_PWM": 90
+}

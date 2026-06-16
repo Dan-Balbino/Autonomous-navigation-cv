@@ -10,8 +10,8 @@ import numpy as np
 import serial
 
 from PID import PID
-from CtrlPanel import ControlPanel
-from imageProcess import laneDetectionPipeline, getFrameDimensions
+from ctrl_panel import ControlPanel
+from vision.lane_detection import lane_detection_pipeline, get_frame_dimensions
 from hud import drawDots, addInfo
 from signDetector import SignDetector
 from messaging.messaging_core import (
@@ -80,7 +80,7 @@ def mainLoop():
         ret, frame = cap.read()
         if not ret:
             break
-        
+
         frame = corrector.correct(frame)
         img = frame.copy()
 
@@ -156,7 +156,7 @@ def mainLoop():
         _, limiar = cv2.threshold(gray, limiar_value, 255, cv2.THRESH_BINARY)
         limiar_bgr = cv2.cvtColor(limiar, cv2.COLOR_GRAY2BGR)
 
-        error, limiar_bgr, lane_state = laneDetectionPipeline(ROI_H, ROI_W, limiar, limiar_bgr, last_error=error)
+        error, limiar_bgr, lane_state = lane_detection_pipeline(ROI_H, ROI_W, limiar, limiar_bgr, last_error=error)
 
         # ── Digital Twin ──────────────────────────────────────────────
         effective_pwm = (0 if (flag_stop or flag_sv) else pwm) if run else 0
@@ -364,7 +364,7 @@ if not ret:
     print("[ERRO] Falha ao ler o primeiro frame.")
     exit()
 
-height, width = getFrameDimensions(frame, 1)
+height, width = get_frame_dimensions(frame, 1)
 
 pid_straight  = PID(Kp=0, Ki=0, Kd=0, output_limit=90.0)
 pid_curve = PID(Kp=0, Ki=0, Kd=0, output_limit=90.0)

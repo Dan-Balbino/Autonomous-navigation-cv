@@ -46,12 +46,12 @@ class ControlPanel:
             self._push_key("running", False)
 
     def _salvar(self):
-        with open("config.json", "w") as f:
+        with open(self.config_path, "w") as f:
             json.dump({k: var.get() for k, var in self.vars.items()}, f, indent=4)
         self.log("[PAINEL] Configurações salvas", "info")
 
     def _resetar(self):
-        config_path = "config.json"
+        config_path = self.config_path
         if not os.path.exists(config_path):
             self.log("[PAINEL] Nenhum config.json encontrado", "error")
             return
@@ -139,7 +139,7 @@ class ControlPanel:
         self.on("salvar",   self._salvar)
 
     def _build_ui(self):
-        config_path = "config.json"
+        config_path = self.config_path
         config = {}
         if os.path.exists(config_path):
             with open(config_path, "r") as f:
