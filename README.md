@@ -1,4 +1,4 @@
-# AutoCar — SimplifyDetectors
+# Autonomous Navigation
 
 Sistema de visão computacional para veículos autônomos com detecção de faixas, sinais de trânsito e controle PID — comunicação com Arduino via serial.
 
@@ -14,23 +14,6 @@ Sistema de visão computacional para veículos autônomos com detecção de faix
 | Painel de controle | Interface Tkinter com sliders de ROI, PID e log em tempo real |
 | Auto-detecção serial | Lista portas COM disponíveis e pede escolha no terminal |
 | Auto-detecção câmera | Tenta índice 1, fallback para 0 automaticamente |
-
----
-
-## Estrutura
-
-```
-AutoCar-SimplifyDetectors/
-├── main.py            # Loop principal — câmera, serial, dashboard
-├── CtrlPanel.py       # Painel de controle Tkinter
-├── imageProcess.py    # Pipeline de detecção de faixas (sliding window)
-├── signDetector.py    # Detector de sinais YOLOv11
-├── hud.py             # Painel de informações do dashboard
-├── PID.py             # Controlador PID
-├── config.json        # Última configuração salva pelo painel
-└── model/
-    └── traffic_sign_detector.pt   # Baixar separadamente (ver abaixo)
-```
 
 ---
 
