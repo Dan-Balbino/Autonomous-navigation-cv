@@ -8,8 +8,9 @@
     "RETA_Kp": 150,
     "RETA_Ki": 0,
     "RETA_Kd": 0,
-    "CURVA_Kp": 185,
+    "CURVA_Kp": 270,
     "CURVA_Ki": 0,
     "CURVA_Kd": 0,
-    "PAR\u00c2METROS DO CARRO_PWM": 30
+    "PAR\u00c2METROS DO CARRO_PWM": 75,
+    "DETECTOR_Confian\u00e7a m\u00edn": 40
 }

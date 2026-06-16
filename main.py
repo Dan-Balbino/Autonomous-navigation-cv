@@ -69,8 +69,6 @@ def mainLoop():
                 ser = None
                 panel.log("[SERIAL] Modo teste — sem Arduino", "info")
             _nc = cv2.VideoCapture(new_cam_idx, cv2.CAP_DSHOW)
-            _nc.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-            _nc.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
             if _nc.isOpened() and _nc.read()[0]:
                 cap.release()   # só libera a antiga depois de confirmar a nova
                 cap = _nc
@@ -82,7 +80,8 @@ def mainLoop():
         ret, frame = cap.read()
         if not ret:
             break
-
+        
+        frame = corrector.correct(frame)
         img = frame.copy()
 
         # ── Detecção de sinais de trânsito ────────────────────
@@ -206,8 +205,8 @@ def mainLoop():
                 else:
                     panel.log(f"[TESTE] TX → {msg.strip()}", "tx")
                 panel.log("[CONTROLE MANUAL] veículo parado pelo painel de controle", "warn")
-
-        last_run = run
+                last_run = False
+        
 
         if ser is not None:
             try:
@@ -320,8 +319,6 @@ def _open_camera(cam_indices: list[int]) -> tuple[cv2.VideoCapture, int]:
     priority = [idx for idx in (1, 0) if idx in cam_indices] or (1, 0)
     for idx in priority:
         c = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
-        c.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        c.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
         if c.isOpened() and c.read()[0]:
             print(f"{_G}{_B}[CAM]{_RS} Câmera aberta automaticamente no índice {_G}{_B}{idx}{_RS}")
             return c, idx
@@ -376,10 +373,8 @@ sign_det = SignDetector("model/traffic_sign_detector.pt")
 
 _twin_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),"AutoCar-DigitalTwin", "index.html")
 
-try:
-    corrector = FisheyeCorrector("calibration/fisheye_calibration.npz", width, height, balance=0.5)
-except FileNotFoundError:
-    corrector = None
+corrector = FisheyeCorrector("calibration/fisheye_calibration.npz", width, height, balance=0.5)
+
 
 panel = ControlPanel(width, height, test_mode=(COM is None),
                      dashboard_url=f"http://{_dashboard_ip}:{_DASHBOARD_PORT}",
