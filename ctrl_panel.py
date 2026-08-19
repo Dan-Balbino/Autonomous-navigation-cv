@@ -3,6 +3,8 @@ from tkinter import ttk
 import json
 import os
 import time
+import qrcode
+from PIL import ImageTk
 
 class ControlPanel:
     def __init__(self, width, height, test_mode=False, dashboard_url="", twin_path="", initial_cam_idx=1):
@@ -12,6 +14,7 @@ class ControlPanel:
         self.root.geometry("900x750")
         self.root.resizable(True, True)
 
+        self.config_path = "config/config.json"
         self.frame_width  = width
         self.frame_height = height
         self.running      = False
@@ -51,11 +54,10 @@ class ControlPanel:
         self.log("[PAINEL] Configurações salvas", "info")
 
     def _resetar(self):
-        config_path = self.config_path
-        if not os.path.exists(config_path):
+        if not os.path.exists(self.config_path):
             self.log("[PAINEL] Nenhum config.json encontrado", "error")
             return
-        with open(config_path, "r") as f:
+        with open(self.config_path, "r") as f:
             config = json.load(f)
         for key, var in self.vars.items():
             if key in config:
@@ -75,12 +77,6 @@ class ControlPanel:
         return None
 
     def _show_qrcode(self):
-        try:
-            import qrcode
-            from PIL import ImageTk
-        except ImportError:
-            self.log("[QR] Instale: pip install qrcode[pil]", "error")
-            return
         qr = qrcode.QRCode(box_size=6, border=3)
         qr.add_data(self._dashboard_url)
         qr.make(fit=True)

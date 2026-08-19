@@ -1,6 +1,8 @@
 import cv2
 import numpy as np
 
+from hud import drawDots
+
 track_size = 200
 
 def lane_detection_pipeline(roi_h, roi_w, limiar, limiar_bgr, last_error=0):
@@ -136,3 +138,38 @@ def get_frame_dimensions(frame, prop):
     return height, width
 
 
+def extract_bird_eye_view(frame, img, upper, lower, y_top, y_bot, roi_w, roi_h):
+    height, width = frame.shape[:2]
+    cx = width // 2
+
+    # ── Definição dos pontos de perspectiva ─────────────────────────────
+    pts_origin = np.float32([
+        [cx - upper // 2, y_top],
+        [cx + upper // 2, y_top],
+        [cx + lower // 2, y_bot],
+        [cx - lower // 2, y_bot],
+    ])
+
+    pts_destiny = np.float32([
+        [0,      0],
+        [roi_w,  0],
+        [roi_w,  roi_h],
+        [0,      roi_h],
+    ])
+
+    # ── Visualização dos pontos e ROI ─────────────────────────────
+    pts_poly = pts_origin.astype(np.int32).reshape((-1, 1, 2))
+    overlay = img.copy()
+
+    cv2.fillPoly(overlay, [pts_poly], (255, 0, 0))
+    cv2.addWeighted(overlay, 0.3, img, 0.7, 0, img)
+    cv2.polylines(img, [pts_poly], True, (255, 0, 0), 2)
+    drawDots(img, pts_origin, ["P1", "P2", "P3", "P4"])
+
+    # Matriz de perspectiva
+    M = cv2.getPerspectiveTransform(pts_origin, pts_destiny)
+
+    # Bird's Eye View
+    roi = cv2.warpPerspective(frame, M, (roi_w, roi_h))
+    
+    return roi, img

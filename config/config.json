@@ -8,8 +8,12 @@
     "RETA_Kp": 150,
     "RETA_Ki": 0,
     "RETA_Kd": 0,
-    "CURVA_Kp": 207,
+    "CURVA_Kp": 200,
     "CURVA_Ki": 0,
     "CURVA_Kd": 0,
-    "PAR\u00c2METROS DO CARRO_PWM": 90
+    "PAR\u00c2METROS DO CARRO_PWM": 50,
+    "DETECTOR_Conf STOP": 100,
+    "DETECTOR_Conf Verde": 100,
+    "DETECTOR_Conf Vermelho": 100,
+    "DETECTOR_Box diagonal": 300
 }

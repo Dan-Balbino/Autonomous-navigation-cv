@@ -7,7 +7,7 @@ from flask import Flask, jsonify, request, send_from_directory
 app = Flask(__name__)
 
 _TWIN_DIR   = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "AutoCar-DigitalTwin"))
-_CONFIG_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "config.json"))
+_CONFIG_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "config/config.json"))
 
 _lock = threading.Lock()
 

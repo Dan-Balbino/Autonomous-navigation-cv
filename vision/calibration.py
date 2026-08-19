@@ -1,9 +1,18 @@
 import cv2
 import numpy as np
 
+
 class FisheyeCorrector:
 
-    def __init__(self, calibration_file, camera_width, camera_height, balance=0.5):
+    def __init__(
+        self,
+        calibration_file,
+        camera_width,
+        camera_height,
+        balance=0.5,
+        offset_x=0,
+        offset_y=0
+    ):
 
         data = np.load(calibration_file)
 
@@ -17,6 +26,10 @@ class FisheyeCorrector:
             np.eye(3),
             balance=balance
         )
+
+        # Aplica os offsets encontrados nos testes
+        new_K[0, 2] += offset_x
+        new_K[1, 2] += offset_y
 
         self.map1, self.map2 = cv2.fisheye.initUndistortRectifyMap(
             K,
