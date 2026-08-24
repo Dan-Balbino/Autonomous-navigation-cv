@@ -11,7 +11,7 @@ from pid import PID
 from ctrl_panel import ControlPanel
 from vision.lane_detection import lane_detection_pipeline, get_frame_dimensions, extract_bird_eye_view
 from hud import addInfo
-from vision.signDetector import SignDetector
+from vision.traffic_sign_detector import TrafficSignDetector
 from messaging.messaging_core import (
     app as dashboard_app, get_local_ip, update_state, load_config_from_file,
 )
@@ -20,9 +20,6 @@ from config.setup import (
     select_com, scan_usb_devices, open_camera, allow_dashboard_firewall_rule
 )
 from core.car import Car
-
-# Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-# Danilo.BALBINO.intern@3ds.com
 
 # ── Inicialização de variáveis ────────────────────────────
 ROI_W = 320
@@ -67,8 +64,8 @@ allow_dashboard_firewall_rule(DASHBOARD_PORT)
 
 # ── Inicialização dos objetos ───────────────
 corrector = FisheyeCorrector("calibration/fisheye_calibration.npz", width, height, balance=0.4, offset_x=-86)
-#sign_det = SignDetector("model/traffic_sign_detector.pt")
-sign_det = SignDetector("model/MOdelo_2.pt")
+#sign_det = TrafficSignDetector("model/traffic_sign_detector.pt")
+sign_det = TrafficSignDetector("model/MOdelo_2.pt")
 panel = ControlPanel(width, height, test_mode=(COM is None),
                      dashboard_url=f"http://{_dashboard_ip}:{DASHBOARD_PORT}",
                      twin_path=_twin_path if os.path.exists(_twin_path) else "",
@@ -85,6 +82,7 @@ def pidHub(erro, pid_straight, pid_curve, dt=0.2):
         return pid_straight.update(erro, dt=dt)
     return pid_curve.update(erro, dt=dt)
 
+
 def mainLoop():
     global cap
     global shared_frame
@@ -97,7 +95,6 @@ def mainLoop():
     last_send = 0
     last_rx   = "Stand by..."
     last_run  = None
-    prev_flags = (False, False, False)
 
     while True:
         # ── Reconexão dinâmica (solicitada pelo painel) ───────────────
@@ -136,7 +133,7 @@ def mainLoop():
         with frame_lock:
             shared_frame = frame.copy()
 
-        frame = corrector.correct(frame)
+        #frame = corrector.correct(frame)
         img = frame.copy()
 
         # ── Leitura dos controles ─────────────────────────────
@@ -229,7 +226,7 @@ def mainLoop():
         cv2.putText(img_view, "Bird Eye", (635, 205),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
 
-        info = addInfo(error, angle, pwm, kp_straight, ki_straight, kd_straight,
+        info = addInfo(error, angle, effective_pwm, kp_straight, ki_straight, kd_straight,
                        kp_curve, ki_curve, kd_curve, last_rx, run,
                        flag_stop, flag_tl)
 
@@ -243,6 +240,7 @@ def mainLoop():
     if ser is not None:
         ser.close()
     cv2.destroyAllWindows()
+
 
 def sign_thread():
 
@@ -263,6 +261,7 @@ def sign_thread():
         with sign_lock:
             flag_stop = stop
             flag_tl = traffic_light
+
 
 # ── Inicialização das threads ────────────────────────────
 threading.Thread(
