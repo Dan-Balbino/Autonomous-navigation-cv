@@ -21,9 +21,6 @@ from config.setup import (
 )
 from core.car import Car
 
-# Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-# Danilo.BALBINO.intern@3ds.com
-
 # ── Inicialização de variáveis ────────────────────────────
 ROI_W = 320
 ROI_H = 240
