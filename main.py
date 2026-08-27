@@ -11,7 +11,6 @@ import serial
 from pid import PID
 from ctrl_panel import ControlPanel
 from vision.lane_detection import lane_detection_pipeline, get_frame_dimensions, extract_bird_eye_view
-from hud import addInfo
 from vision.traffic_sign_detector import TrafficSignDetector
 from messaging.messaging_core import (
     app as dashboard_app, get_local_ip, update_state, load_config_from_file,
