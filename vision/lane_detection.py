@@ -1,8 +1,6 @@
 import cv2
 import numpy as np
 
-from hud import drawDots
-
 track_size = 200
 
 def lane_detection_pipeline(roi_h, roi_w, limiar, limiar_bgr, last_error=0):
@@ -132,6 +130,13 @@ def process_lanes(left_lane, right_lane, left_valid, right_valid, roi_w, referen
     return error, limiar_bgr, lane_state, track_size, track_center
 
 
+def draw_dots(img, points, labels):
+    for i, p in enumerate(points):
+        x, y = int(p[0]), int(p[1])
+        cv2.circle(img, (x, y), 5, (0, 255, 255), -1)
+        cv2.putText(img, labels[i], (x + 6, y - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1)
+
+
 def get_frame_dimensions(frame, prop):
     # Retorna as dimensões da imagem
     height, width = round(frame.shape[0] / prop), round(frame.shape[1] / prop)
@@ -164,7 +169,7 @@ def extract_bird_eye_view(frame, img, upper, lower, y_top, y_bot, roi_w, roi_h):
     cv2.fillPoly(overlay, [pts_poly], (255, 0, 0))
     cv2.addWeighted(overlay, 0.3, img, 0.7, 0, img)
     cv2.polylines(img, [pts_poly], True, (255, 0, 0), 2)
-    drawDots(img, pts_origin, ["P1", "P2", "P3", "P4"])
+    draw_dots(img, pts_origin, ["P1", "P2", "P3", "P4"])
 
     # Matriz de perspectiva
     M = cv2.getPerspectiveTransform(pts_origin, pts_destiny)
