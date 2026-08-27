@@ -41,6 +41,9 @@ class TrafficSignDetector:
         if conf_threshold is None:
             conf_threshold = self.CONF_THRESHOLD
         self._conf = max(0.0, min(1.0, conf_threshold))
+        self._min_stop_diagonal = 0
+        self._min_light_diagonal = 0
+        self._min_light_confidence = 0.0
 
         # Estado da placa STOP
         self._stop_until = 0.0
@@ -60,6 +63,32 @@ class TrafficSignDetector:
                 print(f"[Sinais] Modelo nao encontrado: {p}")
         except ImportError:
             print("[Sinais] ultralytics nao instalado: pip install ultralytics")
+
+    def configure(self, *, stop_confidence=None, min_stop_diagonal=None,
+                  stop_wait_seconds=None, cooldown_seconds=None,
+                  light_timeout_seconds=None, detect_interval=None,
+                  min_light_diagonal=None, light_confidence=None):
+        """Atualiza os parâmetros de PARE e semáforo em tempo real.
+
+        As atribuições são escalares e podem ser feitas pelo loop de controle
+        enquanto a thread de inferência processa o próximo frame.
+        """
+        if stop_confidence is not None:
+            self.MIN_STOP_CONF = max(0.0, min(1.0, float(stop_confidence)))
+        if min_stop_diagonal is not None:
+            self._min_stop_diagonal = max(0, int(min_stop_diagonal))
+        if stop_wait_seconds is not None:
+            self.STOP_WAIT_SECONDS = max(0.0, float(stop_wait_seconds))
+        if cooldown_seconds is not None:
+            self.COOLDOWN_SECONDS = max(0.0, float(cooldown_seconds))
+        if light_timeout_seconds is not None:
+            self.LIGHT_TIMEOUT = max(0.0, float(light_timeout_seconds))
+        if detect_interval is not None:
+            self.DETECT_INTERVAL = max(1, int(detect_interval))
+        if min_light_diagonal is not None:
+            self._min_light_diagonal = max(0, int(min_light_diagonal))
+        if light_confidence is not None:
+            self._min_light_confidence = max(0.0, min(1.0, float(light_confidence)))
 
 
     def update(self, frame) -> list:
@@ -88,6 +117,8 @@ class TrafficSignDetector:
     def draw(self, img) -> None:
         for x1, y1, x2, y2, label, conf in self._boxes:
             lbl = label.lower()
+            if not ("semaforo" in lbl or "light" in lbl or self._is_stop_label(lbl)):
+                continue
 
             # SEMÁFORO
             if "semaforo" in lbl or "light" in lbl:
@@ -95,7 +126,7 @@ class TrafficSignDetector:
                 box_color = self.LIGHT_TO_BGR.get(color_name, (200, 200, 200))
                 thickness = 2
             # PLACA DE PARE
-            elif "pare" in lbl:
+            elif self._is_stop_label(lbl):
                 valid = self._is_valid_stop(x1, y1, x2, y2, conf)
                 if valid:
                     # PARE VÁLIDA
@@ -123,7 +154,10 @@ class TrafficSignDetector:
                 x1, y1, x2, y2 = (int(v) for v in box.xyxy[0])
                 label = r.names[int(box.cls[0])]
                 conf = float(box.conf[0])
-                out.append((x1, y1, x2, y2, label, conf))
+                normalized = label.lower()
+                if ("semaforo" in normalized or "light" in normalized
+                        or self._is_stop_label(normalized)):
+                    out.append((x1, y1, x2, y2, label, conf))
         return out
 
 
@@ -137,6 +171,11 @@ class TrafficSignDetector:
         for x1, y1, x2, y2, label, conf in self._boxes:
             lbl = label.lower()
             if "semaforo" in lbl or "light" in lbl:
+                if conf < self._min_light_confidence:
+                    continue
+                diagonal = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
+                if diagonal < self._min_light_diagonal:
+                    continue
                 if best is None or conf > best[5]:
                     best = (x1, y1, x2, y2, label, conf)
         return best
@@ -198,8 +237,12 @@ class TrafficSignDetector:
     def _code_to_name(code: int):
         return {0: "Vermelho", 1: "Amarelo", 2: "Verde"}.get(code)
 
+    @staticmethod
+    def _is_stop_label(label: str) -> bool:
+        return "pare" in label or "stop" in label
 
-    # ── STOP ──────────────────────────────────────────────────────────────
+
+    # ── PARE ──────────────────────────────────────────────────────────────
     def _is_valid_stop(self, x1, y1, x2, y2, conf):
         width = x2 - x1
         height = y2 - y1
@@ -210,12 +253,14 @@ class TrafficSignDetector:
         # Verifica tamanho
         if area < self.MIN_STOP_AREA:
             return False
+        if (width ** 2 + height ** 2) ** 0.5 < self._min_stop_diagonal:
+            return False
         return True
 
     def get_state(self):
         raw_stop = False
         for x1, y1, x2, y2, label, conf in self._boxes:
-            if "pare" in label.lower():
+            if self._is_stop_label(label.lower()):
                 # Verifica confiança + tamanho
                 if self._is_valid_stop(x1, y1, x2, y2, conf):
                     raw_stop = True

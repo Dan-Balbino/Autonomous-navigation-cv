@@ -88,42 +88,42 @@ def detect_lanes(limiar, height, width, limit, slice_image=False):
 def process_lanes(left_lane, right_lane, left_valid, right_valid, roi_w, reference_line_y, limiar_bgr, last_error, track_size=0):
     track_center = 0
     
-    # Caso 1 - Duas faixas detectadas
+    # ===== Caso 1 - Duas faixas foram detectadas =====
     if left_valid and right_valid:
         # O centro da pista é a média entre as duas faixas detectadas
         track_center = (left_lane + right_lane) // 2
         error = track_center - (roi_w // 2) 
         
-        # Caso detecte as duas faixas, atualiza o tamanho da pista
+        # Atualiza o tamanho da pista
         track_size = right_lane - left_lane
         
         # Desenha uma linha entre as faixas detectadas
         cv2.line(limiar_bgr, (left_lane, reference_line_y), (right_lane, reference_line_y), (100, 100, 100), 2)
         lane_state = "both"
         
-    # Caso 2 - Apenas a faixa da direita detectada
+    # ===== Caso 2 - Apenas a faixa da direita foi detectada =====
     elif not left_valid and right_valid:
         # O centro da pista é diferença entre a posição da faixa direita e metade do tamanho da pista
         track_center = right_lane - (track_size // 2)
         error = track_center - (roi_w // 2)
         
-        # Desenha uma linha cinza do centro da pista pra a faixa da direita e uma linha vermelha do centro da pista para onde a faixa da esquerda deveria estar
+        # Desenha uma linha cinza do centro da pista para a faixa da direita e uma linha vermelha do centro da pista para onde a faixa da esquerda deveria estar
         cv2.line(limiar_bgr, (track_center - (track_size // 2), reference_line_y), (track_center + (track_size // 2), reference_line_y), (0, 0, 255), 2)
         cv2.line(limiar_bgr, (track_center, reference_line_y), (right_lane, reference_line_y), (100, 100, 100), 2)
         lane_state = "right"
         
-    # Caso 3 - Apenas a faixa da esquerda detectada
+    # ===== Caso 3 - Apenas a faixa da esquerda foi detectada =====
     elif left_valid and not right_valid:
         # O centro da pista é a soma da posição da faixa esquerda com metade do tamanho da pista
         track_center = left_lane + (track_size // 2)
         error = track_center - (roi_w // 2)
         
-        # Desenha uma linha cinza do centro da pista pra a faixa da esquerda e uma linha vermelha do centro da pista para onde a faixa da direita deveria estar
+        # Desenha uma linha cinza do centro da pista para a faixa da esquerda e uma linha vermelha do centro da pista para onde a faixa da direita deveria estar
         cv2.line(limiar_bgr, (left_lane, reference_line_y), (track_center, reference_line_y), (100, 100, 100), 2)
         cv2.line(limiar_bgr, (track_center, reference_line_y), (track_center + (track_size // 2), reference_line_y), (0, 0, 255), 2)
         lane_state = "left"
         
-    # Caso 4 - Nenhuma faixa detectada
+    # ===== Caso 4 - Nenhuma faixa foi detectada =====
     else:
         # Assume que o carro está seguindo a última trajetória conhecida, então mantém o erro anterior
         error = last_error

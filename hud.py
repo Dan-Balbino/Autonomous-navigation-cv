@@ -8,7 +8,7 @@ def drawDots(img, points, labels):
         cv2.putText(img, labels[i], (x + 6, y - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1)
 
 
-def addInfo(error, angle, pwm, kp_straight, ki_straight, kd_straight,
+def addInfo(error, angle, speed_mps, kp_straight, ki_straight, kd_straight,
             kp_curve, ki_curve, kd_curve, last_rx, run,
             flag_stop=False, flag_sg=False, flag_sv=False):
     info = np.zeros((160, 960, 3), dtype=np.uint8)
@@ -16,7 +16,7 @@ def addInfo(error, angle, pwm, kp_straight, ki_straight, kd_straight,
     # ── coluna 1 — erro, servo, pwm ──
     cv2.putText(info, f"Erro:  {error}",           (20, 40),  cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
     cv2.putText(info, f"Servo: {int(angle + 90)}", (20, 80),  cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0),   2)
-    cv2.putText(info, f"PWM:   {pwm}",             (20, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+    cv2.putText(info, f"Vel:   {speed_mps:.1f} m/s", (20, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
 
     # ── coluna 2 — PID reta ──
     cv2.putText(info, "PID RETA",           (340, 25),  cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 1)

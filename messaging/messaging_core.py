@@ -2,7 +2,7 @@ import os
 import json
 import socket
 import threading
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, redirect, url_for
 
 app = Flask(__name__)
 
@@ -147,6 +147,8 @@ def panel_page():
 # ── Digital Twin (arquivos estáticos) ─────────────────────────────────────────
 @app.route("/")
 def index():
+  if not os.path.isfile(os.path.join(_TWIN_DIR, "index.html")):
+    return redirect(url_for("panel_page"))
     return send_from_directory(_TWIN_DIR, "index.html")
 
 

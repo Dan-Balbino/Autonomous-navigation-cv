@@ -24,16 +24,17 @@ from io import BytesIO
 import qrcode
 
 from PySide6.QtCore import Qt, QTimer, Signal, QObject
-from PySide6.QtGui import QPixmap, QFont, QColor
+from PySide6.QtGui import QPixmap, QColor, QImage, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QWidget, QMainWindow, QLabel, QPushButton, QSlider,
     QVBoxLayout, QHBoxLayout, QGridLayout, QFrame, QScrollArea,
     QComboBox, QSpinBox, QCheckBox, QTextEdit, QDialog, QSizePolicy,
+    QTabWidget,
 )
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# PALETA (Catppuccin Mocha — mesma da versão anterior)
+# PALETA (Catppuccin Mocha)
 # ─────────────────────────────────────────────────────────────────────────
 
 BG      = "#1e1e2e"
@@ -67,6 +68,32 @@ QWidget {{
     font-size: 11px;
 }}
 
+QLabel {{
+    background-color: transparent;
+    background: transparent;
+    border: none;
+}}
+
+QWidget#PanelContent, QWidget#PanelContent QLabel {{
+    background-color: transparent;
+}}
+
+QWidget#ControlField {{
+    background-color: {CARD};
+}}
+
+QWidget#SectionHeaderContainer {{
+    background-color: transparent;
+}}
+
+QFrame#Card QWidget {{
+    background-color: {CARD};
+}}
+
+QFrame#MetricCard QWidget {{
+    background-color: {CONSOLE};
+}}
+
 QLabel#Title {{
     font-size: 16px;
     font-weight: 700;
@@ -81,7 +108,31 @@ QLabel#SectionHeader {{
 
 QFrame#Card {{
     background-color: {CARD};
+    border: 1px solid {BORDER};
     border-radius: 8px;
+}}
+
+QFrame#MetricCard {{
+    background-color: {CONSOLE};
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+}}
+
+QLabel#MetricValue {{
+    color: {ACCENT};
+    font-size: 20px;
+    font-weight: 700;
+}}
+
+QLabel#MetricLabel {{
+    color: {MUTED};
+    font-size: 9px;
+    font-weight: 700;
+}}
+
+QLabel#StateValue {{
+    color: {TEAL};
+    font-weight: 700;
 }}
 
 QFrame#Separator {{
@@ -101,11 +152,17 @@ QSlider::handle:horizontal {{
     height: 14px;
     margin: -5px 0;
     border-radius: 7px;
+    border: 2px solid {BG};
 }}
 QSlider::sub-page:horizontal {{
     background: {ACCENT};
     border-radius: 2px;
 }}
+QSlider#SpeedSlider::groove:horizontal {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 {RED}, stop:0.15 {RED}, stop:0.151 {BORDER}, stop:1 {BORDER});
+}}
+QSlider#SpeedSlider::sub-page:horizontal {{ background: transparent; }}
 
 QComboBox, QSpinBox {{
     background-color: {BG};
@@ -152,6 +209,15 @@ QScrollBar::handle:vertical {{
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
     height: 0px;
 }}
+
+QTabWidget::pane {{ border: 1px solid {BORDER}; border-radius: 6px; }}
+QTabBar::tab {{
+    background: {CARD}; color: {MUTED}; border: none; padding: 9px 16px;
+    margin-right: 2px; font-weight: 700;
+}}
+QTabBar::tab:selected {{
+    color: {ACCENT}; background: {CARD}; border-bottom: 2px solid {TEAL};
+}}
 """
 
 
@@ -179,6 +245,8 @@ def _btn(text, bg, fg="#1e1e2e", flat_dark=False):
 class _ServerBridge(QObject):
     """Repassa respostas de threads de rede pro loop principal do Qt."""
     config_received = Signal(dict)
+    vehicle_info_received = Signal(dict)
+    log_received = Signal(str, str)
 
 
 class ControlPanel:
@@ -203,14 +271,20 @@ class ControlPanel:
         self._reconnect_pending = False
         self._last_local_change = 0.0
         self._applying_server   = False
+        self._preview_lock = threading.Lock()
+        self._latest_frames = None
+        self._preview_labels = {}
+        self._vehicle_labels = {}
+        self._pid_labels = {}
 
         self._bridge = _ServerBridge()
         self._bridge.config_received.connect(self._apply_config)
+        self._bridge.vehicle_info_received.connect(self._apply_vehicle_info)
+        self._bridge.log_received.connect(self._append_log)
 
         self.window = QMainWindow()
         self.window.setWindowTitle("Controles")
         self.window.setStyleSheet(QSS)
-        self.window.resize(1000, 780)
 
         self._build_ui()
         self._register_callbacks()
@@ -219,6 +293,12 @@ class ControlPanel:
             self._poll_timer = QTimer()
             self._poll_timer.timeout.connect(self._poll_server)
             self._poll_timer.start(2000)
+
+        # A visualização usa somente o frame mais recente; ela nunca cria uma
+        # fila que possa atrasar o loop de direção do veículo.
+        self._preview_timer = QTimer()
+        self._preview_timer.timeout.connect(self._present_latest_frames)
+        self._preview_timer.start(33)  # até 30 FPS no painel
 
     # ─────────────────────────────────────────────────────────────────
     # AÇÕES
@@ -241,7 +321,7 @@ class ControlPanel:
 
     def _salvar(self):
         os.makedirs(os.path.dirname(self.config_path) or ".", exist_ok=True)
-        with open(self.config_path, "w") as f:
+        with open(self.config_path, "w", encoding="utf-8") as f:
             json.dump(self.vars, f, indent=4)
         self.log("[PAINEL] Configurações salvas", "info")
 
@@ -249,7 +329,7 @@ class ControlPanel:
         if not os.path.exists(self.config_path):
             self.log("[PAINEL] Nenhum config.json encontrado", "error")
             return
-        with open(self.config_path, "r") as f:
+        with open(self.config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
         for key, val in config.items():
             if key in self.vars:
@@ -324,10 +404,19 @@ class ControlPanel:
     def _build_ui(self):
         config = {}
         if os.path.exists(self.config_path):
-            with open(self.config_path, "r") as f:
+            with open(self.config_path, "r", encoding="utf-8") as f:
                 config = json.load(f)
+        saved_pwm = config.get("PARÂMETROS DO CARRO_PWM", 40)
+        default_speed = config.get("PARÂMETROS DO CARRO_Velocidade (m/s)",
+                                   round(saved_pwm * 10 / 255, 1))
+        stop_wait_seconds = config.get("PARE_Tempo de parada (s)")
+        if stop_wait_seconds is None:
+            stop_wait_seconds = round(float(config.get("PARE_Tempo de parada (ms)", 3000)) / 1000)
+        cooldown_seconds = config.get("PARE_Cooldown (s)")
+        if cooldown_seconds is None:
+            cooldown_seconds = round(float(config.get("PARE_Cooldown (ms)", 3000)) / 1000)
 
-        sections = [
+        control_sections = [
             ("ROI", [
                 ("Linha superior", config.get("ROI_Linha superior", 1280), 0, self.frame_width),
                 ("Linha inferior", config.get("ROI_Linha inferior", 1280), 0, self.frame_width),
@@ -348,60 +437,288 @@ class ControlPanel:
                 ("Ki", config.get("CURVA_Ki", 0),   0, 1000),
                 ("Kd", config.get("CURVA_Kd", 0),   0, 1000),
             ]),
+        ]
+        signal_sections = [
             ("PARÂMETROS DO CARRO", [
-                ("PWM", config.get("PARÂMETROS DO CARRO_PWM", 40), 0, 255),
+                ("Velocidade (m/s)", default_speed, 0, 100),
+                ("Velocidade no amarelo (%)", config.get("PARÂMETROS DO CARRO_Velocidade no amarelo (%)", config.get("PARÂMETROS DO CARRO_PWM amarelo (%)", 50)), 0, 100),
+                ("Ângulo máximo", config.get("PARÂMETROS DO CARRO_Ângulo máximo", 90), 20, 90),
+                ("Intervalo comando (ms)", config.get("PARÂMETROS DO CARRO_Intervalo comando (ms)", 200), 50, 1000),
             ]),
-            ("DETECTOR", [
-                ("Conf STOP",     config.get("DETECTOR_Conf STOP",     40), 0, 100),
-                ("Conf Verde",    config.get("DETECTOR_Conf Verde",    40), 0, 100),
-                ("Conf Vermelho", config.get("DETECTOR_Conf Vermelho", 40), 0, 100),
-                ("Box diagonal",  config.get("DETECTOR_Box diagonal",   0), 0, 300),
+            ("PARE", [
+                ("Confiança (%)", config.get("PARE_Confiança (%)", config.get("DETECTOR_Confiança (%)", 40)), 0, 100),
+                ("Box diagonal", config.get("PARE_Box diagonal", config.get("DETECTOR_Box diagonal", 0)), 0, 500),
+                ("Tempo de parada (s)", stop_wait_seconds, 0, 15),
+                ("Cooldown (s)", cooldown_seconds, 0, 15),
+            ]),
+            ("SEMÁFORO", [
+                ("Confiança (%)", config.get("SEMÁFORO_Confiança (%)", 80), 0, 100),
+                ("Box diagonal", config.get("SEMÁFORO_Box diagonal", 0), 0, 500),
+                ("Timeout (ms)", config.get("SEMÁFORO_Timeout (ms)", 2000), 250, 10000),
+                ("Intervalo IA (frames)", config.get("SEMÁFORO_Intervalo IA (frames)", 5), 1, 30),
             ]),
         ]
 
         central = QWidget()
         outer = QVBoxLayout(central)
-        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setContentsMargins(12, 8, 12, 10)
 
-        title = QLabel("Painel de Controle")
+        header = QHBoxLayout()
+        title = QLabel("Painel de Controle ─ APEX")
         title.setObjectName("Title")
-        title.setAlignment(Qt.AlignCenter)
-        outer.addWidget(title)
+        title.setAlignment(Qt.AlignLeft)
+        header.addWidget(title)
+        header.addStretch()
+        for label, key, color in (
+            ("▶  Iniciar", "iniciar", GREEN),
+            ("■  Parar", "parar", RED),
+            ("↻  Resetar", "resetar", ORANGE),
+            ("⚙  Calibrar", "calibrar", ACCENT),
+            ("💾  Salvar", "salvar", PURPLE),
+        ):
+            button = _btn(label, color)
+            button.clicked.connect(lambda _, action=key: self._fire(action))
+            header.addWidget(button)
+        close_button = _btn("✕  Fechar", BORDER, flat_dark=True)
+        close_button.setToolTip("Fechar painel")
+        close_button.clicked.connect(self._close_panel)
+        header.addWidget(close_button)
+        outer.addLayout(header)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        outer.addWidget(scroll)
+        # A visão fica fora das abas para permanecer disponível enquanto os
+        # parâmetros são ajustados na parte inferior da tela.
+        outer.addWidget(self._build_camera_area(), 1)
 
-        content = QWidget()
-        scroll.setWidget(content)
-        grid = QGridLayout(content)
-        grid.setContentsMargins(10, 10, 10, 10)
-        grid.setHorizontalSpacing(10)
+        tabs = QTabWidget()
+        tabs.addTab(self._build_sections_tab(control_sections, show_pid=True), "Pista e direção")
+        tabs.addTab(self._build_sections_tab(signal_sections), "Carro e sinais")
+        tabs.addTab(self._build_vehicle_tab(), "Informações do carro")
+        tabs.addTab(self._build_operations_tab(), "Conexão e registros")
+        outer.addWidget(tabs, 1)
+
+        self.window.setCentralWidget(central)
+
+    def _build_vehicle_tab(self):
+        tab = QWidget()
+        tab.setObjectName("PanelContent")
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
+
+        status_card = QFrame()
+        status_card.setObjectName("Card")
+        status_layout = QHBoxLayout(status_card)
+        status_layout.setContentsMargins(14, 10, 14, 10)
+        self._vehicle_status = QLabel("AGUARDANDO DADOS")
+        self._vehicle_status.setStyleSheet(f"color: {ORANGE}; font-size: 14px; font-weight: 700;")
+        status_layout.addWidget(self._vehicle_status)
+        status_layout.addStretch()
+        self._vehicle_last_update = QLabel("Sem atualização")
+        self._vehicle_last_update.setStyleSheet(f"color: {MUTED};")
+        status_layout.addWidget(self._vehicle_last_update)
+        layout.addWidget(status_card)
+
+        metrics = QGridLayout()
+        metrics.setHorizontalSpacing(10)
+        metrics.setColumnStretch(0, 1)
+        metrics.setColumnStretch(1, 1)
+        metrics.setColumnStretch(2, 1)
+        metrics.setColumnStretch(3, 1)
+        for column, (key, label) in enumerate((
+            ("speed_received", "VELOCIDADE RECEBIDA"),
+            ("battery", "BATERIA"),
+            ("speed_applied", "VELOCIDADE APLICADA"),
+            ("servo", "SERVO"),
+        )):
+            metrics.addWidget(self._build_metric_card(key, label), 0, column)
+        layout.addLayout(metrics)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(14)
         grid.setVerticalSpacing(12)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
-        grid.setColumnStretch(2, 0)
+        grid.addWidget(self._build_vehicle_info_card("CONTROLE E HUD", [
+            ("error", "Erro da faixa"),
+            ("pid_mode", "Modo PID"),
+            ("signals", "Sinais detectados"),
+        ]), 0, 0)
+        grid.addWidget(self._build_sensor_card(), 0, 1)
+        grid.addWidget(self._build_can_card(), 1, 0, 1, 2)
+        layout.addLayout(grid)
 
-        rows = [sections[0:2], sections[2:4], sections[4:6]]
-        for r, row_sections in enumerate(rows):
-            for c, (name, controls) in enumerate(row_sections):
-                grid.addWidget(self._build_section(name, controls), r, c, Qt.AlignTop)
+        raw_card = QFrame()
+        raw_card.setObjectName("Card")
+        raw_layout = QVBoxLayout(raw_card)
+        raw_layout.setContentsMargins(12, 10, 12, 10)
+        raw_layout.addWidget(self._section_header("ÚLTIMO RETORNO DO ARDUINO"))
+        self._vehicle_raw_rx = QLabel("Nenhum retorno recebido")
+        self._vehicle_raw_rx.setWordWrap(True)
+        self._vehicle_raw_rx.setStyleSheet(f"color: {TEAL}; font-size: 12px;")
+        raw_layout.addWidget(self._vehicle_raw_rx)
+        layout.addWidget(raw_card)
+        layout.addStretch()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(tab)
+        return scroll
 
-        # coluna lateral: conexão + ações + mensageria
-        side = QVBoxLayout()
-        side.addWidget(self._build_connection_box())
-        side.addWidget(self._build_actions_box())
+    def _build_metric_card(self, key, label):
+        card = QFrame()
+        card.setObjectName("MetricCard")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(12, 10, 12, 10)
+        value = QLabel("--")
+        value.setObjectName("MetricValue")
+        card_layout.addWidget(value)
+        caption = QLabel(label)
+        caption.setObjectName("MetricLabel")
+        card_layout.addWidget(caption)
+        self._vehicle_labels[key] = value
+        return card
+
+    def _build_sensor_card(self):
+        return self._build_vehicle_info_card("ULTRASSÔNICOS", [
+            ("front", "Frontal"),
+            ("left", "Esquerdo"),
+            ("right", "Direito"),
+        ])
+
+    def _build_can_card(self):
+        return self._build_vehicle_info_card("MÓDULOS", [
+            ("can_motors", "Motores"),
+            ("can_lights", "Luzes"),
+            ("can_ultrassonics", "Ultrassônicos"),
+            ("can_encoders", "Encoders"),
+            ("can_battery", "Monitoramento da bateria"),
+        ])
+
+    def _build_vehicle_info_card(self, title, fields):
+        wrap = QVBoxLayout()
+        wrap.setContentsMargins(0, 0, 0, 0)
+        wrap.addWidget(self._section_header(title))
+        card = QFrame()
+        card.setObjectName("Card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(14, 10, 14, 10)
+        card_layout.setSpacing(7)
+        for key, label in fields:
+            row = QHBoxLayout()
+            row.addWidget(QLabel(label))
+            row.addStretch()
+            value = QLabel("--")
+            value.setObjectName("StateValue")
+            value.setMinimumWidth(92)
+            value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            row.addWidget(value)
+            card_layout.addLayout(row)
+            self._vehicle_labels[key] = value
+        wrap.addWidget(card)
+        result = QWidget()
+        result.setLayout(wrap)
+        return result
+
+    def _build_camera_area(self):
+        area = QWidget()
+        area.setObjectName("PanelContent")
+        layout = QVBoxLayout(area)
+        layout.setContentsMargins(10, 12, 10, 10)
+        layout.addWidget(QLabel("Câmeras ao vivo — atualização de até 30 FPS, sem fila de frames."))
+
+        frames = QHBoxLayout()
+        frames.setSpacing(10)
+        for key, title, subtitle in (
+            ("road", "CÂMERA DA PISTA", "Imagem original com região de interesse"),
+            ("bird", "VISTA SUPERIOR", "Bird-eye view e detecção de faixas"),
+            ("sign", "SINAIS", "Elementos detectados pelo modelo de IA"),
+        ):
+            card = QFrame()
+            card.setObjectName("Card")
+            card_layout = QVBoxLayout(card)
+            card_layout.setContentsMargins(8, 8, 8, 8)
+            card_layout.addWidget(self._section_header(title))
+            image = QLabel("Aguardando câmera")
+            image.setAlignment(Qt.AlignCenter)
+            image.setMinimumSize(300, 220)
+            image.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            image.setStyleSheet(f"background: {CONSOLE}; color: {MUTED}; border-radius: 4px;")
+            card_layout.addWidget(image, 1)
+            description = QLabel(subtitle)
+            description.setStyleSheet(f"color: {MUTED}; font-size: 9px;")
+            card_layout.addWidget(description)
+            self._preview_labels[key] = image
+            frames.addWidget(card, 1)
+        layout.addLayout(frames, 1)
+        return area
+
+    def _build_sections_tab(self, sections, show_pid=False):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        content.setObjectName("PanelContent")
+        grid = QGridLayout(content)
+        grid.setContentsMargins(12, 12, 12, 12)
+        grid.setHorizontalSpacing(14)
+        grid.setVerticalSpacing(16)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+        row_offset = 0
+        if show_pid:
+            grid.addWidget(self._build_pid_info_card(), 0, 0, 1, 2, Qt.AlignTop)
+            row_offset = 1
+        for index, (name, controls) in enumerate(sections):
+            grid.addWidget(self._build_section(name, controls), row_offset + index // 2, index % 2, Qt.AlignTop)
+        grid.setRowStretch(row_offset + (len(sections) + 1) // 2, 1)
+        scroll.setWidget(content)
+        return scroll
+
+    def _build_pid_info_card(self):
+        wrap = QVBoxLayout()
+        wrap.setContentsMargins(0, 0, 0, 0)
+        wrap.addWidget(self._section_header("PID UTILIZADO PELO VEÍCULO"))
+
+        card = QFrame()
+        card.setObjectName("Card")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(12, 10, 12, 10)
+
+        values = QGridLayout()
+        values.setHorizontalSpacing(18)
+        for column, prefix in enumerate(("RETA", "CURVA")):
+            title = QLabel(prefix)
+            title.setStyleSheet(f"color: {TEAL}; font-weight: 700;")
+            values.addWidget(title, 0, column)
+            for row, term in enumerate(("Kp", "Ki", "Kd"), start=1):
+                label = QLabel(f"{term}: --")
+                label.setObjectName("StateValue")
+                values.addWidget(label, row, column)
+                self._pid_labels[f"{prefix}_{term}"] = label
+        layout.addLayout(values)
+        wrap.addWidget(card)
+        result = QWidget()
+        result.setLayout(wrap)
+        return result
+
+    def _build_operations_tab(self):
+        tab = QWidget()
+        tab.setObjectName("PanelContent")
+        grid = QGridLayout(tab)
+        grid.setContentsMargins(12, 12, 12, 12)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
         if self._dashboard_url:
-            side.addWidget(self._build_dashboard_box())
-        side.addStretch()
-        side_wrap = QWidget()
-        side_wrap.setLayout(side)
-        grid.addWidget(side_wrap, 0, 2, len(rows), 1, Qt.AlignTop)
-
-        # log
-        grid.addWidget(self._build_log_box(), len(rows), 0, 1, 3)
-
-        self.window.setCentralWidget(central)
+            grid.addWidget(self._build_connection_box(), 0, 0, 1, 1, Qt.AlignTop)
+            grid.addWidget(self._build_dashboard_box(), 0, 1, 1, 1, Qt.AlignTop)
+            log_row = 1
+        else:
+            grid.addWidget(self._build_connection_box(), 0, 0, 1, 2, Qt.AlignTop)
+            log_row = 1
+        grid.addWidget(self._build_log_box(), log_row, 0, 1, 2)
+        grid.setRowStretch(log_row + 1, 1)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(tab)
+        return scroll
 
     def _section_header(self, text):
         header = QHBoxLayout()
@@ -412,6 +729,7 @@ class ControlPanel:
         line.setObjectName("Separator")
         header.addWidget(line, 1)
         wrap = QWidget()
+        wrap.setObjectName("SectionHeaderContainer")
         wrap.setLayout(header)
         return wrap
 
@@ -428,14 +746,16 @@ class ControlPanel:
 
         for i, (label, default, mn, mx) in enumerate(controls):
             key = f"{name}_{label}"
-            self.vars[key] = default
+            slider_value = self._slider_value(key, default)
+            value = self._control_value(key, slider_value)
+            self.vars[key] = value
 
             row = QVBoxLayout()
             top = QHBoxLayout()
             lbl = QLabel(label)
             top.addWidget(lbl)
             top.addStretch()
-            val_lbl = QLabel(str(default))
+            val_lbl = QLabel(self._format_control_value(key, value))
             val_lbl.setStyleSheet(f"color: {ACCENT}; font-weight: 700;")
             top.addWidget(val_lbl)
             row.addLayout(top)
@@ -443,16 +763,25 @@ class ControlPanel:
             slider = QSlider(Qt.Horizontal)
             slider.setMinimum(mn)
             slider.setMaximum(mx)
-            slider.setValue(default)
+            slider.setValue(slider_value)
+            if self._is_speed_key(key):
+                slider.setObjectName("SpeedSlider")
             slider.valueChanged.connect(
                 lambda v, k=key, vl=val_lbl: self._on_slider_change(k, v, vl)
             )
             row.addWidget(slider)
 
+            if self._is_speed_key(key):
+                warning = QLabel("⚠ Velocidades abaixo de 1,5 m/s são tratadas como 0 — velocidade mínima para movimentar o carro.")
+                warning.setWordWrap(True)
+                warning.setStyleSheet(f"color: {RED}; font-size: 9px; font-weight: 700;")
+                row.addWidget(warning)
+
             self.val_labels[key] = val_lbl
             self.sliders[key] = slider
 
             row_wrap = QWidget()
+            row_wrap.setObjectName("ControlField")
             row_wrap.setLayout(row)
             card_layout.addWidget(row_wrap)
 
@@ -467,8 +796,9 @@ class ControlPanel:
         return wrap
 
     def _on_slider_change(self, key, value, val_label):
+        value = self._control_value(key, value)
         self.vars[key] = value
-        val_label.setText(str(value))
+        val_label.setText(self._format_control_value(key, value))
         if self._dashboard_url:
             self._push_key(key, value)
 
@@ -476,10 +806,29 @@ class ControlPanel:
         self.vars[key] = val
         if key in self.sliders:
             self.sliders[key].blockSignals(True)
-            self.sliders[key].setValue(int(val))
+            self.sliders[key].setValue(self._slider_value(key, val))
             self.sliders[key].blockSignals(False)
         if key in self.val_labels:
-            self.val_labels[key].setText(str(val))
+            self.val_labels[key].setText(self._format_control_value(key, val))
+
+    @staticmethod
+    def _is_speed_key(key):
+        return key == "PARÂMETROS DO CARRO_Velocidade (m/s)"
+
+    def _control_value(self, key, slider_value):
+        if self._is_speed_key(key):
+            return round(int(slider_value) / 10.0, 1)
+        return int(slider_value)
+
+    def _slider_value(self, key, value):
+        if self._is_speed_key(key):
+            return max(0, min(100, round(float(value) * 10)))
+        return int(value)
+
+    def _format_control_value(self, key, value):
+        if self._is_speed_key(key):
+            return f"{float(value):.1f} m/s"
+        return str(value)
 
     def _build_connection_box(self):
         wrap_layout = QVBoxLayout()
@@ -552,7 +901,7 @@ class ControlPanel:
 
     def _build_dashboard_box(self):
         layout = QVBoxLayout()
-        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._section_header("MENSAGERIA"))
 
         card = QFrame()
@@ -630,13 +979,138 @@ class ControlPanel:
             panel.log("RX ← dados do arduino", "rx")
             panel.log("TX → dados para o arduino", "tx")
         """
+        self._bridge.log_received.emit(str(msg), tag)
+
+    def _append_log(self, msg, tag):
         ts = time.strftime("%H:%M:%S")
         color = LOG_COLORS.get(tag, FG)
         self._log_text.append(f'<span style="color:{MUTED}">[{ts}]</span> '
                                f'<span style="color:{color}">{msg}</span>')
+        self._log_text.moveCursor(QTextCursor.MoveOperation.End)
+        self._log_text.verticalScrollBar().setValue(
+            self._log_text.verticalScrollBar().maximum()
+        )
 
     def _clear_log(self):
         self._log_text.clear()
+
+    def _close_panel(self):
+        for timer_name in ("_poll_timer", "_preview_timer"):
+            timer = getattr(self, timer_name, None)
+            if timer is not None:
+                timer.stop()
+        self.running = False
+        self.window.close()
+
+    # ── Visualização de câmera ────────────────────────────────────────────
+    def update_frames(self, road_frame, bird_frame, sign_frame):
+        """Disponibiliza frames BGR ao painel sem bloquear a thread de visão.
+
+        A cada chamada a amostra anterior é descartada. O Qt exibe apenas a
+        última imagem disponível em seu próprio timer, sem backlog nem atraso
+        no processamento que controla o carro.
+        """
+        with self._preview_lock:
+            self._latest_frames = {
+                "road": road_frame,
+                "bird": bird_frame,
+                "sign": sign_frame,
+            }
+
+    def update_vehicle_info(self, info):
+        """Agenda no loop do Qt a atualização dos dados do veículo."""
+        self._bridge.vehicle_info_received.emit(dict(info))
+
+    def _apply_vehicle_info(self, info):
+        values = info.get("hud", {})
+        telemetry = info.get("telemetry", {})
+        ultrasonic = telemetry.get("ultrassonics", {}) if isinstance(telemetry, dict) else {}
+        can = telemetry.get("can", {}) if isinstance(telemetry, dict) else {}
+        display = {
+            "error": str(values.get("error", "--")),
+            "servo": f"{values.get('servo', '--')}°",
+            "speed_received": self._format_number(telemetry.get("spd"), " m/min"),
+            "battery": self._format_number(telemetry.get("bat"), "%"),
+            "speed_applied": self._format_number(values.get("speed"), " m/s"),
+            "pid_mode": str(values.get("pid_mode", "--")),
+            "signals": str(values.get("signals", "--")),
+            "front": self._format_sensor(ultrasonic.get("front")),
+            "left": self._format_sensor(ultrasonic.get("left")),
+            "right": self._format_sensor(ultrasonic.get("right")),
+            "can_motors": self._format_module(can.get("motors")),
+            "can_lights": self._format_module(can.get("lights")),
+            "can_ultrassonics": self._format_module(can.get("ultrassonics")),
+            "can_encoders": self._format_module(can.get("encoders")),
+            "can_battery": self._format_module(can.get("battery")),
+        }
+        for key, text in display.items():
+            if key in self._vehicle_labels:
+                self._vehicle_labels[key].setText(text)
+        for prefix in ("RETA", "CURVA"):
+            pid_values = values.get(prefix.lower(), {})
+            for term in ("Kp", "Ki", "Kd"):
+                label = self._pid_labels.get(f"{prefix}_{term}")
+                if label is not None:
+                    label.setText(f"{term}: {pid_values.get(term.lower(), '--')}")
+        running = values.get("running", False)
+        self._vehicle_status.setText("EM MOVIMENTO" if running else "PARADO")
+        self._vehicle_status.setStyleSheet(
+            f"color: {GREEN if running else RED}; font-size: 14px; font-weight: 700;"
+        )
+        self._vehicle_last_update.setText(time.strftime("Atualizado às %H:%M:%S"))
+        self._vehicle_raw_rx.setText(str(info.get("raw_rx") or "Nenhum retorno recebido"))
+
+    @staticmethod
+    def _format_number(value, suffix=""):
+        if value is None:
+            return "--"
+        try:
+            number = float(value)
+            text = f"{number:.1f}" if not number.is_integer() else str(int(number))
+            return f"{text}{suffix}"
+        except (TypeError, ValueError):
+            return "--"
+
+    @staticmethod
+    def _format_sensor(value):
+        labels = {
+            0: ("LIVRE", GREEN),
+            1: ("DISTANTE", ACCENT),
+            2: ("PRÓXIMA", ORANGE),
+            3: ("CRÍTICA", RED),
+        }
+        try:
+            label, color = labels[int(value)]
+        except (KeyError, TypeError, ValueError):
+            return "--"
+        return f'<span style="color:{color}; font-weight:700">{label}</span>'
+
+    @staticmethod
+    def _format_module(value):
+        if value is True:
+            return '<span style="color:#a6e3a1; font-weight:700">ONLINE</span>'
+        if value is False:
+            return '<span style="color:#f38ba8; font-weight:700">OFFLINE</span>'
+        return "--"
+
+    def _present_latest_frames(self):
+        with self._preview_lock:
+            frames = self._latest_frames
+            self._latest_frames = None
+        if not frames:
+            return
+
+        for key, frame in frames.items():
+            label = self._preview_labels.get(key)
+            if label is None or frame is None or getattr(frame, "size", 0) == 0:
+                continue
+            height, width = frame.shape[:2]
+            if len(frame.shape) == 2:
+                image = QImage(frame.data, width, height, frame.strides[0], QImage.Format_Grayscale8)
+            else:
+                image = QImage(frame.data, width, height, frame.strides[0], QImage.Format_BGR888)
+            pixmap = QPixmap.fromImage(image)
+            label.setPixmap(pixmap.scaled(label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
     # ────────────────────────────────────────────────────────────────────
     def _fire(self, key):
@@ -696,7 +1170,7 @@ class ControlPanel:
         self._applying_server = False
 
     def run(self):
-        self.window.show()
+        self.window.showFullScreen()
         self._app.exec()
 
 

@@ -2,6 +2,7 @@ import time
 import threading
 import logging
 import os
+import json
 
 import cv2
 import numpy as np
@@ -20,11 +21,14 @@ from config.setup import (
     select_com, scan_usb_devices, open_camera, allow_dashboard_firewall_rule
 )
 from core.car import Car
+from core.telemetry import CarTelemetry
 
 # ── Inicialização de variáveis ────────────────────────────
 ROI_W = 320
 ROI_H = 240
 DASHBOARD_PORT = 5000
+MAX_SPEED_MPS = 10.0
+MIN_MOVING_SPEED_MPS = 1.5
 COM = select_com()
 
 shared_frame = None
@@ -64,13 +68,13 @@ allow_dashboard_firewall_rule(DASHBOARD_PORT)
 
 # ── Inicialização dos objetos ───────────────
 corrector = FisheyeCorrector("calibration/fisheye_calibration.npz", width, height, balance=0.4, offset_x=-86)
-#sign_det = TrafficSignDetector("model/traffic_sign_detector.pt")
-sign_det = TrafficSignDetector("model/MOdelo_2.pt")
+sign_det = TrafficSignDetector("model/Modelo_3.pt")
 panel = ControlPanel(width, height, test_mode=(COM is None),
                      dashboard_url=f"http://{_dashboard_ip}:{DASHBOARD_PORT}",
                      twin_path=_twin_path if os.path.exists(_twin_path) else "",
                      initial_cam_idx=_cam_idx)
 car = Car(COM)
+
 
 # ── Inicialização dos PIDs ───────────────
 pid_straight  = PID(Kp=0, Ki=0, Kd=0, output_limit=90.0)
@@ -83,12 +87,10 @@ def pidHub(erro, pid_straight, pid_curve, dt=0.2):
     return pid_curve.update(erro, dt=dt)
 
 
+# ── Loop principal ───────────────
 def mainLoop():
     global cap
     global shared_frame
-
-    cv2.namedWindow("AutoCar", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("AutoCar", 960, 700)
 
     error = 0
     angle = 0
@@ -142,21 +144,33 @@ def mainLoop():
         y_top        = panel.get("ROI", "Altura sup")
         y_bot        = panel.get("ROI", "Altura inf")
         limiar_value = panel.get("IMAGEM", "Limiar")
-        pwm          = panel.get("PARÂMETROS DO CARRO", "PWM")
-        # sign_det.set_conf_stop(panel.get("DETECTOR", "Conf STOP")     / 100.0)
-        # sign_det.set_conf_sg(  panel.get("DETECTOR", "Conf Verde")    / 100.0)
-        # sign_det.set_conf_sv(  panel.get("DETECTOR", "Conf Vermelho") / 100.0)
-        # sign_det.set_min_diag( panel.get("DETECTOR", "Box diagonal"))
+        speed_mps    = panel.get("PARÂMETROS DO CARRO", "Velocidade (m/s)")
+        yellow_speed = speed_mps * panel.get("PARÂMETROS DO CARRO", "Velocidade no amarelo (%)") / 100.0
+        command_period_ms = panel.get("PARÂMETROS DO CARRO", "Intervalo comando (ms)")
+        steering_limit = panel.get("PARÂMETROS DO CARRO", "Ângulo máximo")
+
+        sign_det.configure(
+            stop_confidence=panel.get("PARE", "Confiança (%)") / 100.0,
+            min_stop_diagonal=panel.get("PARE", "Box diagonal"),
+            stop_wait_seconds=panel.get("PARE", "Tempo de parada (s)"),
+            cooldown_seconds=panel.get("PARE", "Cooldown (s)"),
+            light_timeout_seconds=panel.get("SEMÁFORO", "Timeout (ms)") / 1000.0,
+            detect_interval=panel.get("SEMÁFORO", "Intervalo IA (frames)"),
+            min_light_diagonal=panel.get("SEMÁFORO", "Box diagonal"),
+            light_confidence=panel.get("SEMÁFORO", "Confiança (%)") / 100.0,
+        )
 
         kp_straight = panel.get("RETA", "Kp") / 100.0
         ki_straight = panel.get("RETA", "Ki") / 1000.0
         kd_straight = panel.get("RETA", "Kd") / 100.0
         pid_straight.setValues(kp_straight, ki_straight, kd_straight)
+        pid_straight.output_limit = steering_limit
 
         kp_curve = panel.get("CURVA", "Kp") / 100.0
         ki_curve = panel.get("CURVA", "Ki") / 1000.0
         kd_curve = panel.get("CURVA", "Kd") / 100.0
         pid_curve.setValues(kp_curve, ki_curve, kd_curve)
+        pid_curve.output_limit = steering_limit
         
         run = panel._IsRunning()
         
@@ -171,19 +185,19 @@ def mainLoop():
         error, limiar_bgr, lane_state = lane_detection_pipeline(ROI_H, ROI_W, limiar, limiar_bgr, last_error=error)
 
         # ── Digital Twin ──────────────────────────────────────────────
-        if not run or flag_stop or flag_tl == 0:
-            effective_pwm = 0
+        if not run or flag_stop or flag_tl == 0 or speed_mps < MIN_MOVING_SPEED_MPS:
+            effective_speed = 0.0
         elif flag_tl == 1:
-            effective_pwm = pwm / 2
+            effective_speed = yellow_speed
         else:
-            effective_pwm = pwm
+            effective_speed = speed_mps
         
-        update_state(effective_pwm, run)
+        update_state(effective_speed, run)
 
         # ── Envio de dados para o Arduino ─────────────────────────────
         if run:
             now = time.time() * 1000
-            should_send = now - last_send >= 200
+            should_send = now - last_send >= command_period_ms
             if should_send:
                 last_send = now
                 angle = pidHub(error, pid_straight, pid_curve, dt=0.2)
@@ -191,14 +205,12 @@ def mainLoop():
             should_send = last_run != False
 
         if should_send:
-            car.command.traffic_light = 1
+            car.command.traffic_light = flag_tl
             car.command.lights = 1
             car.command.servo = int(angle + 90)
             car.command.stop = flag_stop if run else True
-            car.command.pwm = effective_pwm if run else 0
+            car.command.speed = effective_speed if run else 0
 
-            print(car.command.pwm, car.command.stop, flag_tl)
-            
             if car.COM is not None:
                 try:
                     car.send_command()
@@ -215,26 +227,42 @@ def mainLoop():
             last_rx = data
             panel.log(f"RX ← {data}", "rx")
 
+        telemetry = {}
+        if data:
+            try:
+                decoded = json.loads(data)
+                if isinstance(decoded, dict):
+                    telemetry = decoded
+                    car.telemetry = CarTelemetry.from_dict(decoded)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                pass
+
         # ── Dashboard ──────────────────────────────────────
-        sign_det.draw(img)
+        panel.update_vehicle_info({
+            "hud": {
+                "error": error,
+                "servo": int(angle + 90),
+                "speed": effective_speed,
+                "pid_mode": "RETA" if abs(error) < panel.get("IMAGEM", "Erro de transição") else "CURVA",
+                "reta": {"kp": kp_straight, "ki": ki_straight, "kd": kd_straight},
+                "curva": {"kp": kp_curve, "ki": ki_curve, "kd": kd_curve},
+                "signals": ", ".join(
+                    name for name, active in (
+                        ("Pare", flag_stop),
+                        ("Semáforo verde", flag_tl == 2),
+                        ("Semáforo amarelo", flag_tl == 1),
+                        ("Semáforo vermelho", flag_tl == 0),
+                    ) if active
+                ) or "Nenhum",
+                "running": run,
+            },
+            "telemetry": telemetry,
+            "raw_rx": last_rx,
+        })
 
-        img_view  = cv2.resize(img, (960, 540))
-        bird_view = cv2.resize(limiar_bgr, (320, 180))
-
-        img_view[10:190, 630:950] = bird_view
-        cv2.rectangle(img_view, (630, 10), (950, 190), (0, 255, 255), 2)
-        cv2.putText(img_view, "Bird Eye", (635, 205),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
-
-        info = addInfo(error, angle, effective_pwm, kp_straight, ki_straight, kd_straight,
-                       kp_curve, ki_curve, kd_curve, last_rx, run,
-                       flag_stop, flag_tl)
-
-        dashboard = np.vstack((img_view, info))
-        cv2.imshow("AutoCar", dashboard)
-
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+        sign_view = frame.copy()
+        sign_det.draw(sign_view)
+        panel.update_frames(img, limiar_bgr, sign_view)
 
     cap.release()
     if ser is not None:

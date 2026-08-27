@@ -11,9 +11,16 @@
     "CURVA_Kp": 200,
     "CURVA_Ki": 0,
     "CURVA_Kd": 0,
-    "PAR\u00c2METROS DO CARRO_PWM": 50,
-    "DETECTOR_Conf STOP": 100,
-    "DETECTOR_Conf Verde": 100,
-    "DETECTOR_Conf Vermelho": 100,
-    "DETECTOR_Box diagonal": 300
+    "PAR\u00c2METROS DO CARRO_Velocidade (m/s)": 2.0,
+    "PAR\u00c2METROS DO CARRO_Velocidade no amarelo (%)": 50,
+    "PAR\u00c2METROS DO CARRO_\u00c2ngulo m\u00e1ximo": 90,
+    "PAR\u00c2METROS DO CARRO_Intervalo comando (ms)": 200,
+    "PARE_Confian\u00e7a (%)": 40,
+    "PARE_Box diagonal": 300,
+    "PARE_Tempo de parada (s)": 5,
+    "PARE_Cooldown (s)": 5,
+    "SEM\u00c1FORO_Confian\u00e7a (%)": 80,
+    "SEM\u00c1FORO_Box diagonal": 0,
+    "SEM\u00c1FORO_Timeout (ms)": 2000,
+    "SEM\u00c1FORO_Intervalo IA (frames)": 3
 }

@@ -6,7 +6,7 @@ class CarCommand:
     lights: int = 0
     stop: bool = False
     servo: int = 90
-    pwm: int = 0
+    speed: int = 0
     
     def to_dict(self):
         return {
@@ -14,5 +14,5 @@ class CarCommand:
             "lights": self.lights,
             "stop": self.stop,
             "servo": self.servo,
-            "pwm": self.pwm
+            "speed": self.speed
         }
