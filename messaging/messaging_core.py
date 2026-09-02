@@ -43,6 +43,8 @@ _config: dict = {
     "DETECTOR_Conf Verde":           40,
     "DETECTOR_Conf Vermelho":        40,
     "DETECTOR_Box diagonal":          0,
+    "PESSOAS_Confiança (%)":           50,
+    "PESSOAS_Diagonal mínima da caixa (px)": 0,
     "running":                    False,
 }
 _config_updated = False
@@ -337,7 +339,11 @@ const SECTIONS=[
     {key:"DETECTOR_Conf STOP",    label:"Conf STOP (%)",    min:0,max:100},
     {key:"DETECTOR_Conf Verde",   label:"Conf Verde (%)",   min:0,max:100},
     {key:"DETECTOR_Conf Vermelho",label:"Conf Vermelho (%)",min:0,max:100},
-    {key:"DETECTOR_Box diagonal", label:"Box diagonal (px)",min:0,max:300},
+    {key:"DETECTOR_Box diagonal", label:"Diagonal mínima da caixa (px)",min:0,max:300},
+  ]},
+  {title:"PESSOAS",controls:[
+    {key:"PESSOAS_Confiança (%)", label:"Confiança (%)", min:0,max:100},
+    {key:"PESSOAS_Diagonal mínima da caixa (px)", label:"Diagonal mínima da caixa (px)", min:0,max:500},
   ]},
 ];
 

@@ -447,15 +447,19 @@ class ControlPanel:
             ]),
             ("PARE", [
                 ("Confiança (%)", config.get("PARE_Confiança (%)", config.get("DETECTOR_Confiança (%)", 40)), 0, 100),
-                ("Box diagonal", config.get("PARE_Box diagonal", config.get("DETECTOR_Box diagonal", 0)), 0, 500),
+                ("Diagonal mínima da caixa (px)", config.get("PARE_Diagonal mínima da caixa (px)", config.get("PARE_Box diagonal", config.get("DETECTOR_Box diagonal", 0))), 0, 1000),
                 ("Tempo de parada (s)", stop_wait_seconds, 0, 15),
                 ("Cooldown (s)", cooldown_seconds, 0, 15),
             ]),
             ("SEMÁFORO", [
                 ("Confiança (%)", config.get("SEMÁFORO_Confiança (%)", 80), 0, 100),
-                ("Box diagonal", config.get("SEMÁFORO_Box diagonal", 0), 0, 500),
+                ("Diagonal mínima da caixa (px)", config.get("SEMÁFORO_Diagonal mínima da caixa (px)", config.get("SEMÁFORO_Box diagonal", 0)), 0, 1000),
                 ("Timeout (ms)", config.get("SEMÁFORO_Timeout (ms)", 2000), 250, 10000),
                 ("Intervalo IA (frames)", config.get("SEMÁFORO_Intervalo IA (frames)", 5), 1, 30),
+            ]),
+            ("PESSOAS", [
+                ("Confiança (%)", config.get("PESSOAS_Confiança (%)", 50), 0, 100),
+                ("Diagonal mínima da caixa (px)", config.get("PESSOAS_Diagonal mínima da caixa (px)", config.get("PESSOAS_Box diagonal", 0)), 0, 1000),
             ]),
         ]
 

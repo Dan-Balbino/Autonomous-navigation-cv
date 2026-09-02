@@ -11,7 +11,7 @@ import serial
 from pid import PID
 from ctrl_panel import ControlPanel
 from vision.lane_detection import lane_detection_pipeline, get_frame_dimensions, extract_bird_eye_view
-from vision.traffic_sign_detector import TrafficSignDetector
+from vision.object_detector import ObjectDetector
 from messaging.messaging_core import (
     app as dashboard_app, get_local_ip, update_state, load_config_from_file,
 )
@@ -67,7 +67,7 @@ allow_dashboard_firewall_rule(DASHBOARD_PORT)
 
 # ── Inicialização dos objetos ───────────────
 corrector = FisheyeCorrector("calibration/fisheye_calibration.npz", width, height, balance=0.4, offset_x=-86)
-sign_det = TrafficSignDetector("model/Modelo_3.pt")
+sign_det = ObjectDetector("model/Modelo_3.pt")
 panel = ControlPanel(width, height, test_mode=(COM is None),
                      dashboard_url=f"http://{_dashboard_ip}:{DASHBOARD_PORT}",
                      twin_path=_twin_path if os.path.exists(_twin_path) else "",
@@ -150,13 +150,15 @@ def mainLoop():
 
         sign_det.configure(
             stop_confidence=panel.get("PARE", "Confiança (%)") / 100.0,
-            min_stop_diagonal=panel.get("PARE", "Box diagonal"),
+            min_stop_diagonal=panel.get("PARE", "Diagonal mínima da caixa (px)"),
             stop_wait_seconds=panel.get("PARE", "Tempo de parada (s)"),
             cooldown_seconds=panel.get("PARE", "Cooldown (s)"),
             light_timeout_seconds=panel.get("SEMÁFORO", "Timeout (ms)") / 1000.0,
             detect_interval=panel.get("SEMÁFORO", "Intervalo IA (frames)"),
-            min_light_diagonal=panel.get("SEMÁFORO", "Box diagonal"),
+            min_light_diagonal=panel.get("SEMÁFORO", "Diagonal mínima da caixa (px)"),
             light_confidence=panel.get("SEMÁFORO", "Confiança (%)") / 100.0,
+            person_confidence=panel.get("PESSOAS", "Confiança (%)") / 100.0,
+            min_person_diagonal=panel.get("PESSOAS", "Diagonal mínima da caixa (px)"),
         )
 
         kp_straight = panel.get("RETA", "Kp") / 100.0
