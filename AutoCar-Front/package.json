@@ -1,0 +1,15 @@
+{
+  "name": "autocar-front",
+  "version": "1.0.0",
+  "description": "Front-end do rosto animado do carro autônomo",
+  "type": "module",
+  "scripts": {
+    "build": "node build.js",
+    "obfuscate": "javascript-obfuscator src --output dist --config obfuscator.config.json"
+  },
+  "dependencies": {
+    "javascript-obfuscator": "^4.1.0"
+  },
+  "devDependencies": {}
+}
+

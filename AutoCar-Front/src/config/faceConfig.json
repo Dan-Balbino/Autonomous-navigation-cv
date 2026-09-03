@@ -1,0 +1,133 @@
+{
+  // Escala geral do rosto (1 = tamanho normal)
+  "scale": 1.2,
+  
+  // Configuração de cores
+  "colors": {
+    "background": "#0A0E1A",  // Cor de fundo da página (azul escuro base)
+    "face": "#000000",         // Cor do rosto (preto profundo)
+    "stroke": "#C8EDFF",      // Cor de contorno (azul claro suave)
+    "strokeSoft": "#E8F0F8",  // Cor de contorno suave (azul muito claro)
+    "accent": "#4A90E2"        // Cor dos olhos (azul mais escuro da paleta)
+  },
+  
+  // Configuração dos olhos
+  "eyes": {
+    // Nível de ovalidade dos olhos (0-100)
+    // 0 = círculo perfeito, 100 = muito ovalado verticalmente
+    // Valores maiores = mais ovalado, sempre mantém curvas suaves sem partes retas
+    "ovality": 5,
+    // Largura dos olhos em vmin (viewport minimum - mantém proporção)
+    // Valores maiores = olhos mais largos
+    "width": 38,
+    // Altura dos olhos em vmin (viewport minimum - mantém proporção)
+    // Valores maiores = olhos mais altos
+    "height": 42,
+    // Espaçamento ENTRE os olhos em vmin (distância entre os dois olhos)
+    // Valores menores = olhos mais próximos, 0 = olhos colados
+    "spacing": 28,
+    // Posição vertical dos olhos em vmin (posição do centro vertical dos olhos)
+    // Valores menores = olhos mais baixos, valores maiores = olhos mais altos
+    // 0 = parte inferior da tela, 50 = centro, 100 = parte superior
+    "position_y": 55
+  },
+  
+  // Configuração de animações
+  "animations": {
+    // Animação de piscar
+    "blink": {
+      "enabled": true,           // Ativar/desativar animação
+      "intervalMs": 10000,       // Intervalo entre piscadas (em milissegundos)
+      // Exemplos: 5000 = 5 segundos, 10000 = 10 segundos, 15000 = 15 segundos, 30000 = 30 segundos
+      "minScale": 0.08           // Escala mínima ao piscar (0.08 = quase fechado)
+    },
+    
+    // Animação de olhar ao redor
+    "look": {
+      "enabled": true,           // Ativar/desativar animação
+      "durationMs": 4200,        // Duração de um ciclo completo (em milissegundos)
+      "radius": 3,               // Raio de movimento dos olhos (em pixels)
+      "smoothness": 0.18         // Suavidade do movimento (0-1, maior = mais suave)
+    },
+    
+    // Animação de flutuação (sobe e desce)
+    "bob": {
+      "enabled": true,           // Ativar/desativar animação
+      "durationMs": 400,         // Duração de um ciclo completo (em milissegundos)
+      "y": 5,                    // Amplitude vertical do movimento (em pixels)
+      "rotate": 3,               // Ângulo de rotação em graus (0 = sem rotação)
+      "directionLeft": 180,        // Direção de rotação do olho esquerdo (0 = horário, 180 = anti-horário)
+      "directionRight": 0     // Direção de rotação do olho direito (0 = horário, 180 = anti-horário)
+    },
+    
+    // Animação de surpresa - olhos aumentam como slimes (esticando e quicando)
+    // Acionada manualmente pressionando 's' três vezes rapidamente
+    "surprise": {
+      "enabled": true,           // Ativar/desativar animação
+      "maxScale": 1.24,           // Escala máxima dos olhos (1.8 = 80% maior)
+      "expandDuration": 600,     // Duração da expansão com efeito slime (em milissegundos)
+      "holdDuration": 2000,      // Duração mantendo grande (em milissegundos)
+      "shrinkDuration": 400      // Duração voltando ao normal (em milissegundos)
+    },
+    
+    // Animação de tentar enxergar - olhos forçados com óculos e movimento de leitura
+    // Acionada manualmente pressionando 'e' três vezes rapidamente
+    "squint": {
+      "enabled": true,           // Ativar/desativar animação
+      "durationMs": 5000,        // Duração de um ciclo completo (em milissegundos)
+      "horizontalAmplitude": 8,  // Amplitude do movimento horizontal (em pixels)
+      "verticalAmplitude": 4,    // Amplitude do movimento vertical (em pixels)
+      "diagonalAmplitude": 3,    // Amplitude do movimento diagonal (em pixels)
+      "squintScale": 0.85,        // Escala dos olhos durante squint (0.85 = olhos semicerrados/forçados)
+      "movementSpeed": 2.0,      // Multiplicador de velocidade do movimento (1.0 = normal, 2.0 = 2x mais rápido)
+      "glassesBorderWidth": 8,   // Espessura da borda dos óculos (em pixels)
+      "glassesBridgeWidth": 23,   // Largura da ponte dos óculos (em vmin)
+      "glassesBridgeNoseSize": 8,  // Largura da curvatura do nariz no centro da ponte (em vmin)
+      "glassesBridgeNoseHeight": 3.5,  // Altura da curvatura do nariz (em vmin) - quanto menor, mais aberta a curvatura
+      "glassesBridgeNoseEllipseHorizontal": 50,  // Raio horizontal da elipse em porcentagem (50% = metade da largura)
+      "glassesBridgeNoseEllipseVertical": 100,  // Raio vertical da elipse em porcentagem (100% = altura completa para curva pura)
+      "glassesBridgeNoseCoveragePx": -1  // Pixels extras que a curvatura desce para cobrir completamente a linha da ponte (em pixels) - valor intermediário
+    },
+    
+    // Animação de procurar - olhos olham para os lados rapidamente
+    // Acionada manualmente pressionando 'p' três vezes rapidamente ou automaticamente após 20s/40s de idle
+    // Ciclo: meio -> direita (pausa 1s) -> esquerda (pausa 1s) -> meio
+    "search": {
+      "enabled": true,           // Ativar/desativar animação
+      "speed": 1.5,              // Multiplicador de velocidade do movimento (1.0 = normal, 1.5 = 50% mais rápido)
+      "distance": 80,            // Distância do movimento horizontal (em pixels) - aumentada para movimento mais amplo
+      "direction": 1,            // Direção inicial (1 = direita primeiro, -1 = esquerda primeiro)
+      "movementDurationMs": 400, // Duração de cada movimento entre posições (em milissegundos)
+      "pauseDurationMs": 1000,   // Duração de pausa em cada lado (em milissegundos) - 1 segundo
+      "autoIntervalMs": 40000,   // Intervalo automático em idle (40 segundos em milissegundos)
+      "autoAfterIdleMs": 20000   // Tempo após idle para disparar automaticamente (20 segundos em milissegundos)
+    },
+    
+    // Animação de susto - olhos aumentam, diminuem, tremem e se abrem gradualmente, depois dispara procurar
+    // Acionada manualmente pressionando 'f' três vezes rapidamente
+    "fright": {
+      "enabled": true,           // Ativar/desativar animação
+      "maxScale": 1.4,           // Escala máxima dos olhos durante expansão
+      "expandDuration": 300,      // Duração da expansão (em milissegundos) - mais rápida que surpresa
+      "shrinkDuration": 200,      // Duração diminuindo e fechando (em milissegundos)
+      "trembleDuration": 800,     // Duração do tremor com olhos fechados (em milissegundos)
+      "eyeOpenDuration": 1500,    // Duração de um olho se abrindo devagar (em milissegundos) - aumentado para mais suspense
+      "eyeCloseDuration": 300,    // Duração fechando novamente (em milissegundos)
+      "eyeOpenFullDuration": 800  // Duração abrindo completamente (em milissegundos) - aumentado para mais suspense
+    },
+    
+    // Animação de acelerar - olhos ficam meio fechados como se estivesse enfrentando alta velocidade
+    // Acionada/desativada manualmente pressionando 'a' três vezes rapidamente (toggle)
+    "accelerate": {
+      "enabled": true,           // Ativar/desativar animação
+      "blinkScale": 0.4,         // Escala do piscar durante acelerar (0.4 = olhos 40% abertos, meio fechados)
+      "transitionDuration": 300,  // Duração da transição ao ativar/desativar (em milissegundos)
+      "trembleIntensity": 5,     // Intensidade do tremor em pixels (quanto maior, mais intenso) - aumentado para tremor mais visível
+      "trembleChangeInterval": 2000,  // Intervalo para mudar a direção do tremor (em milissegundos) - padrão: 2 segundos
+      "trembleTransitionDuration": 500,  // Duração da transição suave entre direções (em milissegundos) - padrão: 500ms
+      "speedLinesCount": 60,     // Número de linhas de velocidade (quanto mais, mais denso o efeito) - aumentado para mais linhas
+      "speedLinesSpeed": 1000    // Velocidade das linhas (em milissegundos para atravessar a tela e desaparecer - 1 segundo)
+    }
+  }
+}
+

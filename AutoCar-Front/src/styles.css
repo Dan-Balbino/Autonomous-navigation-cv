@@ -1,0 +1,213 @@
+:root {
+  --bg: #0A0E1A;
+  --bg-gradient: 
+    radial-gradient(ellipse 120% 100% at 50% 0%, rgba(102, 232, 255, 0.15) 0%, transparent 50%),
+    radial-gradient(ellipse 100% 80% at 0% 100%, rgba(57, 252, 168, 0.1) 0%, transparent 50%),
+    radial-gradient(ellipse 100% 80% at 100% 100%, rgba(104, 255, 184, 0.1) 0%, transparent 50%),
+    linear-gradient(180deg, #0E1A30 0%, #0A0E1A 50%, #0A0E1A 100%),
+    radial-gradient(ellipse at center, #4A5568 0%, #0E1A30 40%, #0A0E1A 100%);
+  --face: #000000;
+  --stroke: #C8EDFF;
+  --stroke-soft: #E8F0F8;
+  --shadow: rgba(74, 144, 226, 0.3);
+  --accent: #4A90E2;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: var(--bg-gradient);
+  background-color: var(--bg);
+  background-attachment: fixed;
+}
+
+.app-root {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  filter: none;
+}
+
+.eye {
+  position: absolute;
+  /* border-radius e tamanho serão aplicados dinamicamente via JavaScript */
+  background: var(--accent);
+  /* overflow: visible garante que o formato ovalado não seja cortado */
+  overflow: visible;
+  /* Mantém proporções em qualquer tamanho de tela usando vmin */
+  box-sizing: border-box;
+  /* Remove qualquer posicionamento padrão - será definido via JS */
+}
+
+.eye-left,
+.eye-right {
+  /* Tamanho e posicionamento serão aplicados dinamicamente via JavaScript */
+  /* Usando vmin para manter proporções em qualquer tela */
+}
+
+/* Óculos - aparecem apenas durante a animação de squint */
+.glasses-container {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease;
+  /* As animações de movimento e rotação serão aplicadas aqui */
+}
+
+.glasses-frame {
+  position: absolute;
+  border: solid var(--accent);
+  border-radius: 50%;
+  background: transparent;
+  pointer-events: none;
+  /* Tamanho e espessura da borda serão ajustados dinamicamente via JavaScript */
+  transform: translateX(-50%);
+  /* Posições relativas fixas - não mudam durante animação */
+}
+
+.glasses-left,
+.glasses-right {
+  /* Posicionamento será ajustado dinamicamente via JavaScript */
+}
+
+.glasses-bridge {
+  position: absolute;
+  height: 6px;
+  background: var(--accent);
+  pointer-events: none;
+  /* Largura e posição serão ajustadas dinamicamente via JavaScript */
+  transform: translateX(-50%);
+  /* Posição relativa fixa - não muda durante animação */
+}
+
+/* Curvatura do nariz no centro da ponte */
+.glasses-bridge-nose {
+  position: absolute;
+  width: 8vmin; /* Aumentada para ser mais larga */
+  height: 3.5vmin; /* Aumentada para cobrir a linha */
+  border: solid var(--accent);
+  border-bottom: none;
+  border-left-width: 6px;
+  border-right-width: 6px;
+  border-top-width: 6px;
+  /* Border-radius elíptico horizontal para criar curva pura sem partes retas */
+  /* Usa 50% horizontal e valor maior vertical para criar elipse horizontal */
+  border-radius: 50% / 100% 100% 0 0; /* Forma elíptica horizontal - curva pura */
+  background: #0A0E1A; /* Preenchimento na cor de fundo para cobrir a linha da ponte */
+  pointer-events: none;
+  transform: translateX(-50%); /* Centralização horizontal, vertical controlada via JS */
+  /* Posicionado no centro da ponte, criando uma curvatura como o nariz em óculos reais */
+  z-index: 1; /* Fica acima da ponte para criar o efeito visual */
+  box-sizing: border-box;
+}
+
+/* Linhas de velocidade - aparecem apenas durante animação de acelerar */
+.speed-lines-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  z-index: 10;
+  overflow: hidden;
+}
+
+.speed-line {
+  position: absolute;
+  width: 1px;
+  height: 300px;
+  background: var(--accent);
+  opacity: 1;
+  pointer-events: none;
+  transform-origin: center center;
+}
+
+/* Botão de tela cheia */
+.fullscreen-button {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 48px;
+  height: 48px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  box-shadow: none;
+}
+
+.fullscreen-button:hover {
+  background: rgba(74, 144, 226, 0.2);
+  transform: scale(1.05);
+  box-shadow: none;
+}
+
+.fullscreen-button:active {
+  transform: scale(0.95);
+}
+
+/* Botão totalmente transparente quando em tela cheia */
+.fullscreen-button.fullscreen-active {
+  background: transparent;
+  box-shadow: none;
+}
+
+.fullscreen-button.fullscreen-active:hover {
+  background: rgba(74, 144, 226, 0.2);
+  box-shadow: none;
+}
+
+.fullscreen-icon {
+  width: 24px;
+  height: 24px;
+  stroke: var(--accent);
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Display de FPS */
+.fps-display {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  background: transparent;
+  color: #4A90E2;
+  padding: 8px 12px;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  font-weight: bold;
+  z-index: 1000;
+  pointer-events: none;
+  user-select: none;
+}
+

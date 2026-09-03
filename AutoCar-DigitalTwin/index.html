@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Twin</title>
+    <link rel="icon" type="image/x-icon" href="assets/favicon/favicon.ico">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon/favicon-16x16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon/favicon-32x32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon/apple-touch-icon.png">
+    <link rel="manifest" href="assets/favicon/site.webmanifest">
+    <link rel="stylesheet" href="src/css/styles.css">
+</head>
+<body>
+    <img src="assets/mercedez-logo.png" alt="Logo Mercedes" class="brand-logo" id="brandLogo">
+    <div class="top-clock" id="topClock" aria-label="Relogio">
+        <span class="top-clock-main" id="topClockMain">00:00</span>
+        <div class="top-clock-seconds-container">
+            <span class="top-clock-seconds" id="topClockSeconds">00</span>
+            <span class="top-clock-milliseconds" id="topClockMilliseconds">000</span>
+        </div>
+    </div>
+    <div class="status-strip" id="statusStrip" aria-label="Status do dispositivo">
+        <div class="status-item" id="batteryStatus" title="Bateria">
+            <div class="battery-icon" aria-hidden="true">
+                <div class="battery-fill" id="batteryFill"></div>
+                <div class="battery-cap"></div>
+            </div>
+            <span class="status-value" id="batteryValue">--%</span>
+        </div>
+    </div>
+    <button class="panel-btn" aria-label="Painel de controle" onclick="window.location.href='/panel'">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <line x1="4" y1="6"  x2="20" y2="6"  stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <line x1="4" y1="18" x2="20" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="9"  cy="6"  r="2.5" fill="currentColor"/>
+            <circle cx="15" cy="12" r="2.5" fill="currentColor"/>
+            <circle cx="9"  cy="18" r="2.5" fill="currentColor"/>
+        </svg>
+    </button>
+    <button class="fullscreen-btn" id="fullscreenBtn" aria-label="Maximizar tela">
+        <svg class="fullscreen-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 3H5C3.89543 3 3 3.89543 3 5V8M21 8V5C21 3.89543 20.1046 3 19 3H16M16 21H19C20.1046 21 21 20.1046 21 19V16M3 16V19C3 20.1046 3.89543 21 5 21H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+    </button>
+    <div class="side-dashboard" aria-label="Painel auxiliar">
+        <!-- Velocímetro -->
+        <div class="speedometer-card" id="speedometerCard" aria-label="Velocimetro">
+            <div class="speedometer-label-top">VELOCIDADE</div>
+            <svg class="speedometer-svg" viewBox="0 0 220 140" aria-hidden="true">
+                <g id="speedometerZones"></g>
+                <path id="speedometerTrack" d="M 22 110 A 88 88 0 0 1 198 110"></path>
+                <path id="speedometerProgress" d="M 22 110 A 88 88 0 0 1 198 110"></path>
+                <g id="speedometerTicks"></g>
+                <g id="speedometerLabels"></g>
+                <line id="speedometerNeedle" x1="110" y1="110" x2="110" y2="32"></line>
+                <circle cx="110" cy="110" r="6" class="speedometer-center"></circle>
+            </svg>
+            <div class="speedometer-scale">
+                <span id="speedometerMin">0</span>
+                <span id="speedometerMax">10</span>
+            </div>
+            <div class="speedometer-readout">
+                <span id="speedometerValue">0.0</span>
+                <span class="speed-unit">m/min</span>
+            </div>
+        </div>
+
+        <!-- Separador -->
+        <div class="dashboard-separator"></div>
+
+        <!-- Indicadores Secundários -->
+        <div class="dashboard-secondary-indicators">
+            <div class="indicator-item rpm-indicator-item">
+                <div class="indicator-icon rpm-icon">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                        <path d="M12 3V6M12 18V21M21 12H18M6 12H3M19.07 4.93L16.95 7.05M7.05 16.95L4.93 19.07M19.07 19.07L16.95 16.95M7.05 7.05L4.93 4.93" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                    </svg>
+                </div>
+                <div class="indicator-content">
+                    <div class="indicator-label">PWM</div>
+                    <div class="indicator-value" id="rpmValue">0</div>
+                </div>
+            </div>
+            <div class="indicator-item light-indicator-item">
+                <div class="indicator-icon light-icon">
+                    <svg class="light-indicator" id="lightIndicator" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Farol Apagado -->
+                        <g id="lightOff">
+                            <path d="M12 2C8.13 2 5 5.13 5 9C5 11.38 6.19 13.47 8 14.74V17C8 17.55 8.45 18 9 18H15C15.55 18 16 17.55 16 17V14.74C17.81 13.47 19 11.38 19 9C19 5.13 15.87 2 12 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                            <path d="M9 21H15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M10 11H14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </g>
+                        <!-- Farol Aceso -->
+                        <g id="lightOn" style="display: none;">
+                            <path d="M12 2C8.13 2 5 5.13 5 9C5 11.38 6.19 13.47 8 14.74V17C8 17.55 8.45 18 9 18H15C15.55 18 16 17.55 16 17V14.74C17.81 13.47 19 11.38 19 9C19 5.13 15.87 2 12 2Z" fill="currentColor" opacity="0.9"/>
+                            <path d="M12 2C8.13 2 5 5.13 5 9C5 11.38 6.19 13.47 8 14.74V17C8 17.55 8.45 18 9 18H15C15.55 18 16 17.55 16 17V14.74C17.81 13.47 19 11.38 19 9C19 5.13 15.87 2 12 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                            <path d="M9 21H15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            <circle cx="12" cy="11" r="2.5" fill="currentColor" opacity="0.3"/>
+                            <path d="M10 11H14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </g>
+                    </svg>
+                </div>
+                <div class="indicator-content">
+                    <div class="indicator-label">FAROL</div>
+                    <div class="indicator-value" id="lightStatusText">Apagado</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rodapé do Painel -->
+        <div class="dashboard-footer">
+            <div class="dashboard-separator"></div>
+            <div class="dashboard-status-text">SISTEMA ATIVO</div>
+        </div>
+    </div>
+    <!-- Dashboard Horizontal (visível quando carro está na horizontal) -->
+    <div class="horizontal-dashboard" id="horizontalDashboard" aria-label="Painel horizontal">
+        <div class="horizontal-dashboard-content">
+            <!-- Velocímetro Compacto -->
+            <div class="horizontal-speedometer">
+                <div class="horizontal-speed-label">VELOCIDADE</div>
+                <div class="horizontal-speed-value">
+                    <span id="horizontalSpeedValue">0.0</span>
+                    <span class="horizontal-speed-unit">m/min</span>
+                </div>
+            </div>
+            
+            <!-- Indicadores Compactos -->
+            <div class="horizontal-indicators">
+                <div class="horizontal-indicator horizontal-rpm-status">
+                    <div class="horizontal-indicator-icon rpm-icon">
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                            <path d="M12 3V6M12 18V21M21 12H18M6 12H3M19.07 4.93L16.95 7.05M7.05 16.95L4.93 19.07M19.07 19.07L16.95 16.95M7.05 7.05L4.93 4.93" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                        </svg>
+                    </div>
+                    <div class="horizontal-indicator-text">
+                        <div class="horizontal-indicator-label">PWM</div>
+                        <div class="horizontal-indicator-value" id="horizontalRpmValue">0</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Status do Farol -->
+            <div class="horizontal-light-status">
+                <svg class="horizontal-light-icon" id="horizontalLightIndicator" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Farol Apagado -->
+                    <g id="horizontalLightOff">
+                        <path d="M12 2C8.13 2 5 5.13 5 9C5 11.38 6.19 13.47 8 14.74V17C8 17.55 8.45 18 9 18H15C15.55 18 16 17.55 16 17V14.74C17.81 13.47 19 11.38 19 9C19 5.13 15.87 2 12 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                        <path d="M9 21H15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M10 11H14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </g>
+                    <!-- Farol Aceso -->
+                    <g id="horizontalLightOn" style="display: none;">
+                        <path d="M12 2C8.13 2 5 5.13 5 9C5 11.38 6.19 13.47 8 14.74V17C8 17.55 8.45 18 9 18H15C15.55 18 16 17.55 16 17V14.74C17.81 13.47 19 11.38 19 9C19 5.13 15.87 2 12 2Z" fill="currentColor" opacity="0.9"/>
+                        <path d="M12 2C8.13 2 5 5.13 5 9C5 11.38 6.19 13.47 8 14.74V17C8 17.55 8.45 18 9 18H15C15.55 18 16 17.55 16 17V14.74C17.81 13.47 19 11.38 19 9C19 5.13 15.87 2 12 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                        <path d="M9 21H15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <circle cx="12" cy="11" r="2.5" fill="currentColor" opacity="0.3"/>
+                        <path d="M10 11H14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </g>
+                </svg>
+                <div class="horizontal-light-text" id="horizontalLightStatusText">Farol Apagado</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <div class="proximity-panel">
+            <svg class="proximity-waves" id="proximityWaves" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet">
+                <!-- Ondas serão geradas dinamicamente pelo JavaScript -->
+            </svg>
+            <img
+                src="assets/AutoCar Model.png"
+                alt="AutoCar Model"
+                class="car-image"
+                id="carImage"
+                draggable="false"
+            >
+        </div>
+    </div>
+    <script type="module" src="src/js/main.js"></script>
+</body>
+</html>

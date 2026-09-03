@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Toddy Face</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+    <script>
+      // Proteções avançadas contra inspeção do código fonte
+      (function() {
+        'use strict';
+        
+        // Desabilita botão direito do mouse
+        document.addEventListener('contextmenu', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }, { capture: true, passive: false });
+
+        // Desabilita arrastar e soltar
+        document.addEventListener('dragstart', function(e) {
+          e.preventDefault();
+          return false;
+        }, false);
+
+        // Desabilita seleção de texto
+        document.addEventListener('selectstart', function(e) {
+          e.preventDefault();
+          return false;
+        }, false);
+
+        // Bloqueia atalhos de teclado
+        document.addEventListener('keydown', function(e) {
+          // F12
+          if (e.keyCode === 123) {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          }
+          // Ctrl+Shift+I (DevTools)
+          if (e.ctrlKey && e.shiftKey && e.keyCode === 73) {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          }
+          // Ctrl+Shift+J (Console)
+          if (e.ctrlKey && e.shiftKey && e.keyCode === 74) {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          }
+          // Ctrl+U (View Source)
+          if (e.ctrlKey && e.keyCode === 85) {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          }
+          // Ctrl+Shift+C (Inspect Element)
+          if (e.ctrlKey && e.shiftKey && e.keyCode === 67) {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          }
+          // Ctrl+S (Save Page)
+          if (e.ctrlKey && e.keyCode === 83) {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          }
+          // Ctrl+P (Print - pode expor código)
+          if (e.ctrlKey && e.keyCode === 80) {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          }
+        }, { capture: true, passive: false });
+
+        // Detecta abertura do DevTools
+        let devtools = {open: false};
+        const threshold = 160;
+        const checkDevTools = setInterval(function() {
+          if (window.outerHeight - window.innerHeight > threshold || 
+              window.outerWidth - window.innerWidth > threshold) {
+            if (!devtools.open) {
+              devtools.open = true;
+              // Pode adicionar ação aqui (ex: redirecionar, mostrar aviso, etc.)
+            }
+          } else {
+            if (devtools.open) {
+              devtools.open = false;
+            }
+          }
+        }, 500);
+
+        // Bloqueia acesso via console
+        Object.defineProperty(window, 'console', {
+          value: {},
+          writable: false,
+          configurable: false
+        });
+
+        // Tenta bloquear debugger
+        setInterval(function() {
+          const start = performance.now();
+          debugger;
+          const end = performance.now();
+          if (end - start > 100) {
+            // DevTools provavelmente está aberto
+            document.body.innerHTML = '';
+            document.body.style.display = 'none';
+          }
+        }, 1000);
+
+        // Bloqueia acesso ao código fonte via iframe
+        if (window.top !== window.self) {
+          window.top.location = window.self.location;
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <main id="app" class="app-root"></main>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
+
