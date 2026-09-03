@@ -1,0 +1,1360 @@
+/* ============================================
+   CYBERPUNK DIGITAL TWIN — Aesthetic System
+   ============================================ */
+:root {
+    /* Core palette — teal equilibrado, legível sem ser neon */
+    --bg-color: #04080f;
+    --cyber-cyan: #4ab8c8;
+    --cyber-cyan-dim: rgba(74, 184, 200, 0.5);
+    --cyber-cyan-glow: rgba(74, 184, 200, 0.1);
+    --cyber-cyan-ultra: rgba(74, 184, 200, 0.04);
+    --cyber-magenta: #b04060;
+    --cyber-magenta-glow: rgba(176, 64, 96, 0.15);
+    --cyber-yellow: #a0aa50;
+    --cyber-green: #4a9a70;
+    --cyber-green-glow: rgba(74, 154, 112, 0.15);
+    --text-bright: #b0ccd4;
+    --text-mid: #7a9eaa;
+    --text-dim: #4a6470;
+    --card-bg: rgba(2, 6, 16, 0.96);
+    --card-bg-hover: rgba(74, 184, 200, 0.04);
+    --border-neon: rgba(74, 184, 200, 0.2);
+    --border-neon-bright: rgba(74, 184, 200, 0.45);
+    --border-neon-dim: rgba(74, 184, 200, 0.08);
+
+    /* Speedometer neons — keep for compat */
+    --neon-cyan: #66e8ff;
+    --neon-magenta: #ff47d1;
+    --neon-lime: #00ff9f;
+    --neon-yellow: #ffd86a;
+
+    /* Layout */
+    --transition-speed: 0.3s;
+    --wave-color: rgba(160, 185, 200, 0.62);
+    --wave-stroke-width: 2;
+    --vertical-card-width: clamp(320px, 24vw, 430px);
+    --vertical-layout-offset: clamp(165px, 13vw, 235px);
+}
+
+@font-face {
+    font-family: 'BebasNeue';
+    src: url('../../fonts/BebasNeue-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+}
+
+/* ============================================
+   Reset e Base
+   ============================================ */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+body {
+    font-family: 'Courier New', 'Consolas', monospace, -apple-system, BlinkMacSystemFont, sans-serif;
+    background:
+        /* Horizontal scanlines — subtle CRT */
+        repeating-linear-gradient(
+            180deg,
+            transparent 0px,
+            transparent 3px,
+            rgba(0, 4, 12, 0.18) 3px,
+            rgba(0, 4, 12, 0.18) 4px
+        ),
+        /* Circuit grid horizontal */
+        linear-gradient(rgba(0, 240, 255, 0.022) 1px, transparent 1px),
+        /* Circuit grid vertical */
+        linear-gradient(90deg, rgba(0, 240, 255, 0.022) 1px, transparent 1px),
+        /* Neon glow — cyan top-left */
+        radial-gradient(ellipse 55% 45% at 8% 12%, rgba(74, 184, 200, 0.06) 0%, transparent 100%),
+        /* Neon glow — magenta bottom-right */
+        radial-gradient(ellipse 50% 40% at 92% 88%, rgba(130, 50, 80, 0.04) 0%, transparent 100%),
+        /* Neon glow — center dim */
+        radial-gradient(ellipse 80% 60% at 50% 50%, rgba(74, 184, 200, 0.02) 0%, transparent 100%),
+        /* Deep base */
+        #04080f;
+    background-size:
+        100% 4px,
+        52px 52px,
+        52px 52px,
+        100% 100%,
+        100% 100%,
+        100% 100%,
+        auto;
+    color: var(--text-bright);
+}
+
+/* ============================================
+   Brand Logo
+   ============================================ */
+.brand-logo {
+    position: fixed;
+    left: 50%;
+    top: 14px;
+    transform: translateX(-50%);
+    width: 96px;
+    height: 96px;
+    object-fit: contain;
+    z-index: 1002;
+    opacity: 0.95;
+    filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.3));
+    pointer-events: none;
+}
+
+/* ============================================
+   Top Clock
+   ============================================ */
+.top-clock {
+    position: fixed;
+    left: 50%;
+    top: 120px;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    z-index: 1001;
+    font-family: 'BebasNeue', monospace;
+    line-height: 1;
+    pointer-events: none;
+    flex-direction: row;
+}
+
+.top-clock-seconds-container {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    line-height: 1;
+}
+
+.top-clock-main {
+    font-size: clamp(64px, 4.5vw, 88px);
+    letter-spacing: 4px;
+    color: var(--text-bright);
+    text-shadow: none;
+    text-align: center;
+}
+
+.top-clock-seconds {
+    font-size: clamp(22px, 1.5vw, 28px);
+    opacity: 0.7;
+    color: var(--text-mid);
+    line-height: 1.2;
+    letter-spacing: 2px;
+}
+
+.top-clock-milliseconds {
+    font-size: clamp(12px, 0.9vw, 16px);
+    display: block;
+    margin-top: 4px;
+    opacity: 0.45;
+    color: var(--text-mid);
+    font-weight: 300;
+    line-height: 1;
+    letter-spacing: 1px;
+}
+
+/* Esconde relógio no topo quando está em modo horizontal */
+body:not(.vertical-driving-mode) .top-clock {
+    display: none;
+}
+
+/* ============================================
+   Status Strip (Battery)
+   ============================================ */
+.status-strip {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    display: flex;
+    gap: 12px;
+    z-index: 1001;
+    padding: 6px 10px;
+    border-radius: 0;
+    background: transparent;
+    backdrop-filter: none;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-bright);
+    min-width: auto;
+}
+
+.status-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    display: none;
+    text-transform: uppercase;
+}
+
+.status-value {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-mid);
+    text-shadow: none;
+    letter-spacing: 1px;
+}
+
+.status-item .battery-icon {
+    position: relative;
+    width: 26px;
+    height: 12px;
+    border: 1px solid var(--border-neon-bright);
+    border-radius: 0;
+    padding: 1px;
+    box-shadow: 0 0 5px var(--cyber-cyan-glow);
+}
+
+.battery-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--cyber-cyan);
+    transition: width 0.25s ease, background-color 0.25s ease;
+}
+
+.battery-cap {
+    position: absolute;
+    right: -3px;
+    top: 3px;
+    width: 2px;
+    height: 5px;
+    background: var(--border-neon-bright);
+}
+
+/* ============================================
+   Side Dashboard (Modo Vertical)
+   ============================================ */
+.side-dashboard {
+    position: fixed;
+    right: 28px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 900;
+    display: none;
+}
+
+.side-dashboard.animating {
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: clamp(16px, 1.5vw, 22px);
+    width: var(--vertical-card-width);
+    padding: clamp(20px, 1.8vw, 28px) clamp(16px, 1.4vw, 22px) clamp(20px, 1.8vw, 28px);
+    border-radius: 0;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    overflow: hidden;
+    position: relative;
+}
+
+.side-dashboard.exiting {
+    position: fixed !important;
+    right: auto !important;
+    left: 50% !important;
+    top: 50% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: clamp(18px, 1.8vw, 26px) !important;
+    width: var(--vertical-card-width) !important;
+    min-width: unset !important;
+    max-width: unset !important;
+    height: auto !important;
+    padding: clamp(20px, 1.8vw, 28px) clamp(16px, 1.4vw, 22px) clamp(20px, 1.8vw, 28px) !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    overflow: hidden !important;
+    z-index: 900 !important;
+}
+
+.dashboard-header {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.dashboard-separator {
+    width: 90%;
+    height: 1px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(0, 240, 255, 0.1) 15%,
+        rgba(0, 240, 255, 0.3) 50%,
+        rgba(0, 240, 255, 0.1) 85%,
+        transparent 100%);
+    margin: 4px 0;
+}
+
+body.vertical-driving-mode .dashboard-separator {
+    margin: clamp(8px, 0.8vw, 12px) 0;
+}
+
+.dashboard-main-indicators {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+body.vertical-driving-mode .dashboard-main-indicators {
+    gap: clamp(12px, 1.2vw, 16px);
+}
+
+.indicator-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Estilos para o farol */
+.light-indicator {
+    width: clamp(56px, 3.5vw, 72px);
+    height: clamp(56px, 3.5vw, 72px);
+    color: var(--text-bright);
+    flex-shrink: 0;
+}
+
+.light-status-text {
+    font-size: clamp(12px, 0.9vw, 14px);
+    font-weight: 700;
+    color: var(--text-bright);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    text-align: center;
+}
+
+/* Farol — apenas ícone, sem texto */
+.light-indicator-item .indicator-icon {
+    color: var(--text-mid);
+    width: clamp(72px, 5.5vw, 90px);
+    height: clamp(72px, 5.5vw, 90px);
+}
+
+.light-indicator-item .light-indicator {
+    width: 100%;
+    height: 100%;
+    color: inherit;
+}
+
+.light-indicator-item .indicator-content {
+    display: none;
+}
+
+/* ============================================
+   Velocímetro
+   ============================================ */
+.speedometer-card {
+    width: 100%;
+    color: #2b2b2b;
+    user-select: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 8px 0;
+}
+
+.speedometer-label-top {
+    font-size: clamp(10px, 0.75vw, 12px);
+    font-weight: 700;
+    color: var(--text-mid);
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    margin-bottom: 6px;
+    text-align: center;
+    opacity: 0.9;
+    font-family: 'Courier New', monospace;
+}
+
+.speedometer-svg {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+}
+
+#speedometerTrack {
+    fill: none;
+    stroke: rgba(0, 240, 255, 0.07);
+    stroke-width: 5;
+    stroke-linecap: round;
+}
+
+#speedometerProgress {
+    fill: none;
+    stroke: #39fca8;
+    stroke-width: 3;
+    stroke-linecap: round;
+    filter: none;
+    transition: stroke 0.18s ease, stroke-dasharray 0.15s linear;
+}
+
+#speedometerNeedle {
+    stroke: #39c87a;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    transition: stroke 0.18s ease;
+    filter: none;
+}
+
+.speedometer-center {
+    fill: #030810;
+    stroke: rgba(0, 240, 255, 0.4);
+    stroke-width: 1;
+    filter: none;
+}
+
+.speedometer-scale {
+    display: none;
+}
+
+.speedometer-readout {
+    margin-top: 4px;
+    display: flex;
+    justify-content: center;
+    align-items: baseline;
+    gap: 4px;
+    width: 100%;
+    text-align: center;
+}
+
+#speedometerValue {
+    font-size: clamp(42px, 2.8vw, 58px);
+    font-weight: 700;
+    line-height: 1;
+    transition: color 0.18s ease;
+    color: #39c87a;
+    text-shadow: none;
+    text-align: center;
+    font-family: 'BebasNeue', monospace;
+    letter-spacing: 2px;
+}
+
+.speed-unit {
+    font-size: clamp(14px, 1vw, 18px);
+    font-weight: 600;
+    color: var(--text-mid);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.speed-zone {
+    display: none;
+}
+
+.speedometer-tick {
+    stroke-linecap: round;
+}
+
+.speedometer-tick.minor {
+    stroke: rgba(0, 240, 255, 0.15);
+    stroke-width: 0.8;
+}
+
+.speedometer-tick.major {
+    stroke: rgba(0, 240, 255, 0.45);
+    stroke-width: 1.5;
+}
+
+.speedometer-label {
+    fill: var(--text-mid);
+    font-size: 7px;
+    font-weight: 400;
+    letter-spacing: 0.5px;
+}
+
+/* ============================================
+   Botão de Layout (R key)
+   ============================================ */
+.layout-mode-btn {
+    position: fixed;
+    top: 20px;
+    right: 64px;
+    z-index: 1000;
+    border: none;
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    cursor: pointer;
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    outline: none;
+    box-shadow: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: filter 0.2s ease;
+}
+
+.layout-mode-btn:hover {
+    filter: drop-shadow(0 0 8px var(--cyber-cyan));
+}
+
+.layout-mode-btn:focus,
+.layout-mode-btn:focus-visible,
+.layout-mode-btn:active {
+    outline: none;
+    box-shadow: none;
+}
+
+.rotate-icon {
+    width: 100%;
+    height: 100%;
+    color: var(--cyber-cyan-dim);
+}
+
+/* ============================================
+   Clock Vertical (no side-dashboard)
+   ============================================ */
+.vertical-clock {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    color: #2a2a2a;
+    font-family: 'BebasNeue', monospace;
+    line-height: 1;
+    width: 100%;
+    margin: 0 auto;
+}
+
+.clock-main {
+    font-size: clamp(56px, 3.6vw, 78px);
+    letter-spacing: 3px;
+    color: var(--cyber-cyan);
+    text-shadow: none;
+    text-align: center;
+}
+
+.clock-seconds {
+    font-size: clamp(18px, 1.2vw, 24px);
+    transform: translateY(-6px);
+    opacity: 0.8;
+    color: var(--text-mid);
+    letter-spacing: 2px;
+}
+
+/* ============================================
+   Indicadores Secundários do Dashboard
+   ============================================ */
+.dashboard-secondary-indicators {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin: 4px 0;
+}
+
+body.vertical-driving-mode .dashboard-secondary-indicators {
+    gap: clamp(12px, 1.2vw, 16px);
+    margin: clamp(8px, 0.8vw, 12px) 0;
+}
+
+.indicator-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    transition: opacity 0.2s ease;
+    position: relative;
+}
+
+.indicator-item:hover {
+    opacity: 0.8;
+}
+
+.indicator-icon {
+    width: clamp(24px, 1.6vw, 28px);
+    height: clamp(24px, 1.6vw, 28px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--cyber-cyan-dim);
+}
+
+.indicator-icon svg {
+    width: 100%;
+    height: 100%;
+    stroke: currentColor;
+    fill: none;
+}
+
+.temperature-icon {
+    color: var(--cyber-magenta);
+}
+
+.rpm-icon {
+    color: var(--cyber-magenta);
+    filter: drop-shadow(0 0 4px var(--cyber-magenta-glow));
+}
+
+.battery-icon {
+    color: var(--cyber-green);
+    width: clamp(32px, 2.2vw, 40px);
+    height: clamp(32px, 2.2vw, 40px);
+    filter: drop-shadow(0 0 4px var(--cyber-green-glow));
+}
+
+.battery-icon svg #batteryFillIndicator {
+    transition: width 0.3s ease, x 0.3s ease, fill 0.3s ease;
+}
+
+.battery-item-full {
+    grid-column: 1 / -1;
+    padding: 12px 14px;
+    justify-content: flex-start;
+    border: 1px solid var(--border-neon-dim);
+    border-left: 2px solid var(--cyber-green);
+}
+
+.light-indicator-item {
+    grid-column: 1 / -1;
+}
+
+.rpm-indicator-item,
+.light-indicator-item {
+    width: 100%;
+    min-height: clamp(72px, 6.2vw, 92px);
+    padding: clamp(10px, 0.9vw, 14px) clamp(12px, 1vw, 16px);
+    justify-content: flex-start;
+    align-items: center;
+    gap: clamp(10px, 0.9vw, 14px);
+}
+
+.rpm-indicator-item .indicator-icon,
+.light-indicator-item .indicator-icon {
+    width: clamp(56px, 4.2vw, 72px);
+    height: clamp(56px, 4.2vw, 72px);
+}
+
+.rpm-indicator-item .indicator-content,
+.light-indicator-item .indicator-content {
+    align-items: flex-start;
+    justify-content: center;
+    gap: 4px;
+}
+
+.rpm-indicator-item .indicator-value,
+.light-indicator-item .indicator-value {
+    font-size: clamp(36px, 2.8vw, 48px);
+    line-height: 1;
+}
+
+.battery-item-full .indicator-icon {
+    width: clamp(32px, 2.2vw, 38px);
+    height: clamp(32px, 2.2vw, 38px);
+    border: none;
+    outline: none;
+}
+
+.battery-item-full .indicator-icon svg {
+    border: none;
+    outline: none;
+}
+
+.battery-item-full .indicator-content {
+    flex: 1;
+}
+
+.battery-item-full .indicator-value {
+    font-size: clamp(16px, 1.2vw, 20px);
+}
+
+.indicator-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+.indicator-label {
+    font-size: clamp(8px, 0.65vw, 10px);
+    font-weight: 700;
+    color: rgba(74, 154, 112, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    opacity: 1;
+    line-height: 1.2;
+    font-family: 'Courier New', monospace;
+}
+
+.indicator-value {
+    font-size: clamp(13px, 1vw, 16px);
+    font-weight: 700;
+    color: var(--cyber-green);
+    line-height: 1.2;
+    text-shadow: none;
+    font-family: 'BebasNeue', 'Courier New', monospace;
+    letter-spacing: 1px;
+}
+
+/* ============================================
+   Footer do Dashboard
+   ============================================ */
+.dashboard-footer {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.dashboard-status-text {
+    font-size: clamp(9px, 0.7vw, 11px);
+    font-weight: 700;
+    color: rgba(0, 255, 159, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    text-align: center;
+    padding: 5px 12px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    text-shadow: none;
+    font-family: 'Courier New', monospace;
+    animation: statusPulse 3s ease-in-out infinite;
+}
+
+@keyframes statusPulse {
+    0%, 100% { opacity: 1; text-shadow: 0 0 8px rgba(0, 255, 159, 0.6); }
+    50%       { opacity: 0.65; text-shadow: 0 0 4px rgba(0, 255, 159, 0.3); }
+}
+
+/* ============================================
+   Dashboard Horizontal (modo padrão — bottom HUD)
+   ============================================ */
+.horizontal-dashboard {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 800;
+    display: flex;
+    justify-content: center;
+    padding: clamp(12px, 1vw, 18px) clamp(20px, 2vw, 40px);
+    pointer-events: none;
+}
+
+body:not(.vertical-driving-mode) .horizontal-dashboard:not(.exiting) {
+    display: flex;
+}
+
+body:not(.vertical-driving-mode) .horizontal-dashboard:not(.exiting):not([style*="animation"]) {
+    animation: slideUpFromBottom 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+@keyframes slideUpFromBottom {
+    0%   { opacity: 0; transform: translateY(100%); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDownToBottom {
+    0%   { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(100%); }
+}
+
+.horizontal-dashboard-content {
+    display: flex;
+    align-items: center;
+    gap: clamp(20px, 2.5vw, 40px);
+    padding: clamp(14px, 1.2vw, 20px) clamp(28px, 2.5vw, 40px);
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    backdrop-filter: none;
+    pointer-events: auto;
+    max-width: 90vw;
+    position: relative;
+}
+
+.horizontal-speedometer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 120px;
+}
+
+.horizontal-speed-label {
+    font-size: clamp(9px, 0.7vw, 11px);
+    font-weight: 700;
+    color: var(--text-mid);
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    font-family: 'Courier New', monospace;
+}
+
+.horizontal-speed-value {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.horizontal-speed-value span:first-child {
+    font-size: clamp(32px, 2.4vw, 42px);
+    font-weight: 700;
+    color: var(--text-bright);
+    text-shadow: none;
+    line-height: 1;
+    font-family: 'BebasNeue', monospace;
+    letter-spacing: 2px;
+}
+
+.horizontal-speed-unit {
+    font-size: clamp(11px, 0.85vw, 14px);
+    font-weight: 600;
+    color: var(--text-mid);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.horizontal-indicators {
+    display: flex;
+    gap: clamp(16px, 2vw, 28px);
+    align-items: center;
+}
+
+.horizontal-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    transition: opacity 0.2s ease;
+}
+
+.horizontal-indicator:hover {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    opacity: 0.85;
+}
+
+.horizontal-indicator-icon {
+    width: clamp(28px, 2vw, 36px);
+    height: clamp(28px, 2vw, 36px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--cyber-cyan-dim);
+}
+
+.horizontal-indicator-icon svg {
+    width: 100%;
+    height: 100%;
+    stroke: currentColor;
+    fill: none;
+}
+
+.horizontal-indicator-icon.temperature-icon {
+    color: var(--cyber-magenta);
+}
+
+.horizontal-indicator-icon.rpm-icon {
+    color: rgba(255, 0, 102, 0.7);
+    filter: none;
+}
+
+.horizontal-indicator-icon.battery-icon {
+    color: var(--cyber-green);
+}
+
+.horizontal-indicator-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.horizontal-indicator-label {
+    font-size: clamp(9px, 0.7vw, 11px);
+    font-weight: 700;
+    color: var(--text-mid);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    line-height: 1.2;
+    font-family: 'Courier New', monospace;
+}
+
+.horizontal-indicator-value {
+    font-size: clamp(28px, 2.2vw, 38px);
+    font-weight: 700;
+    color: var(--text-bright);
+    line-height: 1.2;
+    text-shadow: none;
+    font-family: 'BebasNeue', monospace;
+    letter-spacing: 1px;
+}
+
+.horizontal-light-status {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    min-width: clamp(140px, 11vw, 180px);
+    width: clamp(140px, 11vw, 180px);
+    min-height: clamp(96px, 7.2vw, 124px);
+    height: clamp(96px, 7.2vw, 124px);
+    flex-shrink: 0;
+}
+
+.horizontal-rpm-status {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: clamp(140px, 11vw, 180px);
+    width: clamp(140px, 11vw, 180px);
+    min-height: clamp(96px, 7.2vw, 124px);
+    height: clamp(96px, 7.2vw, 124px);
+    flex-shrink: 0;
+}
+
+.horizontal-rpm-status .horizontal-indicator-icon {
+    width: clamp(36px, 2.8vw, 46px);
+    height: clamp(36px, 2.8vw, 46px);
+}
+
+.horizontal-rpm-status .horizontal-indicator-text {
+    align-items: center;
+    text-align: center;
+    gap: 4px;
+}
+
+.horizontal-rpm-status .horizontal-indicator-value {
+    font-size: clamp(32px, 2.4vw, 42px);
+    color: var(--text-bright);
+    line-height: 1;
+}
+
+.horizontal-light-icon {
+    width: clamp(40px, 3vw, 52px);
+    height: clamp(40px, 3vw, 52px);
+    color: var(--text-mid);
+    flex-shrink: 0;
+}
+
+.horizontal-light-text {
+    display: none;
+}
+
+.horizontal-light-text {
+    font-size: clamp(10px, 0.8vw, 12px);
+    font-weight: 700;
+    color: var(--text-mid);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    text-align: center;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: 'Courier New', monospace;
+}
+
+/* Esconde dashboard horizontal no modo vertical */
+body.vertical-driving-mode .horizontal-dashboard:not(.animating):not(.exiting) {
+    display: none;
+}
+
+.horizontal-dashboard.animating,
+.horizontal-dashboard.exiting {
+    display: flex !important;
+}
+
+.horizontal-dashboard.exiting {
+    animation: slideDownToBottom 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards !important;
+}
+
+/* ============================================
+   Container Principal
+   ============================================ */
+.app-container {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: padding 0.3s ease, justify-content 0.3s ease;
+    padding-bottom: clamp(80px, 8vh, 120px);
+}
+
+/* ============================================
+   Painel de Proximidade
+   ============================================ */
+.proximity-panel {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    transform-origin: center center;
+    transform: translateX(0) rotate(0deg);
+    transition: transform 0.62s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* ============================================
+   Ondas de Proximidade
+   ============================================ */
+.proximity-waves {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+    transform-origin: center center;
+    transition: transform 0.62s cubic-bezier(0.2, 0.7, 0.2, 1), opacity 0.3s ease;
+}
+
+.wave {
+    fill: none;
+    stroke: var(--wave-color);
+    stroke-width: var(--wave-stroke-width);
+    stroke-linecap: butt;
+    stroke-linejoin: miter;
+    opacity: 0.65;
+}
+
+.wave-1 { animation: wavePulse 2s ease-out infinite; animation-delay: 0s; }
+.wave-2 { animation: wavePulse 2s ease-out infinite; animation-delay: 0.4s; }
+.wave-3 { animation: wavePulse 2s ease-out infinite; animation-delay: 0.8s; }
+.wave-4 { animation: wavePulse 2s ease-out infinite; animation-delay: 1.2s; }
+
+@keyframes wavePulse {
+    0%   { opacity: 0.28; stroke-width: var(--wave-stroke-width); }
+    20%  { opacity: 0.62; }
+    50%  { opacity: 0.88; }
+    100% { opacity: 0.28; stroke-width: var(--wave-stroke-width); }
+}
+
+/* ============================================
+   Imagem do Carro
+   ============================================ */
+.car-image {
+    max-width: 50vw;
+    max-height: 50vh;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    display: block;
+    transition: opacity var(--transition-speed) ease-in-out;
+    position: relative;
+    z-index: 2;
+    pointer-events: none;
+    -webkit-user-drag: none;
+    user-drag: none;
+}
+
+.car-image.loading { opacity: 0; }
+.car-image.loaded  { opacity: 1; }
+
+/* ============================================
+   Modo Vertical
+   ============================================ */
+body.vertical-driving-mode .app-container {
+    justify-content: center;
+    align-items: flex-start;
+    padding-left: 0;
+    padding-top: clamp(180px, 18vh, 240px);
+}
+
+body.vertical-driving-mode .proximity-waves {
+    display: none;
+}
+
+body.vertical-driving-mode .proximity-panel {
+    transform: translateX(calc(-1 * var(--vertical-layout-offset) - clamp(80px, 8vw, 120px))) rotate(90deg) translateY(clamp(40px, 4vh, 60px));
+}
+
+body.vertical-driving-mode .side-dashboard:not(.exiting) {
+    display: flex !important;
+    right: auto !important;
+    left: 50% !important;
+    top: 50% !important;
+    gap: clamp(18px, 1.8vw, 26px) !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    width: var(--vertical-card-width) !important;
+    padding: clamp(20px, 1.8vw, 28px) clamp(16px, 1.4vw, 22px) clamp(20px, 1.8vw, 28px) !important;
+    border-radius: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    overflow: hidden !important;
+    z-index: 900 !important;
+}
+
+body.vertical-driving-mode .side-dashboard:not(.exiting):not([style*="animation"]):not([style*="transform"]) {
+    transform: translate(calc(var(--vertical-layout-offset)), -50%);
+}
+
+@keyframes slideInFromSide {
+    0%   { opacity: 0; transform: translate(calc(var(--vertical-layout-offset) + 100%), -50%); }
+    100% { opacity: 1; transform: translate(calc(var(--vertical-layout-offset)), -50%); }
+}
+
+@keyframes slideOutToSide {
+    0%   { opacity: 1; transform: translate(calc(var(--vertical-layout-offset)), -50%); }
+    100% { opacity: 0; transform: translate(calc(var(--vertical-layout-offset) + 100%), -50%); }
+}
+
+body.vertical-driving-mode .car-image {
+    max-width: clamp(38vw, 42vw, 45vw);
+    max-height: clamp(38vh, 42vh, 45vh);
+}
+
+@keyframes sensorsExpandIn {
+    0%   { transform: scale(0.88); opacity: 0.55; }
+    65%  { transform: scale(1.08); opacity: 1; }
+    100% { transform: scale(1);    opacity: 1; }
+}
+
+body.vertical-layout-animating .proximity-waves {
+    opacity: 0;
+    animation: none;
+}
+
+/* ============================================
+   Botão Painel de Controle
+   ============================================ */
+.panel-btn {
+    position: fixed;
+    top: 20px;
+    right: 62px;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    z-index: 1000;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: filter var(--transition-speed) ease, opacity var(--transition-speed) ease;
+}
+.panel-btn:hover  { filter: drop-shadow(0 0 8px var(--cyber-cyan)); opacity: 1; }
+.panel-btn:active { opacity: 0.6; }
+.panel-btn:focus  { outline: none; }
+.panel-btn svg    { width: 100%; height: 100%; color: var(--cyber-cyan-dim); }
+
+/* ============================================
+   Botão Fullscreen
+   ============================================ */
+.fullscreen-btn {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    z-index: 1000;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: filter var(--transition-speed) ease, opacity var(--transition-speed) ease;
+}
+
+.fullscreen-btn:hover  { filter: drop-shadow(0 0 8px var(--cyber-cyan)); opacity: 1; }
+.fullscreen-btn:active { opacity: 0.6; }
+.fullscreen-btn:focus  { outline: none; }
+
+.fullscreen-icon {
+    width: 100%;
+    height: 100%;
+    color: var(--cyber-cyan-dim);
+    stroke: currentColor;
+}
+
+/* ============================================
+   Responsividade
+   ============================================ */
+@media (max-width: 768px) {
+    .car-image {
+        max-width: 65vw;
+        max-height: 65vh;
+    }
+
+    .fullscreen-btn {
+        top: 15px;
+        right: 15px;
+        width: 28px;
+        height: 28px;
+    }
+
+    .side-dashboard {
+        right: 12px;
+        transform: translateY(-50%) scale(0.9);
+        transform-origin: right center;
+        width: clamp(250px, 28vw, 330px);
+        padding: 12px;
+    }
+
+    .horizontal-dashboard-content {
+        flex-wrap: wrap;
+        gap: clamp(12px, 1.5vw, 20px);
+        padding: clamp(10px, 1vw, 14px) clamp(16px, 2vw, 24px);
+    }
+
+    .horizontal-indicators {
+        gap: clamp(10px, 1.2vw, 16px);
+    }
+
+    .app-container {
+        padding-bottom: clamp(100px, 12vh, 140px);
+    }
+
+    body.vertical-driving-mode .proximity-panel {
+        transform: translateX(calc(-1 * clamp(145px, 10vw, 180px))) rotate(90deg);
+    }
+
+    body.vertical-driving-mode .side-dashboard:not(.exiting) {
+        right: auto !important;
+        left: 50% !important;
+        top: 50% !important;
+        transform: translate(calc(var(--vertical-layout-offset)), -50%) !important;
+        transform-origin: center center;
+    }
+
+    body.vertical-driving-mode .car-image {
+        max-width: 36vw;
+        max-height: 36vh;
+    }
+
+    .layout-mode-btn {
+        top: 15px;
+        right: 52px;
+        width: 30px;
+        height: 30px;
+    }
+
+    .clock-main {
+        font-size: clamp(48px, 3.2vw, 68px);
+    }
+
+    .clock-seconds {
+        font-size: clamp(16px, 1.1vw, 22px);
+    }
+}
+
+@media (max-width: 480px) {
+    .car-image {
+        max-width: 75vw;
+        max-height: 75vh;
+    }
+
+    .fullscreen-btn {
+        top: 10px;
+        right: 10px;
+        width: 24px;
+        height: 24px;
+    }
+
+    .layout-mode-btn {
+        top: 10px;
+        right: 42px;
+        width: 26px;
+        height: 26px;
+    }
+
+    .side-dashboard {
+        transform: translateY(-50%) scale(0.78);
+        right: 8px;
+        width: clamp(220px, 36vw, 270px);
+        padding: 10px;
+    }
+
+    .horizontal-dashboard-content {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+
+    .horizontal-indicators {
+        justify-content: space-around;
+        width: 100%;
+    }
+
+    .app-container {
+        padding-bottom: clamp(140px, 18vh, 180px);
+    }
+
+    body.vertical-driving-mode .proximity-panel {
+        transform: translateX(calc(-1 * clamp(105px, 12vw, 145px))) rotate(90deg);
+    }
+
+    body.vertical-driving-mode .side-dashboard:not(.exiting) {
+        right: auto !important;
+        left: 50% !important;
+        top: 50% !important;
+        transform: translate(calc(var(--vertical-layout-offset)), -50%) !important;
+        transform-origin: center center;
+    }
+
+    body.vertical-driving-mode .car-image {
+        max-width: 40vw;
+        max-height: 40vh;
+    }
+
+    .clock-main {
+        font-size: clamp(44px, 3vw, 64px);
+    }
+
+    .clock-seconds {
+        font-size: clamp(15px, 1vw, 20px);
+    }
+
+    .brand-logo {
+        width: 64px;
+        height: 64px;
+        top: 10px;
+    }
+}

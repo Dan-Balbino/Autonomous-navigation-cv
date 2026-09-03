@@ -1,15 +1,5 @@
-# ── Repositórios embutidos (projetos separados) ───────────────────────────────
-AutoCar-DigitalTwin/
-AutoCar-Front/
-eyes-front/
-digital-twin/
-
 # ── Claude / IDE ──────────────────────────────────────────────────────────────
 .claude/
-
-# ── Projetos do Front ──────────────────────────────────────────────────────────────
-.AutoCar-DigitalTwin/
-.AutoCar-Front/
 
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
