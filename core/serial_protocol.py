@@ -5,6 +5,7 @@ import json
 class SerialProtocol:
     def __init__(self, port, baudrate=115200, timeout=0.1):
         self.ser = None
+        self._receive_buffer = bytearray()
 
         if port is None:
             print("[SERIAL] Modo teste.")
@@ -37,10 +38,18 @@ class SerialProtocol:
     def receive_data(self):
         if self.ser is None:
             return
-        if self.ser.in_waiting > 0:
-            try:
-                response = self.ser.readline().decode("utf-8").strip()
-                if response:
-                    return response
-            except Exception as e:
-                print("Erro ao ler:", e)
+        try:
+            waiting = self.ser.in_waiting
+            if waiting <= 0:
+                return
+
+            self._receive_buffer.extend(self.ser.read(waiting))
+            lines = self._receive_buffer.split(b"\n")
+            self._receive_buffer = bytearray(lines.pop())
+            if not lines:
+                return
+
+            response = lines[-1].decode("utf-8", errors="replace").strip()
+            return response or None
+        except (serial.SerialException, OSError) as e:
+            print("Erro ao ler:", e)

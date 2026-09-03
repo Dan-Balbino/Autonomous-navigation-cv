@@ -28,9 +28,11 @@ ROI_H = 240
 DASHBOARD_PORT = 5000
 MAX_SPEED_MPS = 10.0
 MIN_MOVING_SPEED_MPS = 1.5
+SERIAL_BAUDRATE = 115200
 COM = select_com()
 
 shared_frame = None
+shared_frame_id = 0
 
 flag_stop = False
 flag_tl = 0
@@ -40,6 +42,7 @@ sign_lock = threading.Lock()
 
 _usb_cams = scan_usb_devices()
 cap, _cam_idx = open_camera(_usb_cams)
+cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
 
 # ── Inicialização da cãmera ────────────────────────────
@@ -68,11 +71,11 @@ allow_dashboard_firewall_rule(DASHBOARD_PORT)
 # ── Inicialização dos objetos ───────────────
 corrector = FisheyeCorrector("calibration/fisheye_calibration.npz", width, height, balance=0.4, offset_x=-86)
 sign_det = ObjectDetector("model/Modelo_3.pt")
+car = Car(COM)
 panel = ControlPanel(width, height, test_mode=(COM is None),
                      dashboard_url=f"http://{_dashboard_ip}:{DASHBOARD_PORT}",
                      twin_path=_twin_path if os.path.exists(_twin_path) else "",
-                     initial_cam_idx=_cam_idx)
-car = Car(COM)
+                     initial_cam_idx=_cam_idx, car=car)
 
 
 # ── Inicialização dos PIDs ───────────────
@@ -90,6 +93,7 @@ def pidHub(erro, pid_straight, pid_curve, dt=0.2):
 def mainLoop():
     global cap
     global shared_frame
+    global shared_frame_id
 
     error = 0
     angle = 0
@@ -102,24 +106,17 @@ def mainLoop():
         req = panel.get_connection()
         if req:
             new_com, new_cam_idx = req
-            if ser is not None:
-                try:
-                    ser.close()
-                except Exception:
-                    pass
-            if new_com is not None:
-                try:
-                    ser = serial.Serial(new_com, 9600, timeout=1)
-                    time.sleep(2)
-                    panel.log(f"[SERIAL] Reconectado: {new_com}", "ok")
-                except Exception as e:
-                    ser = None
-                    panel.log(f"[SERIAL] Falha em {new_com}: {e}", "error")
-            else:
-                ser = None
-                panel.log("[SERIAL] Modo teste — sem Arduino", "info")
+            try:
+                car.reconnect(new_com)
+                if new_com is not None:
+                    panel.log(f"[SERIAL] Reconectado: {new_com} @ {SERIAL_BAUDRATE}", "ok")
+                else:
+                    panel.log("[SERIAL] Modo teste — sem Arduino", "info")
+            except (serial.SerialException, OSError) as e:
+                panel.log(f"[SERIAL] Falha ao reconectar: {e}", "error")
             _nc = cv2.VideoCapture(new_cam_idx, cv2.CAP_DSHOW)
             if _nc.isOpened() and _nc.read()[0]:
+                _nc.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                 cap.release()   # só libera a antiga depois de confirmar a nova
                 cap = _nc
                 panel.log(f"[CAM] Reconectada: indice {new_cam_idx}", "ok")
@@ -133,6 +130,7 @@ def mainLoop():
         
         with frame_lock:
             shared_frame = frame.copy()
+            shared_frame_id += 1
 
         #frame = corrector.correct(frame)
         img = frame.copy()
@@ -196,6 +194,7 @@ def mainLoop():
         update_state(effective_speed, run)
 
         # ── Envio de dados para o Arduino ─────────────────────────────
+        car.command.run = run
         if run:
             now = time.time() * 1000
             should_send = now - last_send >= command_period_ms
@@ -228,15 +227,15 @@ def mainLoop():
             last_rx = data
             panel.log(f"RX ← {data}", "rx")
 
-        telemetry = {}
         if data:
             try:
                 decoded = json.loads(data)
                 if isinstance(decoded, dict):
-                    telemetry = decoded
                     car.telemetry = CarTelemetry.from_dict(decoded)
+                else:
+                    panel.log(f"[SERIAL] Telemetria ignorada: JSON não é objeto: {data}", "warn")
             except (TypeError, ValueError, json.JSONDecodeError):
-                pass
+                panel.log(f"[SERIAL] Telemetria inválida: {data}", "warn")
 
         # ── Dashboard ──────────────────────────────────────
         panel.update_vehicle_info({
@@ -257,7 +256,6 @@ def mainLoop():
                 ) or "Nenhum",
                 "running": run,
             },
-            "telemetry": telemetry,
             "raw_rx": last_rx,
         })
 
@@ -266,21 +264,27 @@ def mainLoop():
         panel.update_frames(img, limiar_bgr, sign_view)
 
     cap.release()
-    if ser is not None:
-        ser.close()
+    car.serial.close()
     cv2.destroyAllWindows()
 
 
 def sign_thread():
 
     global flag_stop, flag_tl
+    last_frame_id = -1
 
     while True:
 
-        if shared_frame is None:
-            continue
+        with frame_lock:
+            if shared_frame is None or shared_frame_id == last_frame_id:
+                frame = None
+            else:
+                frame = shared_frame.copy()
+                last_frame_id = shared_frame_id
 
-        frame = shared_frame.copy()
+        if frame is None:
+            time.sleep(0.001)
+            continue
 
         sign_det.update(frame)
 

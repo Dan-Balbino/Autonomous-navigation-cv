@@ -9,6 +9,11 @@ class Car:
         self.serial = SerialProtocol(self.COM)
         self.command = CarCommand()
         self.telemetry = CarTelemetry()
+
+    def reconnect(self, port: str=None):
+        self.serial.close()
+        self.COM = port
+        self.serial = SerialProtocol(port)
             
     def send_command(self):
         self.serial.send_data(self.command)

@@ -251,7 +251,7 @@ class _ServerBridge(QObject):
 
 class ControlPanel:
     def __init__(self, width, height, test_mode=False, dashboard_url="",
-                 twin_path="", initial_cam_idx=1):
+                 twin_path="", initial_cam_idx=1, car=None):
 
         self._app = QApplication.instance() or QApplication([])
 
@@ -263,6 +263,7 @@ class ControlPanel:
         self._dashboard_url = dashboard_url
         self._twin_path     = twin_path
         self._initial_cam_idx = initial_cam_idx
+        self.car = car
 
         self.vars       = {}   # key -> valor atual (int)
         self.val_labels = {}   # key -> QLabel
@@ -276,6 +277,7 @@ class ControlPanel:
         self._preview_labels = {}
         self._vehicle_labels = {}
         self._pid_labels = {}
+        self._can_modules_signature = None
 
         self._bridge = _ServerBridge()
         self._bridge.config_received.connect(self._apply_config)
@@ -589,13 +591,46 @@ class ControlPanel:
         ])
 
     def _build_can_card(self):
-        return self._build_vehicle_info_card("MÓDULOS", [
-            ("can_motors", "Motores"),
-            ("can_lights", "Luzes"),
-            ("can_ultrassonics", "Ultrassônicos"),
-            ("can_encoders", "Encoders"),
-            ("can_battery", "Monitoramento da bateria"),
-        ])
+        wrap = QVBoxLayout()
+        wrap.setContentsMargins(0, 0, 0, 0)
+        wrap.addWidget(self._section_header("MÓDULOS"))
+        self._can_card = QFrame()
+        self._can_card.setObjectName("Card")
+        self._can_layout = QVBoxLayout(self._can_card)
+        self._can_layout.setContentsMargins(14, 10, 14, 10)
+        self._can_layout.setSpacing(7)
+        self._can_layout.addWidget(QLabel("Nenhum módulo CAN"))
+        wrap.addWidget(self._can_card)
+        result = QWidget()
+        result.setLayout(wrap)
+        return result
+
+    def _update_can_modules(self, modules):
+        signature = tuple(sorted((str(name), repr(state)) for name, state in modules.items()))
+        if signature == self._can_modules_signature:
+            return
+        self._can_modules_signature = signature
+
+        while self._can_layout.count():
+            item = self._can_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        if not modules:
+            self._can_layout.addWidget(QLabel("Nenhum módulo CAN"))
+            return
+
+        for name, enabled in sorted(modules.items(), key=lambda item: str(item[0])):
+            row = QHBoxLayout()
+            row.addWidget(QLabel(str(name)))
+            row.addStretch()
+            value = QLabel(self._format_module(enabled))
+            value.setObjectName("StateValue")
+            value.setMinimumWidth(92)
+            value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            row.addWidget(value)
+            self._can_layout.addLayout(row)
 
     def _build_vehicle_info_card(self, title, fields):
         wrap = QVBoxLayout()
@@ -1027,29 +1062,35 @@ class ControlPanel:
 
     def _apply_vehicle_info(self, info):
         values = info.get("hud", {})
-        telemetry = info.get("telemetry", {})
-        ultrasonic = telemetry.get("ultrassonics", {}) if isinstance(telemetry, dict) else {}
-        can = telemetry.get("can", {}) if isinstance(telemetry, dict) else {}
+        car_telemetry = self.car.telemetry if self.car is not None else None
         display = {
             "error": str(values.get("error", "--")),
             "servo": f"{values.get('servo', '--')}°",
-            "speed_received": self._format_number(telemetry.get("spd"), " m/min"),
-            "battery": self._format_number(telemetry.get("bat"), "%"),
+            "speed_received": self._format_number(
+                car_telemetry.speed if car_telemetry is not None else None, " m/s"
+            ),
+            "battery": self._format_number(
+                car_telemetry.battery if car_telemetry is not None else None, "%"
+            ),
             "speed_applied": self._format_number(values.get("speed"), " m/s"),
             "pid_mode": str(values.get("pid_mode", "--")),
             "signals": str(values.get("signals", "--")),
-            "front": self._format_sensor(ultrasonic.get("front")),
-            "left": self._format_sensor(ultrasonic.get("left")),
-            "right": self._format_sensor(ultrasonic.get("right")),
-            "can_motors": self._format_module(can.get("motors")),
-            "can_lights": self._format_module(can.get("lights")),
-            "can_ultrassonics": self._format_module(can.get("ultrassonics")),
-            "can_encoders": self._format_module(can.get("encoders")),
-            "can_battery": self._format_module(can.get("battery")),
+            "front": self._format_sensor(
+                car_telemetry.front if car_telemetry is not None else None
+            ),
+            "left": self._format_sensor(
+                car_telemetry.left if car_telemetry is not None else None
+            ),
+            "right": self._format_sensor(
+                car_telemetry.right if car_telemetry is not None else None
+            ),
         }
         for key, text in display.items():
             if key in self._vehicle_labels:
                 self._vehicle_labels[key].setText(text)
+        self._update_can_modules(
+            car_telemetry.can if car_telemetry is not None else {}
+        )
         for prefix in ("RETA", "CURVA"):
             pid_values = values.get(prefix.lower(), {})
             for term in ("Kp", "Ki", "Kd"):
@@ -1092,9 +1133,9 @@ class ControlPanel:
     @staticmethod
     def _format_module(value):
         if value is True:
-            return '<span style="color:#a6e3a1; font-weight:700">ONLINE</span>'
+            return '<span style="color:#a6e3a1; font-weight:700">ATIVADO</span>'
         if value is False:
-            return '<span style="color:#f38ba8; font-weight:700">OFFLINE</span>'
+            return '<span style="color:#f38ba8; font-weight:700">DESATIVADO</span>'
         return "--"
 
     def _present_latest_frames(self):
