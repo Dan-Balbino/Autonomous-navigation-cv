@@ -235,6 +235,90 @@ body:not(.vertical-driving-mode) .top-clock {
 }
 
 /* ============================================
+   Faixa de sinais (placa de PARE / semáforo / veículo)
+   ============================================ */
+.signal-strip {
+    position: fixed;
+    top: 44px;
+    left: 12px;
+    z-index: 1001;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Mesmo padrão visual dos indicator-item (PWM / Farol): ícone + label/valor,
+   com a barra lateral colorida indicando o estado atual. */
+.signal-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    min-width: 150px;
+    background: rgba(4, 8, 15, 0.55);
+    border: 1px solid var(--border-neon-dim);
+    border-left: 2px solid var(--cyber-cyan-dim);
+    box-shadow: 0 0 5px var(--cyber-cyan-glow);
+    transition: border-left-color 0.2s ease;
+}
+
+.signal-chip-icon {
+    width: clamp(18px, 1.4vw, 22px);
+    height: clamp(18px, 1.4vw, 22px);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-mid);
+    transition: color 0.2s ease;
+}
+
+.signal-chip-icon svg {
+    width: 100%;
+    height: 100%;
+    stroke: currentColor;
+    fill: none;
+}
+
+.signal-chip-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.signal-chip-label {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--text-mid);
+    text-transform: uppercase;
+    opacity: 0.75;
+    font-family: 'Courier New', monospace;
+    white-space: nowrap;
+}
+
+.signal-chip-value {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--text-mid);
+    font-family: 'BebasNeue', 'Courier New', monospace;
+    white-space: nowrap;
+    transition: color 0.2s ease;
+}
+
+.signal-chip.state-green  { border-left-color: var(--cyber-green); }
+.signal-chip.state-red    { border-left-color: var(--cyber-magenta); }
+.signal-chip.state-yellow { border-left-color: var(--cyber-yellow); }
+.signal-chip.state-muted  { border-left-color: var(--cyber-cyan-dim); }
+
+.signal-chip.state-green  .signal-chip-icon, .signal-chip.state-green  .signal-chip-value { color: var(--cyber-green); }
+.signal-chip.state-red    .signal-chip-icon, .signal-chip.state-red    .signal-chip-value { color: var(--cyber-magenta); }
+.signal-chip.state-yellow .signal-chip-icon, .signal-chip.state-yellow .signal-chip-value { color: var(--cyber-yellow); }
+.signal-chip.state-muted  .signal-chip-icon, .signal-chip.state-muted  .signal-chip-value { color: var(--text-mid); }
+
+/* ============================================
    Side Dashboard (Modo Vertical)
    ============================================ */
 .side-dashboard {
@@ -495,15 +579,15 @@ body.vertical-driving-mode .dashboard-main-indicators {
 .layout-mode-btn {
     position: fixed;
     top: 20px;
-    right: 64px;
+    right: 104px;
     z-index: 1000;
     border: none;
     background: transparent;
     padding: 0;
     border-radius: 0;
     cursor: pointer;
-    width: 34px;
-    height: 34px;
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1271,7 +1355,7 @@ body.vertical-layout-animating .proximity-waves {
 
     .layout-mode-btn {
         top: 15px;
-        right: 52px;
+        right: 104px;
         width: 30px;
         height: 30px;
     }
@@ -1300,7 +1384,7 @@ body.vertical-layout-animating .proximity-waves {
 
     .layout-mode-btn {
         top: 10px;
-        right: 42px;
+        right: 104px;
         width: 26px;
         height: 26px;
     }

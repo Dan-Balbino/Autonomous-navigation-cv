@@ -20,6 +20,7 @@ import { ProximityAudioManager } from './modules/proximityAudioManager.js';
 function init() {
     const imageElement = document.getElementById('carImage');
     const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const layoutModeBtn = document.getElementById('layoutModeBtn');
     const clockMainEl = document.getElementById('topClockMain');
     const clockSecondsEl = document.getElementById('topClockSeconds');
     const clockMillisecondsEl = document.getElementById('topClockMilliseconds');
@@ -28,6 +29,9 @@ function init() {
     const wavesContainer = document.getElementById('proximityWaves');
     const appContainer = document.querySelector('.app-container');
     const proximityPanel = document.querySelector('.proximity-panel');
+    const signalStopValueEl = document.getElementById('signalStopValue');
+    const signalLightValueEl = document.getElementById('signalLightValue');
+    const signalReasonValueEl = document.getElementById('signalReasonValue');
     
     if (!imageElement) {
         console.error('Elemento da imagem não encontrado');
@@ -136,6 +140,9 @@ function init() {
             let speedRecalcTimer = null;
             let latestRpm = 0;
             let latestPwm = 0;
+            // Velocidade real, lida de car.telemetry.speed (via /api/dashboard) — não é
+            // mais derivada do PWM comandado, então o velocímetro reflete o sensor do carro.
+            let latestRealSpeed = 0;
             let lastRotateFromApi = null;
             let displayedSpeed = 0;
             let lastSpeedUpdateTs = performance.now();
@@ -150,11 +157,8 @@ function init() {
                 return Number.isFinite(parsed) ? parsed : null;
             };
             const wheelCircumference = Math.PI * wheelDiameterMeters;
-            const rpmToSpeed = (rpmValue) => {
-                const safeRpm = Math.max(0, Number(rpmValue) || 0);
-                const wheelRpm = safeRpm / gearRatio;
-                return wheelRpm * wheelCircumference;
-            };
+            // Usado apenas pela simulação de teste (tecla V) para mover o indicador de PWM;
+            // o velocímetro em si é alimentado direto por latestRealSpeed (car.telemetry.speed).
             const speedToRpm = (speedMmin) => (speedMmin / wheelCircumference) * gearRatio;
 
             // Simulação por tecla V — limitada ao máximo físico real (PWM 255 → motor max → roda)
@@ -207,7 +211,7 @@ function init() {
             };
 
             const updateSpeedAndRpmUI = () => {
-                const targetSpeed = rpmToSpeed(latestRpm);
+                const targetSpeed = latestRealSpeed;
                 const now = performance.now();
                 const deltaSeconds = Math.max(0.016, Math.min(0.25, (now - lastSpeedUpdateTs) / 1000));
                 lastSpeedUpdateTs = now;
@@ -232,8 +236,44 @@ function init() {
 
             let setLayoutMode = () => {};
 
+            // Placa de PARE / semáforo — mesma lógica de indicação do painel web.
+            // O estado (cor) é aplicado no card inteiro (.signal-chip), pois ícone e
+            // valor mudam de cor juntos, no mesmo padrão dos indicator-item existentes.
+            const setSignalChip = (valueEl, text, state) => {
+                if (!valueEl) return;
+                valueEl.textContent = text;
+                const chip = valueEl.closest('.signal-chip');
+                if (!chip) return;
+                chip.classList.remove('state-green', 'state-red', 'state-yellow', 'state-muted');
+                chip.classList.add(`state-${state}`);
+            };
+
+            const updateSignalChips = (dashboardData) => {
+                const stopRaw = dashboardData?.tabDashboard_stop_active ?? dashboardData?.tabdashboard_stop_active;
+                const stopActive = typeof stopRaw === 'boolean' ? stopRaw : null;
+                if (stopActive === true) setSignalChip(signalStopValueEl, 'ATIVA', 'red');
+                else if (stopActive === false) setSignalChip(signalStopValueEl, 'LIVRE', 'green');
+                else setSignalChip(signalStopValueEl, '—', 'muted');
+
+                const lightCode = parseNumber(dashboardData?.tabDashboard_traffic_light_code ?? dashboardData?.tabdashboard_traffic_light_code);
+                const lightMap = { 0: ['VERMELHO', 'red'], 1: ['AMARELO', 'yellow'], 2: ['VERDE', 'green'], '-1': ['NENHUM', 'muted'] };
+                const [lightText, lightState] = lightMap[lightCode] ?? ['—', 'muted'];
+                setSignalChip(signalLightValueEl, lightText, lightState);
+
+                const runningRaw = dashboardData?.tabDashboard_running ?? dashboardData?.tabdashboard_running;
+                const running = Boolean(runningRaw);
+                let reasonText = '—', reasonState = 'muted';
+                if (!running) { reasonText = 'PARADO (painel)'; reasonState = 'red'; }
+                else if (stopActive) { reasonText = 'PARADO — PLACA'; reasonState = 'red'; }
+                else if (lightCode === 0) { reasonText = 'PARADO — SEMÁFORO'; reasonState = 'red'; }
+                else { reasonText = 'EM MOVIMENTO'; reasonState = 'green'; }
+                setSignalChip(signalReasonValueEl, reasonText, reasonState);
+            };
+
             const applyDashboardPayload = (dashboardData) => {
                 const rpm = parseNumber(dashboardData?.tabDashboard_rpm ?? dashboardData?.tabdashboard_rpm);
+                const realSpeed = parseNumber(dashboardData?.tabDashboard_speed ?? dashboardData?.tabdashboard_speed);
+                const batteryLevel = parseNumber(dashboardData?.tabDashboard_battery ?? dashboardData?.tabdashboard_battery);
                 const lightRaw = dashboardData?.tabDashboard_light ?? dashboardData?.tabdashboard_light;
                 const rotateRaw = dashboardData?.tabDashboard_rotate ?? dashboardData?.tabdashboard_rotate;
                 const light = Boolean(lightRaw);
@@ -250,7 +290,13 @@ function init() {
                     latestPwm = Math.round(Math.max(0, Math.min(255, rpm)));
                     latestRpm = (latestPwm / 255) * maxMotorRpm;
                 }
+                if (realSpeed !== null) {
+                    latestRealSpeed = Math.max(0, realSpeed);
+                }
                 updateSpeedAndRpmUI();
+
+                deviceStatusManager.setLevel(batteryLevel);
+                updateSignalChips(dashboardData);
 
                 isHeadlightOn = light;
                 updateHeadlightUI();
@@ -472,6 +518,13 @@ function init() {
                 // Fallback caso transitionend não dispare
                 setTimeout(finishRefresh, 1200);
             };
+
+            // Botão de girar tela alterna entre o modo horizontal e o modo vertical
+            if (layoutModeBtn) {
+                layoutModeBtn.addEventListener('click', () => {
+                    setLayoutMode();
+                });
+            }
 
             // Tecla R alterna entre o modo horizontal e o modo vertical (com velocímetro)
             // Tecla V aumenta a velocidade simulada

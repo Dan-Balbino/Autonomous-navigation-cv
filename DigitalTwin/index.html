@@ -29,6 +29,48 @@
             <span class="status-value" id="batteryValue">--%</span>
         </div>
     </div>
+    <div class="signal-strip" id="signalStrip" aria-label="Sinais de trânsito">
+        <div class="signal-chip" id="chipStop">
+            <div class="signal-chip-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <polygon points="7.5,2 16.5,2 22,7.5 22,16.5 16.5,22 7.5,22 2,16.5 2,7.5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                    <line x1="8" y1="12" x2="16" y2="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+            </div>
+            <div class="signal-chip-content">
+                <div class="signal-chip-label">Placa de pare</div>
+                <div class="signal-chip-value" id="signalStopValue">—</div>
+            </div>
+        </div>
+        <div class="signal-chip" id="chipLight">
+            <div class="signal-chip-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="8" y="2" width="8" height="20" rx="4" stroke="currentColor" stroke-width="1.5"/>
+                    <circle cx="12" cy="7.2" r="1.6" fill="currentColor"/>
+                    <circle cx="12" cy="12" r="1.6" fill="currentColor" opacity="0.4"/>
+                    <circle cx="12" cy="16.8" r="1.6" fill="currentColor" opacity="0.4"/>
+                </svg>
+            </div>
+            <div class="signal-chip-content">
+                <div class="signal-chip-label">Semáforo</div>
+                <div class="signal-chip-value" id="signalLightValue">—</div>
+            </div>
+        </div>
+        <div class="signal-chip" id="chipReason">
+            <div class="signal-chip-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 13.5l1.6-4.8A2 2 0 0 1 6.5 7.3h11a2 2 0 0 1 1.9 1.4l1.6 4.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <rect x="2" y="13.5" width="20" height="5.5" rx="1.6" stroke="currentColor" stroke-width="1.5"/>
+                    <circle cx="7" cy="19" r="1.5" fill="currentColor"/>
+                    <circle cx="17" cy="19" r="1.5" fill="currentColor"/>
+                </svg>
+            </div>
+            <div class="signal-chip-content">
+                <div class="signal-chip-label">Veículo</div>
+                <div class="signal-chip-value" id="signalReasonValue">—</div>
+            </div>
+        </div>
+    </div>
     <button class="panel-btn" aria-label="Painel de controle" onclick="window.location.href='/panel'">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <line x1="4" y1="6"  x2="20" y2="6"  stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -42,6 +84,12 @@
     <button class="fullscreen-btn" id="fullscreenBtn" aria-label="Maximizar tela">
         <svg class="fullscreen-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M8 3H5C3.89543 3 3 3.89543 3 5V8M21 8V5C21 3.89543 20.1046 3 19 3H16M16 21H19C20.1046 21 21 20.1046 21 19V16M3 16V19C3 20.1046 3.89543 21 5 21H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+    </button>
+    <button class="layout-mode-btn" id="layoutModeBtn" aria-label="Girar tela" title="Girar tela">
+        <svg class="rotate-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <polyline points="1 4 1 10 7 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
     </button>
     <div class="side-dashboard" aria-label="Painel auxiliar">
