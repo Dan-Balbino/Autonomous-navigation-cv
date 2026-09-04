@@ -479,8 +479,7 @@ class ControlPanel:
             ("▶  Iniciar", "iniciar", GREEN),
             ("■  Parar", "parar", RED),
             ("↻  Resetar", "resetar", ORANGE),
-            ("⚙  Calibrar", "calibrar", ACCENT),
-            ("💾  Salvar", "salvar", PURPLE),
+            ("Salvar", "salvar", PURPLE),
         ):
             button = _btn(label, color)
             button.clicked.connect(lambda _, action=key: self._fire(action))
@@ -909,7 +908,7 @@ class ControlPanel:
 
         wrap_layout.addWidget(card)
 
-        reconnect_btn = _btn("🔌 Reconectar", TEAL)
+        reconnect_btn = _btn("Reconectar", TEAL)
         reconnect_btn.clicked.connect(self._reconectar)
         wrap_layout.addWidget(reconnect_btn)
 
@@ -926,8 +925,7 @@ class ControlPanel:
             ("▶  Iniciar",  "iniciar",  GREEN),
             ("■  Parar",    "parar",    RED),
             ("↺  Resetar",  "resetar",  ORANGE),
-            ("⚙  Calibrar", "calibrar", ACCENT),
-            ("💾  Salvar",  "salvar",   PURPLE),
+            ("Salvar",   "salvar",   PURPLE),
         ]
         for label, key, color in buttons:
             btn = _btn(label, color)
@@ -953,16 +951,16 @@ class ControlPanel:
         url_lbl.setWordWrap(True)
         card_layout.addWidget(url_lbl)
 
-        open_btn = _btn("🚗 Abrir Digital Twin", GREEN)
+        open_btn = _btn("Abrir Digital Twin", GREEN)
         open_btn.clicked.connect(lambda: webbrowser.open(self._dashboard_url))
         card_layout.addWidget(open_btn)
 
-        copy_btn = _btn("📋 Copiar link", BORDER, flat_dark=True)
+        copy_btn = _btn("Copiar link", BORDER, flat_dark=True)
 
         def _copy_link():
             self._app.clipboard().setText(self._dashboard_url)
-            copy_btn.setText("✔ Copiado!")
-            QTimer.singleShot(1500, lambda: copy_btn.setText("📋 Copiar link"))
+            copy_btn.setText("Copiado!")
+            QTimer.singleShot(1500, lambda: copy_btn.setText("Copiar link"))
 
         copy_btn.clicked.connect(_copy_link)
         card_layout.addWidget(copy_btn)

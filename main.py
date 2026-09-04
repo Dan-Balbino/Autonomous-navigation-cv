@@ -14,6 +14,9 @@ from vision.lane_detection import lane_detection_pipeline, get_frame_dimensions,
 from vision.object_detector import ObjectDetector
 from messaging.messaging_core import (
     app as dashboard_app, get_local_ip, update_state, load_config_from_file,
+    update_frames as dashboard_update_frames,
+    update_vehicle_info as dashboard_update_vehicle_info,
+    push_log as dashboard_push_log,
 )
 from vision.calibration import FisheyeCorrector
 from config.setup import (
@@ -29,6 +32,7 @@ DASHBOARD_PORT = 5000
 MAX_SPEED_MPS = 10.0
 MIN_MOVING_SPEED_MPS = 1.5
 SERIAL_BAUDRATE = 115200
+TRAFFIC_LIGHT_LABELS = {-1: "Nenhum", 0: "Vermelho", 1: "Amarelo", 2: "Verde"}
 COM = select_com()
 
 shared_frame = None
@@ -62,7 +66,7 @@ load_config_from_file()
 _dashboard_ip = get_local_ip()
 
 print(f"Dashboard http://{_dashboard_ip}:{DASHBOARD_PORT}/")
-_twin_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),"AutoCar-DigitalTwin", "index.html")
+_twin_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),"DigitalTwin", "index.html")
 
 # Libera a porta no Firewall do Windows (silencioso — requer admin na primeira vez)
 allow_dashboard_firewall_rule(DASHBOARD_PORT)
@@ -81,6 +85,12 @@ panel = ControlPanel(width, height, test_mode=(COM is None),
 # ── Inicialização dos PIDs ───────────────
 pid_straight  = PID(Kp=0, Ki=0, Kd=0, output_limit=90.0)
 pid_curve = PID(Kp=0, Ki=0, Kd=0, output_limit=90.0)
+
+
+def log(msg, tag="info"):
+    """Registra no painel Python e replica para o painel web (mesmo console)."""
+    panel.log(msg, tag)
+    dashboard_push_log(msg, tag)
 
 
 def pidHub(erro, pid_straight, pid_curve, dt=0.2):
@@ -109,20 +119,20 @@ def mainLoop():
             try:
                 car.reconnect(new_com)
                 if new_com is not None:
-                    panel.log(f"[SERIAL] Reconectado: {new_com} @ {SERIAL_BAUDRATE}", "ok")
+                    log(f"[SERIAL] Reconectado: {new_com} @ {SERIAL_BAUDRATE}", "ok")
                 else:
-                    panel.log("[SERIAL] Modo teste — sem Arduino", "info")
+                    log("[SERIAL] Modo teste — sem Arduino", "info")
             except (serial.SerialException, OSError) as e:
-                panel.log(f"[SERIAL] Falha ao reconectar: {e}", "error")
+                log(f"[SERIAL] Falha ao reconectar: {e}", "error")
             _nc = cv2.VideoCapture(new_cam_idx, cv2.CAP_DSHOW)
             if _nc.isOpened() and _nc.read()[0]:
                 _nc.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                 cap.release()   # só libera a antiga depois de confirmar a nova
                 cap = _nc
-                panel.log(f"[CAM] Reconectada: indice {new_cam_idx}", "ok")
+                log(f"[CAM] Reconectada: indice {new_cam_idx}", "ok")
             else:
                 _nc.release()
-                panel.log(f"[CAM] Falha no indice {new_cam_idx} — mantendo camera atual", "warn")
+                log(f"[CAM] Falha no indice {new_cam_idx} — mantendo camera atual", "warn")
 
         ret, frame = cap.read()
         if not ret:
@@ -191,7 +201,14 @@ def mainLoop():
         else:
             effective_speed = speed_mps
         
-        update_state(effective_speed, run)
+        update_state(
+            effective_speed, run,
+            real_speed=car.telemetry.speed,
+            battery=car.telemetry.battery,
+            stop_active=flag_stop,
+            traffic_light_code=flag_tl,
+            traffic_light_label=TRAFFIC_LIGHT_LABELS.get(flag_tl, "Nenhum"),
+        )
 
         # ── Envio de dados para o Arduino ─────────────────────────────
         car.command.run = run
@@ -214,18 +231,18 @@ def mainLoop():
             if car.COM is not None:
                 try:
                     car.send_command()
-                    panel.log(f"TX → {car.command.to_dict()}", "tx")
+                    log(f"TX → {car.command.to_dict()}", "tx")
                 except serial.SerialException as e:
-                    panel.log(f"[SERIAL] Falha ao enviar: {e}", "warn")
+                    log(f"[SERIAL] Falha ao enviar: {e}", "warn")
             else:
-                panel.log(f"[TESTE] TX → {car.command.to_dict()}", "tx")
+                log(f"[TESTE] TX → {car.command.to_dict()}", "tx")
 
         last_run = run
 
         data = car.receive()
         if data:
             last_rx = data
-            panel.log(f"RX ← {data}", "rx")
+            log(f"RX ← {data}", "rx")
 
         if data:
             try:
@@ -233,35 +250,51 @@ def mainLoop():
                 if isinstance(decoded, dict):
                     car.telemetry = CarTelemetry.from_dict(decoded)
                 else:
-                    panel.log(f"[SERIAL] Telemetria ignorada: JSON não é objeto: {data}", "warn")
+                    log(f"[SERIAL] Telemetria ignorada: JSON não é objeto: {data}", "warn")
             except (TypeError, ValueError, json.JSONDecodeError):
-                panel.log(f"[SERIAL] Telemetria inválida: {data}", "warn")
+                log(f"[SERIAL] Telemetria inválida: {data}", "warn")
 
         # ── Dashboard ──────────────────────────────────────
-        panel.update_vehicle_info({
-            "hud": {
-                "error": error,
-                "servo": int(angle + 90),
-                "speed": effective_speed,
-                "pid_mode": "RETA" if abs(error) < panel.get("IMAGEM", "Erro de transição") else "CURVA",
-                "reta": {"kp": kp_straight, "ki": ki_straight, "kd": kd_straight},
-                "curva": {"kp": kp_curve, "ki": ki_curve, "kd": kd_curve},
-                "signals": ", ".join(
-                    name for name, active in (
-                        ("Pare", flag_stop),
-                        ("Semáforo verde", flag_tl == 2),
-                        ("Semáforo amarelo", flag_tl == 1),
-                        ("Semáforo vermelho", flag_tl == 0),
-                    ) if active
-                ) or "Nenhum",
-                "running": run,
-            },
+        hud = {
+            "error": error,
+            "servo": int(angle + 90),
+            "speed": effective_speed,
+            "pid_mode": "RETA" if abs(error) < panel.get("IMAGEM", "Erro de transição") else "CURVA",
+            "reta": {"kp": kp_straight, "ki": ki_straight, "kd": kd_straight},
+            "curva": {"kp": kp_curve, "ki": ki_curve, "kd": kd_curve},
+            "signals": ", ".join(
+                name for name, active in (
+                    ("Pare", flag_stop),
+                    ("Semáforo verde", flag_tl == 2),
+                    ("Semáforo amarelo", flag_tl == 1),
+                    ("Semáforo vermelho", flag_tl == 0),
+                ) if active
+            ) or "Nenhum",
+            "running": run,
+            # Estado explícito da placa de PARE e do semáforo, para os indicadores
+            # do painel web (o painel Python já deriva isso de "signals").
+            "stop_active": flag_stop,
+            "traffic_light_code": flag_tl,
+            "traffic_light_label": TRAFFIC_LIGHT_LABELS.get(flag_tl, "Nenhum"),
+        }
+        panel.update_vehicle_info({"hud": hud, "raw_rx": last_rx})
+        dashboard_update_vehicle_info({
+            "hud": hud,
             "raw_rx": last_rx,
+            "telemetry": {
+                "speed": car.telemetry.speed,
+                "battery": car.telemetry.battery,
+                "front": car.telemetry.front,
+                "left": car.telemetry.left,
+                "right": car.telemetry.right,
+                "can": car.telemetry.can,
+            },
         })
 
         sign_view = frame.copy()
         sign_det.draw(sign_view)
         panel.update_frames(img, limiar_bgr, sign_view)
+        dashboard_update_frames(img, limiar_bgr, sign_view)
 
     cap.release()
     car.serial.close()
@@ -299,7 +332,7 @@ def sign_thread():
 # ── Inicialização das threads ────────────────────────────
 threading.Thread(
     target=lambda: dashboard_app.run(host="0.0.0.0", port=DASHBOARD_PORT,
-                                     debug=False, use_reloader=False),
+                                     debug=False, use_reloader=False, threaded=True),
     daemon=True,
 ).start()
 
