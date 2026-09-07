@@ -3,6 +3,6 @@ numpy>=1.24
 pyserial>=3.5
 ultralytics>=8.0
 qrcode>=7.4
-Pillow>=10.0
+Pillow>=12.3.0
 PySide6>=6.6
 Flask>=3.0
