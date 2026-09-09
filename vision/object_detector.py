@@ -11,6 +11,7 @@ class ObjectDetector:
     """Detecta sinais de trânsito, semáforos e pessoas em frames da câmera."""
 
     CONF_THRESHOLD = 0.8
+    DISPLAY_CONF_THRESHOLD = 0.1
     PERSON_CONF_THRESHOLD = 0.5
     PERSON_INFERENCE_CONF_THRESHOLD = 0.01
     PERSON_CLASS_ID = 0  # Classe person no modelo COCO
@@ -121,12 +122,16 @@ class ObjectDetector:
 
     def draw(self, img) -> None:
         for x1, y1, x2, y2, conf in self._person_boxes:
+            if conf < self.DISPLAY_CONF_THRESHOLD:
+                continue
             color = (self.PERSON_VALID_COLOR
                      if self._is_valid_person(x1, y1, x2, y2, conf)
                      else self.PERSON_INVALID_COLOR)
             self._draw_box(img, x1, y1, x2, y2, "Pessoa", conf, color)
 
         for x1, y1, x2, y2, label, conf in self._boxes:
+            if conf < self.DISPLAY_CONF_THRESHOLD:
+                continue
             lbl = label.lower()
             if self._is_traffic_light_label(lbl):
                 color_name = self._code_to_name(self._light_code)

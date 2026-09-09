@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QApplication, QWidget, QMainWindow, QLabel, QPushButton, QSlider,
     QVBoxLayout, QHBoxLayout, QGridLayout, QFrame, QScrollArea,
     QComboBox, QSpinBox, QCheckBox, QTextEdit, QDialog, QSizePolicy,
+    QProgressBar,
     QTabWidget,
 )
 
@@ -276,6 +277,8 @@ class ControlPanel:
         self._latest_frames = None
         self._preview_labels = {}
         self._vehicle_labels = {}
+        self._wheel_speed_bars = {}
+        self._wheel_speed_labels = {}
         self._pid_labels = {}
         self._can_modules_signature = None
 
@@ -537,6 +540,7 @@ class ControlPanel:
         )):
             metrics.addWidget(self._build_metric_card(key, label), 0, column)
         layout.addLayout(metrics)
+        layout.addWidget(self._build_wheel_speeds_card())
 
         grid = QGridLayout()
         grid.setHorizontalSpacing(14)
@@ -567,6 +571,63 @@ class ControlPanel:
         scroll.setWidgetResizable(True)
         scroll.setWidget(tab)
         return scroll
+
+    def _build_wheel_speeds_card(self):
+        wrap = QVBoxLayout()
+        wrap.setContentsMargins(0, 0, 0, 0)
+        wrap.addWidget(self._section_header("VELOCIDADE DAS RODAS"))
+
+        card = QFrame()
+        card.setObjectName("Card")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(8)
+
+        wheel_names = (
+            ("speed1", "Roda frontal esquerda"),
+            ("speed2", "Roda traseira esquerda"),
+            ("speed3", "Roda frontal direita"),
+            ("speed4", "Roda traseira direita"),
+        )
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(16)
+        grid.setVerticalSpacing(8)
+        for index, (key, name) in enumerate(wheel_names):
+            row = index // 2
+            column = index % 2
+            wheel_layout = QVBoxLayout()
+            header = QHBoxLayout()
+            header.addWidget(QLabel(name))
+            value = QLabel("0.0 m/s")
+            value.setObjectName("StateValue")
+            header.addWidget(value)
+            wheel_layout.addLayout(header)
+
+            bar = QProgressBar()
+            bar.setRange(0, 100)
+            bar.setValue(0)
+            bar.setTextVisible(False)
+            bar.setFixedHeight(12)
+            bar.setStyleSheet(f"""
+                QProgressBar {{
+                    background-color: {CONSOLE};
+                    border: 1px solid {BORDER};
+                    border-radius: 5px;
+                }}
+                QProgressBar::chunk {{
+                    background-color: {ACCENT};
+                    border-radius: 4px;
+                }}
+            """)
+            wheel_layout.addWidget(bar)
+            grid.addLayout(wheel_layout, row, column)
+            self._wheel_speed_bars[key] = bar
+            self._wheel_speed_labels[key] = value
+        layout.addLayout(grid)
+        wrap.addWidget(card)
+        result = QWidget()
+        result.setLayout(wrap)
+        return result
 
     def _build_metric_card(self, key, label):
         card = QFrame()
@@ -1083,6 +1144,14 @@ class ControlPanel:
                 car_telemetry.right if car_telemetry is not None else None
             ),
         }
+        for key in self._wheel_speed_bars:
+            wheel_speed = getattr(car_telemetry, key, 0.0) if car_telemetry is not None else 0.0
+            try:
+                wheel_speed = max(0.0, float(wheel_speed))
+            except (TypeError, ValueError):
+                wheel_speed = 0.0
+            self._wheel_speed_bars[key].setValue(min(100, round(wheel_speed * 10)))
+            self._wheel_speed_labels[key].setText(f"{wheel_speed:.1f} m/s")
         for key, text in display.items():
             if key in self._vehicle_labels:
                 self._vehicle_labels[key].setText(text)

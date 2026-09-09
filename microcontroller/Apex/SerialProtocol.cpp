@@ -40,15 +40,20 @@ bool receiveCommand(CarCommand &cmd) {
 
 
 void processCommand(CarCommand &cmd) {
-  sendMotorCommand(MOTOR1_COMMAND, (cmd.servo - 90), cmd.speed);
+  sendMotorCommand(MOTOR_COMMAND, (cmd.servo - 90), cmd.speed);
 }
 
 
 void sendTelemetry(const Telemetry& telemetry) {
   StaticJsonDocument<256> doc;
 
-  doc["spd"] = telemetry.speed;
   doc["bat"] = telemetry.battery;
+
+  JsonObject speed = doc.createNestedObject("speed");
+  speed["speed1"] = telemetry.speed1;
+  speed["speed2"] = telemetry.speed2;
+  speed["speed3"] = telemetry.speed3;
+  speed["speed4"] = telemetry.speed4;
 
   JsonObject ultrasonic = doc.createNestedObject("ultrasonic");
   ultrasonic["front"] = telemetry.front;

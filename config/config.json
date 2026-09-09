@@ -1,5 +1,5 @@
 {
-    "ROI_Linha superior": 525,
+    "ROI_Linha superior": 497,
     "ROI_Linha inferior": 385,
     "ROI_Altura sup": 192,
     "ROI_Altura inf": 286,
@@ -15,14 +15,14 @@
     "PAR\u00c2METROS DO CARRO_Velocidade no amarelo (%)": 50,
     "PAR\u00c2METROS DO CARRO_\u00c2ngulo m\u00e1ximo": 90,
     "PAR\u00c2METROS DO CARRO_Intervalo comando (ms)": 200,
-    "PARE_Confian\u00e7a (%)": 40,
-    "PARE_Diagonal m\u00ednima da caixa (px)": 300,
+    "PARE_Confian\u00e7a (%)": 85,
+    "PARE_Diagonal m\u00ednima da caixa (px)": 129,
     "PARE_Tempo de parada (s)": 3,
-    "PARE_Cooldown (s)": 3,
-    "SEM\u00c1FORO_Confian\u00e7a (%)": 80,
-    "SEM\u00c1FORO_Diagonal m\u00ednima da caixa (px)": 1000,
+    "PARE_Cooldown (s)": 7,
+    "SEM\u00c1FORO_Confian\u00e7a (%)": 82,
+    "SEM\u00c1FORO_Diagonal m\u00ednima da caixa (px)": 146,
     "SEM\u00c1FORO_Timeout (ms)": 2000,
     "SEM\u00c1FORO_Intervalo IA (frames)": 3,
     "PESSOAS_Confian\u00e7a (%)": 85,
-    "PESSOAS_Diagonal m\u00ednima da caixa (px)": 546
+    "PESSOAS_Diagonal m\u00ednima da caixa (px)": 155
 }

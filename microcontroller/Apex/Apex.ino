@@ -3,9 +3,6 @@
 #include "SerialProtocol.h"
 #include "Types.h"
 #include "CANProtocol.h"
-#include "HBridgeController.h"
-
-#include <Servo.h>
 
 #define CAN_CS_PIN 53
 #define CAN_INTERRUPT_PIN 2
@@ -15,21 +12,6 @@ Telemetry telemetry;
 
 unsigned long last = 0;
 unsigned long lastTelemetry = 0;
-
-
-// =====================================================
-// SERVO
-// =====================================================
-
-Servo myservo;
-
-const int SERVO_PIN = 12;
-
-float angleTarget = 90.0;
-float angle = 90.0;
-
-unsigned long lastUpdate = 0;
-
 
 // =====================================================
 // SERIAL1
@@ -51,18 +33,15 @@ void setup() {
 
   pinMode(LED_BUILTIN, OUTPUT);
 
-  myservo.attach(SERVO_PIN);
-  myservo.write(90);
-
   beginCAN(CAN_CS_PIN, CAN_INTERRUPT_PIN);
 
   initCAN(cmd, telemetry);
 
+  cmd.speed = 2.5;
   cmd.vehicleState = true;
 
   telemetry.canModules[MOTOR] = {"Motor", false};
   telemetry.canModules[ULTRASONIC] = {"Ultrasonic", false};
-  telemetry.canModules[ENCODER] = {"Encoder", false};
   telemetry.canModules[LIGHTING] = {"Lighting", false};
 }
 
@@ -77,15 +56,12 @@ void loop() {
   updateCANStatus();
 
   if (receiveCommand(cmd)) {
-
-    angleTarget = constrain(cmd.servo, 0, 180);
     processCommand(cmd);
   }
 
   // Lê Serial1
   readSerial1();
   testBlock();
-  taskServo();
 
   if (millis() - lastTelemetry >= 100) {
     lastTelemetry = millis();
@@ -136,34 +112,3 @@ void testBlock() {
 }
 
 
-// =====================================================
-// SERVO
-// =====================================================
-
-void taskServo() {
-
-  unsigned long now = millis();
-
-  if (now - lastUpdate < 1) {
-
-    return;
-  }
-
-  lastUpdate = now;
-
-  if (abs(angle - angleTarget) < 0.5) {
-
-    return;
-  }
-
-  angle += (angle < angleTarget) ? 1 : -1;
-
-  angle = constrain(angle, 0, 180);
-
-  if (abs(angle - angleTarget) < 1) {
-
-    angle = angleTarget;
-  }
-
-  myservo.write((int)angle);
-}

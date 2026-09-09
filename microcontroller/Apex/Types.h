@@ -53,14 +53,13 @@ struct CanModule {
 };
 
 struct Telemetry {
-  float speed;
   uint8_t battery;
+
+  float speed1, speed2, speed3, speed4;
 
   int front;
   int left;
   int right;
-
-  
 
   CanModule canModules[NUM_CAN_MODULES];
 };

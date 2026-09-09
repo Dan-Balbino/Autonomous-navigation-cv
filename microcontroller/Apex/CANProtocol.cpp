@@ -47,6 +47,23 @@ void receiveUltrasonic(Telemetry* telemetry, CarCommand* command, int packetSize
   lastMessage.ultrasonic = millis();
 }
 
+void receiveMotor(Telemetry* telemetry, int packetSize)
+{
+  if (packetSize != 8)
+    return;
+
+  int16_t sp1, sp2, sp3, sp4;
+
+  CAN.readBytes((uint8_t*)&sp1, sizeof(sp1));
+  CAN.readBytes((uint8_t*)&sp2, sizeof(sp2));
+  CAN.readBytes((uint8_t*)&sp3, sizeof(sp3));
+  CAN.readBytes((uint8_t*)&sp4, sizeof(sp4));
+
+  telemetry->speed1 = sp1 / 10.0;
+  telemetry->speed2 = sp2 / 10.0;
+  telemetry->speed3 = sp3 / 10.0;
+  telemetry->speed4 = sp4 / 10.0;
+}
 
 
 void onReceive(int packetSize) {
@@ -56,6 +73,9 @@ void onReceive(int packetSize) {
       receiveUltrasonic(telemetry, command, packetSize);
       break;
     
+    case MOTOR_DATA:
+      receiveMotor(telemetry, packetSize);
+      break;
   }
 }
 
@@ -66,11 +86,11 @@ void sendCommand(int id, int data) {
   CAN.endPacket();
 }
 
-void sendMotorCommand(int id, int ang, float speed) {
+void sendMotorCommand(int id, int16_t ang, float speed) {
   CAN.beginPacket(id);
   // Envia o float (4 bytes)
   CAN.write((uint8_t*)&speed, sizeof(speed));
-  // Envia o int (4 bytes)
+  // Envia o angulo como int16_t (2 bytes)
   CAN.write((uint8_t*)&ang, sizeof(ang));
   CAN.endPacket();
 }

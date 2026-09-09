@@ -142,7 +142,7 @@ def mainLoop():
             shared_frame = frame.copy()
             shared_frame_id += 1
 
-        #frame = corrector.correct(frame)
+        frame = corrector.correct(frame)
         img = frame.copy()
 
         # ── Leitura dos controles ─────────────────────────────
