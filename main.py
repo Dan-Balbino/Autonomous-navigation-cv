@@ -48,18 +48,21 @@ frame_lock = threading.Lock()
 sign_lock = threading.Lock()
 
 _usb_cams = scan_usb_devices()
-cap, _cam_idx = open_camera(_usb_cams)
-cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+cap_1, _cam_idx_1, cap_2, _cam_idx_2 = open_camera(_usb_cams)
+cap_1.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+cap_2.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
 
 # ── Inicialização da cãmera ────────────────────────────
-ret, frame = cap.read()
+ret_1, frame_1 = cap_1.read()
+ret_2, frame_2 = cap_2.read()
 
-if not ret:
+
+if not ret_1 or not ret_2:
     print("[ERRO] Falha ao ler o primeiro frame.")
     exit()
 
-height, width = get_frame_dimensions(frame, 1)
+height, width = get_frame_dimensions(frame_1, 1)
 
 
 # ── Parêmtros e configuração do dashboard ────────────────────────────
@@ -83,7 +86,9 @@ nav = Navigation()
 panel = ControlPanel(width, height, test_mode=(COM is None),
                      dashboard_url=f"http://{_dashboard_ip}:{DASHBOARD_PORT}",
                      twin_path=_twin_path if os.path.exists(_twin_path) else "",
-                     initial_cam_idx=_cam_idx, car=car, nav=nav)
+                     initial_cam_idx=_cam_idx_1,
+                     secondary_cam_idx=_cam_idx_2,
+                     car=car, nav=nav)
 
 # ── Inicialização dos PIDs ───────────────
 pid_straight  = PID(Kp=0, Ki=0, Kd=0, output_limit=90.0)
@@ -104,7 +109,8 @@ def pidHub(erro, pid_straight, pid_curve, dt=0.2):
 
 # ── Loop principal ───────────────
 def mainLoop():
-    global cap, shared_frame, shared_frame_id, right_detour
+    global cap_1, cap_2, _cam_idx_1, _cam_idx_2
+    global shared_frame, shared_frame_id, right_detour
 
     error = 0
     angle = 0
@@ -128,23 +134,26 @@ def mainLoop():
             _nc = cv2.VideoCapture(new_cam_idx, cv2.CAP_DSHOW)
             if _nc.isOpened() and _nc.read()[0]:
                 _nc.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                cap.release()   # só libera a antiga depois de confirmar a nova
-                cap = _nc
+                cap_1.release()   # só libera a antiga depois de confirmar a nova
+                cap_1 = _nc
+                _cam_idx_1 = new_cam_idx
+                panel.update_camera_ids(_cam_idx_1, _cam_idx_2)
                 log(f"[CAM] Reconectada: indice {new_cam_idx}", "ok")
             else:
                 _nc.release()
                 log(f"[CAM] Falha no indice {new_cam_idx} — mantendo camera atual", "warn")
 
-        ret, frame = cap.read()
-        if not ret:
+        ret_1, frame_1 = cap_1.read()
+        ret_2, frame_2 = cap_2.read()
+        if not ret_1 or not ret_2       :
             break
         
         with frame_lock:
-            shared_frame = frame.copy()
+            shared_frame = frame_2.copy()
             shared_frame_id += 1
 
-        #frame = corrector.correct(frame)
-        img = frame.copy()
+        frame_1 = corrector.correct(frame_1)
+        img = frame_1.copy()
 
         # ── Leitura dos controles ─────────────────────────────
         upper        = panel.get("ROI", "Linha superior")
@@ -188,7 +197,7 @@ def mainLoop():
         run = panel._IsRunning()
         
         # ── Extração do ROI e imagem com a área de interesse ─────────────────────────────
-        roi, img = extract_bird_eye_view(frame, img, upper, lower, y_top, y_bot, ROI_W, ROI_H)
+        roi, img = extract_bird_eye_view(frame_1, img, upper, lower, y_top, y_bot, ROI_W, ROI_H)
 
         # ── Processamento da ROI ─────────────────────────────
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
@@ -308,12 +317,13 @@ def mainLoop():
             },
         })
 
-        sign_view = frame.copy()
+        sign_view = frame_2.copy()
         sign_det.draw(sign_view)
         panel.update_frames(img, limiar_bgr, sign_view)
         dashboard_update_frames(img, limiar_bgr, sign_view)
 
-    cap.release()
+    cap_1.release()
+    cap_2.release()
     car.serial.close()
     cv2.destroyAllWindows()
 
