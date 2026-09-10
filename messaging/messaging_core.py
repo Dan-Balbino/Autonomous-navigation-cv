@@ -29,10 +29,11 @@ _state: dict = {
     "tabDashboard_speed":                0.0,
     "tabDashboard_battery":              None,
     "tabDashboard_running":              False,
-    # Placa de PARE / semáforo, para os indicadores do Digital Twin.
+    # Placa de PARE / semáforo / desvio à direita, para os indicadores do Digital Twin.
     "tabDashboard_stop_active":          False,
     "tabDashboard_traffic_light_code":   -1,
     "tabDashboard_traffic_light_label":  "Nenhum",
+    "tabDashboard_right_detour_active":  False,
 }
 _PWM_TO_RPM = 3.0
 
@@ -137,13 +138,14 @@ def push_log(msg, tag="info") -> None:
 
 def update_state(pwm, running, *, real_speed=None, battery=None,
                   stop_active=None, traffic_light_code=None,
-                  traffic_light_label=None) -> None:
+                  traffic_light_label=None,
+                  right_detour_active=None) -> None:
     """Atualiza o estado do Digital Twin.
 
     `pwm`/`running` seguem o comportamento antigo (indicador de PWM e farol).
     Os demais parâmetros, quando informados, vêm direto de car.telemetry e do
-    estado dos sinais (placa de PARE / semáforo), para o velocímetro, a
-    bateria e os indicadores de sinalização do Digital Twin.
+    estado dos sinais (placa de PARE / semáforo / desvio à direita), para o
+    velocímetro, a bateria e os indicadores de sinalização do Digital Twin.
     """
     with _lock:
         _state["tabDashboard_rpm"]     = round(pwm * _PWM_TO_RPM)
@@ -168,6 +170,8 @@ def update_state(pwm, running, *, real_speed=None, battery=None,
                 pass
         if traffic_light_label is not None:
             _state["tabDashboard_traffic_light_label"] = str(traffic_light_label)
+        if right_detour_active is not None:
+            _state["tabDashboard_right_detour_active"] = bool(right_detour_active)
 
 
 def pop_config_update() -> dict | None:

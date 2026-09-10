@@ -2,9 +2,10 @@ import cv2
 import numpy as np
 
 track_size = 200
+preference_lane = "neutral" # "left", "right", "neutral"
 
 def lane_detection_pipeline(roi_h, roi_w, limiar, limiar_bgr, last_error=0):
-    global track_size
+    global track_size, preference_lane
     
     # Inicializa o centro da pista e o erro
     track_center = 0
@@ -20,11 +21,15 @@ def lane_detection_pipeline(roi_h, roi_w, limiar, limiar_bgr, last_error=0):
     # Realiza uma busca por janelas deslizantes para detectar as faixas na imagem limiarizada
     left_lane, right_lane, left_valid, right_valid = sliding_window_search(limiar, roi_h // 2, roi_w, minimum_limit, num_windows=3)
     
+    # Se uma das faixas não for detectada, define o estado da pista como "neutral"
+    if not left_valid or not right_valid:
+        preference_lane = "neutral"
+    
     if track_size == 0:
         track_size = right_lane - left_lane
     
     # Processa a detecção das faixas e calcula o erro de acordo com os casos possíveis
-    error, limiar_bgr, lane_state, track_size, track_center =  process_lanes(left_lane, right_lane, left_valid, right_valid, roi_w, reference_line_y, limiar_bgr, last_error, track_size)
+    error, limiar_bgr, lane_state, track_size, track_center =  process_lanes(left_lane, right_lane, left_valid, right_valid, roi_w, reference_line_y, limiar_bgr, last_error, track_size, preference_lane)
     
     # Desenha um círculo verde no centro da pista 
     if(track_center != 0):
@@ -83,8 +88,14 @@ def detect_lanes(limiar, height, width, limit, slice_image=False):
     return left_lane, right_lane, left_valid, right_valid
 
 
-def process_lanes(left_lane, right_lane, left_valid, right_valid, roi_w, reference_line_y, limiar_bgr, last_error, track_size=0):
+def process_lanes(left_lane, right_lane, left_valid, right_valid, roi_w, reference_line_y, limiar_bgr, last_error, track_size=0, preference_lane="neutral"):
     track_center = 0
+    
+    # Define a preferência de faixa com base na variável global preference_lane
+    if preference_lane == "right":
+        left_valid = False
+    elif preference_lane == "left":
+        right_valid = False
     
     # ===== Caso 1 - Duas faixas foram detectadas =====
     if left_valid and right_valid:
@@ -128,6 +139,14 @@ def process_lanes(left_lane, right_lane, left_valid, right_valid, roi_w, referen
         lane_state = "none"
 
     return error, limiar_bgr, lane_state, track_size, track_center
+
+
+def set_lane_preference(preference):
+    global preference_lane
+    if preference in ["left", "right", "neutral"]:
+        preference_lane = preference
+    else:
+        raise ValueError("A preferência de faixa deve ser 'left', 'right' ou 'neutral'.")
 
 
 def draw_dots(img, points, labels):

@@ -10,7 +10,7 @@ class ObjectDetector:
     # CONFIGURAÇÕES
     """Detecta sinais de trânsito, semáforos e pessoas em frames da câmera."""
 
-    CONF_THRESHOLD = 0.8
+    CONF_THRESHOLD = 0.1
     DISPLAY_CONF_THRESHOLD = 0.1
     PERSON_CONF_THRESHOLD = 0.5
     PERSON_INFERENCE_CONF_THRESHOLD = 0.01
@@ -35,7 +35,12 @@ class ObjectDetector:
     STOP_VALID_COLOR = (0, 165, 255)       # Laranja forte
     PERSON_VALID_COLOR = (255, 0, 0)       # Azul
     PERSON_INVALID_COLOR = INVALID_COLOR
+    RIGHT_DETOUR_VALID_COLOR = (153, 255, 180) # Verde claro para placa de desvio válida
     TRAFFIC_LIGHT_LABELS = ("semaforo", "semáforo", "light")
+    RIGHT_DETOUR_LABELS = ("desvio_direita",)
+
+    MIN_RIGHT_DETOUR_CONF = 0.1
+    RIGHT_DETOUR_REQUIRED_FRAMES = 3
 
 
     def __init__(self, model_path: str, conf_threshold: float = None):
@@ -54,6 +59,9 @@ class ObjectDetector:
         self._min_light_diagonal = 0
         self._min_light_confidence = 0.0
         self._min_person_diagonal = 0
+        self._min_right_detour_diagonal = 0
+        self._right_detour_frames_seen = 0
+        self._right_detour_is_valid = False
 
         # Estado da placa STOP
         self._stop_until = 0.0
@@ -78,7 +86,10 @@ class ObjectDetector:
                   stop_wait_seconds=None, cooldown_seconds=None,
                   light_timeout_seconds=None, detect_interval=None,
                   min_light_diagonal=None, light_confidence=None,
-                  person_confidence=None, min_person_diagonal=None):
+                  person_confidence=None, min_person_diagonal=None,
+                  right_detour_confidence=None,
+                  min_right_detour_diagonal=None,
+                  right_detour_required_frames=None):
         """Atualiza os parâmetros de detecção em tempo real.
 
         As atribuições são escalares e podem ser feitas pelo loop de controle
@@ -104,6 +115,12 @@ class ObjectDetector:
             self.PERSON_CONF_THRESHOLD = max(0.0, min(1.0, float(person_confidence)))
         if min_person_diagonal is not None:
             self._min_person_diagonal = max(0, int(min_person_diagonal))
+        if right_detour_confidence is not None:
+            self.MIN_RIGHT_DETOUR_CONF = max(0.0, min(1.0, float(right_detour_confidence)))
+        if min_right_detour_diagonal is not None:
+            self._min_right_detour_diagonal = max(0, int(min_right_detour_diagonal))
+        if right_detour_required_frames is not None:
+            self.RIGHT_DETOUR_REQUIRED_FRAMES = max(1, int(right_detour_required_frames))
 
 
     def update(self, frame) -> list:
@@ -116,6 +133,7 @@ class ObjectDetector:
         self._boxes = self._predict(frame) if self._traffic_signs_model else []
         self._person_boxes = self._predict_people(frame)
         self._update_traffic_light(frame)
+        self._update_right_detour_state()
 
         return self._boxes
 
@@ -140,6 +158,10 @@ class ObjectDetector:
                 color = (self.STOP_VALID_COLOR
                          if self._is_valid_stop(x1, y1, x2, y2, conf)
                          else self.INVALID_COLOR)
+            elif self._is_right_detour_label(lbl):
+                color = (self.RIGHT_DETOUR_VALID_COLOR
+                         if self._is_valid_right_detour(x1, y1, x2, y2, conf)
+                         else self.INVALID_COLOR)
             else:
                 continue
             self._draw_box(img, x1, y1, x2, y2, label, conf, color)
@@ -159,17 +181,21 @@ class ObjectDetector:
 
     # YOLO
     def _predict(self, frame) -> list:
-        out = []
+        best_by_label = {}
         for r in self._traffic_signs_model.predict(frame, verbose=False, conf=self._conf):
             for box in r.boxes:
                 x1, y1, x2, y2 = (int(v) for v in box.xyxy[0])
                 label = r.names[int(box.cls[0])]
                 conf = float(box.conf[0])
-                normalized = label.lower()
+                normalized = label.lower().strip().replace("-", "_").replace(" ", "_")
                 if (self._is_traffic_light_label(normalized)
-                    or self._is_stop_label(normalized)):
-                    out.append((x1, y1, x2, y2, label, conf))
-        return out
+                    or self._is_stop_label(normalized)
+                    or self._is_right_detour_label(normalized)):
+                    key = normalized
+                    current = best_by_label.get(key)
+                    if current is None or conf > current[5]:
+                        best_by_label[key] = (x1, y1, x2, y2, label, conf)
+        return list(best_by_label.values())
 
 
     def _predict_people(self, frame) -> list:
@@ -283,9 +309,42 @@ class ObjectDetector:
     def _is_traffic_light_label(cls, label: str) -> bool:
         return any(name in label for name in cls.TRAFFIC_LIGHT_LABELS)
 
+    @classmethod
+    def _is_right_detour_label(cls, label: str) -> bool:
+        normalized = label.lower().strip().replace("-", "_").replace(" ", "_")
+        return normalized in cls.RIGHT_DETOUR_LABELS
+
     @staticmethod
     def _is_stop_label(label: str) -> bool:
         return "pare" in label or "stop" in label
+
+    def _is_valid_right_detour(self, x1, y1, x2, y2, conf):
+        width = x2 - x1
+        height = y2 - y1
+        diagonal = (width ** 2 + height ** 2) ** 0.5
+        if conf < self.MIN_RIGHT_DETOUR_CONF:
+            return False
+        if diagonal < self._min_right_detour_diagonal:
+            return False
+        return True
+
+    def _update_right_detour_state(self):
+        found = False
+        for x1, y1, x2, y2, label, conf in self._boxes:
+            lbl = label.lower()
+            if not self._is_right_detour_label(lbl):
+                continue
+            if not self._is_valid_right_detour(x1, y1, x2, y2, conf):
+                continue
+            found = True
+            break
+
+        if found:
+            self._right_detour_frames_seen += 1
+        else:
+            self._right_detour_frames_seen = 0
+
+        self._right_detour_is_valid = self._right_detour_frames_seen >= self.RIGHT_DETOUR_REQUIRED_FRAMES
 
 
     # ── PARE ──────────────────────────────────────────────────────────────
@@ -323,4 +382,4 @@ class ObjectDetector:
             self.stop_active = True
             # print("[Sinais] STOP ativado!")
 
-        return self.stop_active
+        return self.stop_active, self._right_detour_is_valid

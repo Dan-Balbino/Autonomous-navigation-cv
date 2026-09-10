@@ -5,12 +5,11 @@ import os
 import json
 
 import cv2
-import numpy as np
 import serial
 
 from pid import PID
 from ctrl_panel import ControlPanel
-from vision.lane_detection import lane_detection_pipeline, get_frame_dimensions, extract_bird_eye_view
+from vision.lane_detection import lane_detection_pipeline, get_frame_dimensions, extract_bird_eye_view, set_lane_preference
 from vision.object_detector import ObjectDetector
 from messaging.messaging_core import (
     app as dashboard_app, get_local_ip, update_state, load_config_from_file,
@@ -24,6 +23,7 @@ from config.setup import (
 )
 from core.car import Car
 from core.telemetry import CarTelemetry
+from core.navigation import Navigation
 
 # ── Inicialização de variáveis ────────────────────────────
 ROI_W = 320
@@ -40,6 +40,9 @@ shared_frame_id = 0
 
 flag_stop = False
 flag_tl = 0
+flag_right_detour = False
+right_detour = False
+
 
 frame_lock = threading.Lock()
 sign_lock = threading.Lock()
@@ -74,13 +77,13 @@ allow_dashboard_firewall_rule(DASHBOARD_PORT)
 
 # ── Inicialização dos objetos ───────────────
 corrector = FisheyeCorrector("calibration/fisheye_calibration.npz", width, height, balance=0.4, offset_x=-86)
-sign_det = ObjectDetector("model/Modelo_3.pt")
+sign_det = ObjectDetector("model/Modelo_4.pt")
 car = Car(COM)
+nav = Navigation()
 panel = ControlPanel(width, height, test_mode=(COM is None),
                      dashboard_url=f"http://{_dashboard_ip}:{DASHBOARD_PORT}",
                      twin_path=_twin_path if os.path.exists(_twin_path) else "",
-                     initial_cam_idx=_cam_idx, car=car)
-
+                     initial_cam_idx=_cam_idx, car=car, nav=nav)
 
 # ── Inicialização dos PIDs ───────────────
 pid_straight  = PID(Kp=0, Ki=0, Kd=0, output_limit=90.0)
@@ -101,9 +104,7 @@ def pidHub(erro, pid_straight, pid_curve, dt=0.2):
 
 # ── Loop principal ───────────────
 def mainLoop():
-    global cap
-    global shared_frame
-    global shared_frame_id
+    global cap, shared_frame, shared_frame_id, right_detour
 
     error = 0
     angle = 0
@@ -142,7 +143,7 @@ def mainLoop():
             shared_frame = frame.copy()
             shared_frame_id += 1
 
-        frame = corrector.correct(frame)
+        #frame = corrector.correct(frame)
         img = frame.copy()
 
         # ── Leitura dos controles ─────────────────────────────
@@ -167,6 +168,9 @@ def mainLoop():
             light_confidence=panel.get("SEMÁFORO", "Confiança (%)") / 100.0,
             person_confidence=panel.get("PESSOAS", "Confiança (%)") / 100.0,
             min_person_diagonal=panel.get("PESSOAS", "Diagonal mínima da caixa (px)"),
+            right_detour_confidence=panel.get("DESVIO DIREITA", "Confiança (%)") / 100.0,
+            min_right_detour_diagonal=panel.get("DESVIO DIREITA", "Diagonal mínima da caixa (px)"),
+            right_detour_required_frames=panel.get("DESVIO DIREITA", "Frames seguidos"),
         )
 
         kp_straight = panel.get("RETA", "Kp") / 100.0
@@ -191,6 +195,13 @@ def mainLoop():
         _, limiar = cv2.threshold(gray, limiar_value, 255, cv2.THRESH_BINARY)
         limiar_bgr = cv2.cvtColor(limiar, cv2.COLOR_GRAY2BGR)
 
+        if flag_right_detour and not right_detour:    
+            lane = nav.update_lane()
+            set_lane_preference(lane)
+            right_detour = True
+        elif not flag_right_detour and right_detour:
+            right_detour = False
+
         error, limiar_bgr, lane_state = lane_detection_pipeline(ROI_H, ROI_W, limiar, limiar_bgr, last_error=error)
 
         # ── Digital Twin ──────────────────────────────────────────────
@@ -208,11 +219,12 @@ def mainLoop():
             stop_active=flag_stop,
             traffic_light_code=flag_tl,
             traffic_light_label=TRAFFIC_LIGHT_LABELS.get(flag_tl, "Nenhum"),
+            right_detour_active=flag_right_detour,
         )
 
         # ── Envio de dados para o Arduino ─────────────────────────────
         car.command.run = run
-        if run:
+        if run:     
             now = time.time() * 1000
             should_send = now - last_send >= command_period_ms
             if should_send:
@@ -255,6 +267,8 @@ def mainLoop():
                 log(f"[SERIAL] Telemetria inválida: {data}", "warn")
 
         # ── Dashboard ──────────────────────────────────────
+        route_points = [str(point) for point in getattr(nav, "route", [])]
+        route_text = " → ".join(route_points) if route_points else "Nenhum ponto"
         hud = {
             "error": error,
             "servo": int(angle + 90),
@@ -268,14 +282,17 @@ def mainLoop():
                     ("Semáforo verde", flag_tl == 2),
                     ("Semáforo amarelo", flag_tl == 1),
                     ("Semáforo vermelho", flag_tl == 0),
+                    ("Desvio à direita", flag_right_detour),
                 ) if active
             ) or "Nenhum",
             "running": run,
-            # Estado explícito da placa de PARE e do semáforo, para os indicadores
-            # do painel web (o painel Python já deriva isso de "signals").
+            # Estado explícito da placa de PARE, semáforo e sinal de desvio à direita,
+            # para os indicadores do painel web (o painel Python já deriva isso de "signals").
             "stop_active": flag_stop,
             "traffic_light_code": flag_tl,
             "traffic_light_label": TRAFFIC_LIGHT_LABELS.get(flag_tl, "Nenhum"),
+            "right_detour_active": flag_right_detour,
+            "route": route_text,
         }
         panel.update_vehicle_info({"hud": hud, "raw_rx": last_rx})
         dashboard_update_vehicle_info({
@@ -303,7 +320,7 @@ def mainLoop():
 
 def sign_thread():
 
-    global flag_stop, flag_tl
+    global flag_stop, flag_tl, flag_right_detour
     last_frame_id = -1
 
     while True:
@@ -321,12 +338,13 @@ def sign_thread():
 
         sign_det.update(frame)
 
-        stop = sign_det.get_state()
+        stop, right_detour = sign_det.get_state()
         traffic_light = sign_det.get_light_state()
-        
+
         with sign_lock:
             flag_stop = stop
             flag_tl = traffic_light
+            flag_right_detour = right_detour
 
 
 # ── Inicialização das threads ────────────────────────────

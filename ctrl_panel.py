@@ -50,6 +50,7 @@ RED     = "#f38ba8"
 ORANGE  = "#fab387"
 PURPLE  = "#cba6f7"
 TEAL    = "#94e2d5"
+RIGHT_DETOUR_VALID = "#99ffb4"
 CONSOLE = "#11111b"
 
 LOG_COLORS = {
@@ -252,7 +253,7 @@ class _ServerBridge(QObject):
 
 class ControlPanel:
     def __init__(self, width, height, test_mode=False, dashboard_url="",
-                 twin_path="", initial_cam_idx=1, car=None):
+                 twin_path="", initial_cam_idx=1, car=None, nav=None):
 
         self._app = QApplication.instance() or QApplication([])
 
@@ -265,6 +266,7 @@ class ControlPanel:
         self._twin_path     = twin_path
         self._initial_cam_idx = initial_cam_idx
         self.car = car
+        self.nav = nav
 
         self.vars       = {}   # key -> valor atual (int)
         self.val_labels = {}   # key -> QLabel
@@ -281,6 +283,8 @@ class ControlPanel:
         self._wheel_speed_labels = {}
         self._pid_labels = {}
         self._can_modules_signature = None
+        self._stop_point_selectors = {}
+        self._selected_stop_points = {"coleta": "A", "entrega": "A"}
 
         self._bridge = _ServerBridge()
         self._bridge.config_received.connect(self._apply_config)
@@ -462,6 +466,11 @@ class ControlPanel:
                 ("Timeout (ms)", config.get("SEMÁFORO_Timeout (ms)", 2000), 250, 10000),
                 ("Intervalo IA (frames)", config.get("SEMÁFORO_Intervalo IA (frames)", 5), 1, 30),
             ]),
+            ("DESVIO DIREITA", [
+                ("Confiança (%)", config.get("DESVIO DIREITA_Confiança (%)", 80), 0, 100),
+                ("Diagonal mínima da caixa (px)", config.get("DESVIO DIREITA_Diagonal mínima da caixa (px)", config.get("DESVIO DIREITA_Box diagonal", 0)), 0, 1000),
+                ("Frames seguidos", config.get("DESVIO DIREITA_Frames seguidos", 3), 1, 30),
+            ]),
             ("PESSOAS", [
                 ("Confiança (%)", config.get("PESSOAS_Confiança (%)", 50), 0, 100),
                 ("Diagonal mínima da caixa (px)", config.get("PESSOAS_Diagonal mínima da caixa (px)", config.get("PESSOAS_Box diagonal", 0)), 0, 1000),
@@ -554,6 +563,7 @@ class ControlPanel:
         ]), 0, 0)
         grid.addWidget(self._build_sensor_card(), 0, 1)
         grid.addWidget(self._build_can_card(), 1, 0, 1, 2)
+        grid.addWidget(self._build_route_card(), 2, 0, 1, 2)
         layout.addLayout(grid)
 
         raw_card = QFrame()
@@ -649,6 +659,70 @@ class ControlPanel:
             ("left", "Esquerdo"),
             ("right", "Direito"),
         ])
+
+    def _build_route_card(self):
+        wrap = QVBoxLayout()
+        wrap.setContentsMargins(0, 0, 0, 0)
+        wrap.addWidget(self._section_header("PONTOS DE PARADA"))
+
+        card = QFrame()
+        card.setObjectName("Card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(14, 10, 14, 10)
+        card_layout.setSpacing(8)
+
+        selector_row = QHBoxLayout()
+        selector_row.addWidget(QLabel("Adicionar ponto"))
+        selector_row.addStretch()
+        self._route_point_combo = QComboBox()
+        self._route_point_combo.addItems(["A", "B", "C"])
+        self._route_point_combo.setCurrentText("A")
+        self._route_point_combo.setMinimumWidth(80)
+        selector_row.addWidget(self._route_point_combo)
+
+        add_btn = _btn("Adicionar", GREEN)
+        add_btn.clicked.connect(self._add_route_point)
+        selector_row.addWidget(add_btn)
+        card_layout.addLayout(selector_row)
+
+        route_row = QHBoxLayout()
+        route_row.addWidget(QLabel("Rota atual"))
+        route_row.addStretch()
+        self._route_display = QLabel("Nenhum ponto")
+        self._route_display.setObjectName("StateValue")
+        self._route_display.setWordWrap(True)
+        route_row.addWidget(self._route_display)
+        card_layout.addLayout(route_row)
+
+        wrap.addWidget(card)
+        result = QWidget()
+        result.setLayout(wrap)
+        result.setStyleSheet(f"QFrame#Card {{ background-color: {CARD}; border: 1px solid {BORDER}; border-radius: 8px; }}")
+        self._update_route_display()
+        return result
+
+    def _add_route_point(self):
+        if self._route_point_combo is None:
+            return
+        point = self._route_point_combo.currentText().strip()
+        if not point:
+            return
+        if self.nav is not None:
+            try:
+                self.nav.add_point(point)
+            except Exception:
+                pass
+        self._update_route_display()
+
+    def _update_route_display(self):
+        if self.nav is not None and hasattr(self.nav, "route"):
+            route = getattr(self.nav, "route", [])
+            points = [str(item) for item in route]
+            text = " → ".join(points) if points else "Nenhum ponto"
+        else:
+            text = "Nenhum ponto"
+        if hasattr(self, "_route_display") and self._route_display is not None:
+            self._route_display.setText(text)
 
     def _build_can_card(self):
         wrap = QVBoxLayout()
@@ -1158,6 +1232,9 @@ class ControlPanel:
         self._update_can_modules(
             car_telemetry.can if car_telemetry is not None else {}
         )
+        if hasattr(self, "_route_display") and self._route_display is not None:
+            route_text = str(values.get("route") or "Nenhum ponto")
+            self._route_display.setText(route_text)
         for prefix in ("RETA", "CURVA"):
             pid_values = values.get(prefix.lower(), {})
             for term in ("Kp", "Ki", "Kd"):

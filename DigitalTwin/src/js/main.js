@@ -32,9 +32,7 @@ function init() {
     const signalStopValueEl = document.getElementById('signalStopValue');
     const signalLightValueEl = document.getElementById('signalLightValue');
     const signalReasonValueEl = document.getElementById('signalReasonValue');
-    
-    if (!imageElement) {
-        console.error('Elemento da imagem não encontrado');
+            const signalRightDetourValueEl = document.getElementById('signalRightDetourValue');
         return;
     }
 
@@ -260,12 +258,19 @@ function init() {
                 const [lightText, lightState] = lightMap[lightCode] ?? ['—', 'muted'];
                 setSignalChip(signalLightValueEl, lightText, lightState);
 
+                const rightDetourRaw = dashboardData?.tabDashboard_right_detour_active ?? dashboardData?.tabdashboard_right_detour_active;
+                const rightDetourActive = typeof rightDetourRaw === 'boolean' ? rightDetourRaw : null;
+                if (rightDetourActive === true) setSignalChip(signalRightDetourValueEl, 'ATIVA', 'green');
+                else if (rightDetourActive === false) setSignalChip(signalRightDetourValueEl, 'LIVRE', 'muted');
+                else setSignalChip(signalRightDetourValueEl, '—', 'muted');
+
                 const runningRaw = dashboardData?.tabDashboard_running ?? dashboardData?.tabdashboard_running;
                 const running = Boolean(runningRaw);
                 let reasonText = '—', reasonState = 'muted';
                 if (!running) { reasonText = 'PARADO (painel)'; reasonState = 'red'; }
                 else if (stopActive) { reasonText = 'PARADO — PLACA'; reasonState = 'red'; }
                 else if (lightCode === 0) { reasonText = 'PARADO — SEMÁFORO'; reasonState = 'red'; }
+                else if (rightDetourActive) { reasonText = 'DESVIO — DIREITA'; reasonState = 'green'; }
                 else { reasonText = 'EM MOVIMENTO'; reasonState = 'green'; }
                 setSignalChip(signalReasonValueEl, reasonText, reasonState);
             };
