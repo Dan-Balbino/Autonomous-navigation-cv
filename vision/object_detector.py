@@ -3,7 +3,6 @@ import time
 
 import cv2
 import numpy as np
-from ultralytics import YOLO
 
 
 class ObjectDetector:
@@ -45,8 +44,9 @@ class ObjectDetector:
 
     def __init__(self, model_path: str, conf_threshold: float = None):
         self._traffic_signs_model = None                # Modelo customizado para sinais de trânsito
-        standard_model_path = Path(__file__).resolve().parents[1] / "model" / "yolov8n.pt"
-        self._yolo_standard_model = YOLO(str(standard_model_path))
+        self._standard_model_path = Path(__file__).resolve().parents[1] / "model" / "yolov8n.pt"
+        self._yolo_standard_model = None
+        self._traffic_signs_model_path = str(model_path)
         self._boxes = []
         self._person_boxes = []
         self._counter = 0
@@ -72,15 +72,11 @@ class ObjectDetector:
         self._light_code = -1
         self._light_last_seen = 0.0
 
-        try:
-            p = Path(model_path)
-            if p.exists():
-                self._traffic_signs_model = YOLO(str(p))
-                print(f"[Sinais] Modelo carregado: {p.name}")
-            else:
-                print(f"[Sinais] Modelo nao encontrado: {p}")
-        except ImportError:
-            print("[Sinais] ultralytics nao instalado: pip install ultralytics")
+        p = Path(self._traffic_signs_model_path)
+        if p.exists():
+            print(f"[Sinais] Modelo pronto para carregamento lazy: {p.name}")
+        else:
+            print(f"[Sinais] Modelo nao encontrado: {p}")
 
     def configure(self, *, stop_confidence=None, min_stop_diagonal=None,
                   stop_wait_seconds=None, cooldown_seconds=None,
@@ -179,10 +175,46 @@ class ObjectDetector:
             1,
         )
 
+    def _get_traffic_signs_model(self):
+        if self._traffic_signs_model is not None:
+            return self._traffic_signs_model
+
+        try:
+            from ultralytics import YOLO
+        except ImportError:
+            print("[Sinais] ultralytics nao instalado: pip install ultralytics")
+            return None
+
+        p = Path(self._traffic_signs_model_path)
+        if not p.exists():
+            print(f"[Sinais] Modelo nao encontrado: {p}")
+            return None
+
+        self._traffic_signs_model = YOLO(str(p))
+        print(f"[Sinais] Modelo carregado: {p.name}")
+        return self._traffic_signs_model
+
+    def _get_standard_model(self):
+        if self._yolo_standard_model is not None:
+            return self._yolo_standard_model
+
+        try:
+            from ultralytics import YOLO
+        except ImportError:
+            print("[Sinais] ultralytics nao instalado: pip install ultralytics")
+            return None
+
+        self._yolo_standard_model = YOLO(str(self._standard_model_path))
+        return self._yolo_standard_model
+
     # YOLO
     def _predict(self, frame) -> list:
+        model = self._get_traffic_signs_model()
+        if model is None:
+            return []
+
         best_by_label = {}
-        for r in self._traffic_signs_model.predict(frame, verbose=False, conf=self._conf):
+        for r in model.predict(frame, verbose=False, conf=self._conf):
             for box in r.boxes:
                 x1, y1, x2, y2 = (int(v) for v in box.xyxy[0])
                 label = r.names[int(box.cls[0])]
@@ -200,8 +232,12 @@ class ObjectDetector:
 
     def _predict_people(self, frame) -> list:
         """Detecta somente pessoas usando o modelo YOLO padrão."""
+        model = self._get_standard_model()
+        if model is None:
+            return []
+
         people = []
-        for result in self._yolo_standard_model.predict(
+        for result in model.predict(
             frame,
             verbose=False,
             conf=self.PERSON_INFERENCE_CONF_THRESHOLD,
