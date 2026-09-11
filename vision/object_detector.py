@@ -126,7 +126,7 @@ class ObjectDetector:
             return self._boxes
 
         self._counter = 0
-        self._boxes = self._predict(frame) if self._traffic_signs_model else []
+        self._boxes = self._predict(frame)
         self._person_boxes = self._predict_people(frame)
         self._update_traffic_light(frame)
         self._update_right_detour_state()
