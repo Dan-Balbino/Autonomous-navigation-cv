@@ -5,35 +5,37 @@
 
 class Encoder {
 public:
-  Encoder(int int_pin, float wheel_circumference, int pulses_per_rotation, float alpha = 0.25);
+    Encoder(int int_pin, float wheel_circumference, int pulses_per_rotation, float alpha = 0.35);
 
-  void begin();
-  void update();
-  float get_speed();
-  bool consume_new_speed(float& measurement_dt);
-
-  // Precisa ser público para o trampolim/ISR acessar
-  void handle_pulse();
-
-  static const uint8_t MAX_ENCODERS = 4; // ajuste para o número máximo de encoders que vai usar
-  static Encoder* instances[MAX_ENCODERS];
-  static uint8_t instance_count;
+    void begin();
+    void update();
+    float get_speed();
+    bool consume_new_speed(float& measurement_dt); // mantido por compatibilidade
+    void handle_pulse();
 
 private:
-  int encoder_pin;
-  float circumference;
-  int pulses_per_rot;
+    static const uint8_t AVG_SAMPLES = 4; // media dos ultimos N periodos, absorve o padrao curto/longo do ima
 
-  volatile unsigned long last_pulse_time;
-  volatile unsigned long pulse_period;
-  volatile bool new_pulse;
+    int encoder_pin;
+    float circumference;
+    int pulses_per_rot;
 
-  volatile bool new_speed;
-  volatile float new_speed_dt;
+    volatile unsigned long last_pulse_time;
+    volatile unsigned long pulse_period;
+    volatile bool new_pulse;
 
-  float speed;
-  float filter_alpha;
-  bool first_speed;
+    volatile unsigned long period_buffer[AVG_SAMPLES];
+    volatile uint8_t buffer_index;
+    volatile uint8_t buffer_count;
+
+    bool new_speed;
+    float new_speed_dt;
+    float speed;
+
+    float filter_alpha;
+    bool first_speed;
+
+    unsigned long get_avg_period();
 };
 
 #endif

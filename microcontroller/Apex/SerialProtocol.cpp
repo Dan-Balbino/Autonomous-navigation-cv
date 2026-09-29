@@ -26,7 +26,11 @@ bool receiveCommand(CarCommand &cmd) {
       cmd.lights = (Lights)ls;
       cmd.stop = doc["stop"];
       cmd.servo = doc["servo"];
-      cmd.speed = doc["speed"];
+      cmd.speed = constrain((int)doc["speed"], 0, 255);
+      if (cmd.speed < 30) {
+        cmd.speed = 0;
+      }
+      cmd.reverse = doc["reverse"];
 
       buffer = ""; // limpa depois de processar
       return true;
@@ -40,7 +44,7 @@ bool receiveCommand(CarCommand &cmd) {
 
 
 void processCommand(CarCommand &cmd) {
-  sendMotorCommand(MOTOR_COMMAND, (cmd.servo - 90), cmd.speed);
+  sendMotorCommand(MOTOR_COMMAND, (int16_t)(cmd.servo - 90), cmd.speed, cmd.reverse);
 }
 
 

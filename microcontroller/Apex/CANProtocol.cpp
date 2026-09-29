@@ -54,15 +54,18 @@ void receiveMotor(Telemetry* telemetry, int packetSize)
 
   int16_t sp1, sp2, sp3, sp4;
 
-  CAN.readBytes((uint8_t*)&sp1, sizeof(sp1));
-  CAN.readBytes((uint8_t*)&sp2, sizeof(sp2));
-  CAN.readBytes((uint8_t*)&sp3, sizeof(sp3));
-  CAN.readBytes((uint8_t*)&sp4, sizeof(sp4));
+  if (CAN.readBytes((uint8_t*)&sp1, sizeof(sp1)) != sizeof(sp1) ||
+      CAN.readBytes((uint8_t*)&sp2, sizeof(sp2)) != sizeof(sp2) ||
+      CAN.readBytes((uint8_t*)&sp3, sizeof(sp3)) != sizeof(sp3) ||
+      CAN.readBytes((uint8_t*)&sp4, sizeof(sp4)) != sizeof(sp4)) {
+    return;
+  }
 
   telemetry->speed1 = sp1 / 10.0;
   telemetry->speed2 = sp2 / 10.0;
   telemetry->speed3 = sp3 / 10.0;
   telemetry->speed4 = sp4 / 10.0;
+  lastMessage.motor = millis();
 }
 
 
@@ -86,12 +89,11 @@ void sendCommand(int id, int data) {
   CAN.endPacket();
 }
 
-void sendMotorCommand(int id, int16_t ang, float speed) {
+void sendMotorCommand(int id, int16_t ang, int16_t pwm, bool reverse) {
   CAN.beginPacket(id);
-  // Envia o float (4 bytes)
-  CAN.write((uint8_t*)&speed, sizeof(speed));
-  // Envia o angulo como int16_t (2 bytes)
+  CAN.write((uint8_t*)&pwm, sizeof(pwm));
   CAN.write((uint8_t*)&ang, sizeof(ang));
+  CAN.write((uint8_t*)&reverse, sizeof(reverse));
   CAN.endPacket();
 }
 
@@ -102,6 +104,7 @@ bool isModuleOnline(unsigned long lastMessage, unsigned long timeout) {
 
 
 void updateCANStatus() {
+  telemetry->canModules[MOTOR].status = isModuleOnline(lastMessage.motor, 1000);
   telemetry->canModules[ULTRASONIC].status = isModuleOnline(lastMessage.ultrasonic, 1000);
 }
 

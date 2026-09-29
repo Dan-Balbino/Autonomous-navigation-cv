@@ -23,14 +23,15 @@ from config.setup import (
 )
 from core.car import Car
 from core.telemetry import CarTelemetry
+from core.remote_control import RemoteControl
 from core.navigation import Navigation
 
 # ── Inicialização de variáveis ────────────────────────────
 ROI_W = 320
 ROI_H = 240
 DASHBOARD_PORT = 5000
-MAX_SPEED_MPS = 10.0
-MIN_MOVING_SPEED_MPS = 1.5
+MAX_PWM = 255
+MIN_MOVING_PWM = 30
 SERIAL_BAUDRATE = 115200
 TRAFFIC_LIGHT_LABELS = {-1: "Nenhum", 0: "Vermelho", 1: "Amarelo", 2: "Verde"}
 COM = select_com()
@@ -39,9 +40,30 @@ shared_frame = None
 shared_frame_id = 0
 
 flag_stop = False
-flag_tl = 0
+flag_tl = -1
 flag_right_detour = False
 right_detour = False
+
+# ── Fonte opcional de imagens para teste ───────────────────────────────
+_project_dir = os.path.dirname(os.path.abspath(__file__))
+_test_image_dirs = (
+    os.path.join(_project_dir, "teste"),
+    os.path.join(_project_dir, "tests", "images"),
+)
+
+
+def _load_test_image(filename):
+    for directory in _test_image_dirs:
+        path = os.path.join(directory, filename)
+        image = cv2.imread(path)
+        if image is not None:
+            return image
+    return None
+
+
+_test_road_frame = None#_load_test_image("road.png")
+_test_stop_frame = None #_load_test_image("pare.png")
+_use_test_images = _test_road_frame is not None and _test_stop_frame is not None
 
 
 frame_lock = threading.Lock()
@@ -54,8 +76,15 @@ cap_2.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
 
 # ── Inicialização da cãmera ────────────────────────────
-ret_1, frame_1 = cap_1.read()
-ret_2, frame_2 = cap_2.read()
+if _use_test_images:
+    ret_1, frame_1 = True, _test_road_frame.copy()
+    ret_2, frame_2 = True, _test_stop_frame.copy()
+elif cap_1 is cap_2:
+    ret_1, frame_1 = cap_1.read()
+    ret_2, frame_2 = ret_1, frame_1.copy() if ret_1 else None
+else:
+    ret_1, frame_1 = cap_1.read()
+    ret_2, frame_2 = cap_2.read()
 
 
 if not ret_1 or not ret_2:
@@ -82,13 +111,14 @@ allow_dashboard_firewall_rule(DASHBOARD_PORT)
 corrector = FisheyeCorrector("calibration/fisheye_calibration.npz", width, height, balance=0.4, offset_x=-86)
 sign_det = ObjectDetector("model/Modelo_4.pt")
 car = Car(COM)
+rc = RemoteControl()
 nav = Navigation()
 panel = ControlPanel(width, height, test_mode=(COM is None),
                      dashboard_url=f"http://{_dashboard_ip}:{DASHBOARD_PORT}",
                      twin_path=_twin_path if os.path.exists(_twin_path) else "",
                      initial_cam_idx=_cam_idx_1,
                      secondary_cam_idx=_cam_idx_2,
-                     car=car, nav=nav)
+                     car=car, nav=nav, remote_control=rc)
 
 # ── Inicialização dos PIDs ───────────────
 pid_straight  = PID(Kp=0, Ki=0, Kd=0, output_limit=90.0)
@@ -117,6 +147,12 @@ def mainLoop():
     last_send = 0
     last_rx   = "Stand by..."
     last_run  = None
+    last_right_button = False
+    last_left_button = False
+    last_start_button = False
+    remote_control_active = False
+    right_trigger_active = False
+    left_trigger_active = False
 
     while True:
         # ── Reconexão dinâmica (solicitada pelo painel) ───────────────
@@ -143,9 +179,14 @@ def mainLoop():
                 _nc.release()
                 log(f"[CAM] Falha no indice {new_cam_idx} — mantendo camera atual", "warn")
 
-        ret_1, frame_1 = cap_1.read()
-        ret_2, frame_2 = cap_2.read()
-        if not ret_1 or not ret_2       :
+
+        if cap_1 is cap_2:
+            ret_1, frame_1 = cap_1.read()
+            ret_2, frame_2 = ret_1, frame_1.copy() if ret_1 else None
+        else:
+            ret_1, frame_1 = cap_1.read()
+            ret_2, frame_2 = cap_2.read()
+        if not ret_1 or not ret_2:
             break
         
         with frame_lock:
@@ -161,8 +202,8 @@ def mainLoop():
         y_top        = panel.get("ROI", "Altura sup")
         y_bot        = panel.get("ROI", "Altura inf")
         limiar_value = panel.get("IMAGEM", "Limiar")
-        speed_mps    = panel.get("PARÂMETROS DO CARRO", "Velocidade (m/s)")
-        yellow_speed = speed_mps * panel.get("PARÂMETROS DO CARRO", "Velocidade no amarelo (%)") / 100.0
+        pwm_value    = panel.get("PARÂMETROS DO CARRO", "PWM")
+        yellow_pwm   = pwm_value * panel.get("PARÂMETROS DO CARRO", "Velocidade no amarelo (%)") / 100.0
         command_period_ms = panel.get("PARÂMETROS DO CARRO", "Intervalo comando (ms)")
         steering_limit = panel.get("PARÂMETROS DO CARRO", "Ângulo máximo")
 
@@ -195,6 +236,51 @@ def mainLoop():
         pid_curve.output_limit = steering_limit
         
         run = panel._IsRunning()
+
+        # O controle deve ser lido mesmo com o carro parado, pois o botao
+        # START troca o modo de controle independentemente de run.
+        remote_inputs = None
+        if rc.connected:
+            remote_inputs = rc.read_inputs()
+            if remote_inputs is not None:
+                (
+                    start_button,
+                    left_joystick_x,
+                    right_trigger,
+                    left_trigger,
+                    right_button,
+                    left_button,
+                ) = remote_inputs
+
+                if start_button and not last_start_button:
+                    remote_control_active = not remote_control_active
+
+                if remote_control_active:
+                    if right_button and not last_right_button:
+                        panel.adjust_speed(5)
+                    if left_button and not last_left_button:
+                        panel.adjust_speed(-5)
+
+                    if right_trigger >= 0.25:
+                        right_trigger_active = True
+                    elif right_trigger <= 0.10:
+                        right_trigger_active = False
+
+                    if left_trigger >= 0.25:
+                        left_trigger_active = True
+                    elif left_trigger <= 0.10:
+                        left_trigger_active = False
+
+                last_start_button = bool(start_button)
+                last_right_button = bool(right_button)
+                last_left_button = bool(left_button)
+        else:
+            remote_control_active = False
+            right_trigger_active = False
+            left_trigger_active = False
+            last_start_button = False
+            last_right_button = False
+            last_left_button = False
         
         # ── Extração do ROI e imagem com a área de interesse ─────────────────────────────
         roi, img = extract_bird_eye_view(frame_1, img, upper, lower, y_top, y_bot, ROI_W, ROI_H)
@@ -214,15 +300,19 @@ def mainLoop():
         error, limiar_bgr, lane_state = lane_detection_pipeline(ROI_H, ROI_W, limiar, limiar_bgr, last_error=error)
 
         # ── Digital Twin ──────────────────────────────────────────────
-        if not run or flag_stop or flag_tl == 0 or speed_mps < MIN_MOVING_SPEED_MPS:
-            effective_speed = 0.0
+        if not run or flag_stop or flag_tl == 0 or pwm_value < MIN_MOVING_PWM:
+            effective_pwm = 0
         elif flag_tl == 1:
-            effective_speed = yellow_speed
+            effective_pwm = yellow_pwm
         else:
-            effective_speed = speed_mps
+            effective_pwm = pwm_value
+
+        effective_pwm = int(round(max(0, min(MAX_PWM, effective_pwm))))
+        if effective_pwm < MIN_MOVING_PWM:
+            effective_pwm = 0
         
         update_state(
-            effective_speed, run,
+            effective_pwm, run,
             real_speed=car.telemetry.speed,
             battery=car.telemetry.battery,
             stop_active=flag_stop,
@@ -233,21 +323,40 @@ def mainLoop():
 
         # ── Envio de dados para o Arduino ─────────────────────────────
         car.command.run = run
-        if run:     
-            now = time.time() * 1000
+        now = time.time() * 1000
+        if run or remote_control_active:
             should_send = now - last_send >= command_period_ms
             if should_send:
                 last_send = now
-                angle = pidHub(error, pid_straight, pid_curve, dt=0.2)
+                if run and not remote_control_active:
+                    angle = pidHub(error, pid_straight, pid_curve, dt=0.2)
         else:
             should_send = last_run != False
 
         if should_send:
+            if remote_control_active and remote_inputs is not None:
+                # Ajuste do ângulo com base no joystick esquerdo
+                angle = left_joystick_x * steering_limit
+                angle = max(-steering_limit, min(steering_limit, angle))  # Limita o ângulo
+
+                if left_trigger_active and right_trigger_active or not left_trigger_active and not right_trigger_active:
+                    effective_pwm = 0  # Ambos os gatilhos pressionados: velocidade zero
+                    reverse = False
+                elif left_trigger_active:
+                    effective_pwm = 0
+                    reverse = True
+                elif right_trigger_active:
+                    reverse = False
+                    effective_pwm = pwm_value if pwm_value >= MIN_MOVING_PWM else 0
+            else:
+                reverse = False
+
             car.command.traffic_light = flag_tl
             car.command.lights = 1
             car.command.servo = int(angle + 90)
             car.command.stop = flag_stop if run else True
-            car.command.speed = effective_speed if run else 0
+            car.command.speed = effective_pwm if (run or remote_control_active) else 0
+            car.command.reverse = reverse if (run or remote_control_active) else False
 
             if car.COM is not None:
                 try:
@@ -281,7 +390,8 @@ def mainLoop():
         hud = {
             "error": error,
             "servo": int(angle + 90),
-            "speed": effective_speed,
+            "speed": effective_pwm,
+            "control_mode": "MANUAL" if remote_control_active and rc.connected else "AUTOMÁTICO",
             "pid_mode": "RETA" if abs(error) < panel.get("IMAGEM", "Erro de transição") else "CURVA",
             "reta": {"kp": kp_straight, "ki": ki_straight, "kd": kd_straight},
             "curva": {"kp": kp_curve, "ki": ki_curve, "kd": kd_curve},

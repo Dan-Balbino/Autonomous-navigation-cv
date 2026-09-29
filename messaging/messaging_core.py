@@ -53,7 +53,7 @@ _config: dict = {
     "CURVA_Kp":                     650,
     "CURVA_Ki":                       0,
     "CURVA_Kd":                       0,
-    "PARÂMETROS DO CARRO_Velocidade (m/s)":        1.6,
+    "PARÂMETROS DO CARRO_PWM":                         40,
     "PARÂMETROS DO CARRO_Velocidade no amarelo (%)": 50,
     "PARÂMETROS DO CARRO_Ângulo máximo":             90,
     "PARÂMETROS DO CARRO_Intervalo comando (ms)":   200,
@@ -619,6 +619,7 @@ input[type=range]:disabled::-moz-range-thumb{background:var(--muted);cursor:not-
   <div class="info-grid">
     <div class="info-card">
       <div class="section-title">Controle e HUD</div>
+      <div class="info-row"><span>Modo de controle</span><span class="val" id="iControlMode">--</span></div>
       <div class="info-row"><span>Erro da faixa</span><span class="val" id="iError">--</span></div>
       <div class="info-row"><span>Modo PID</span><span class="val" id="iPidMode">--</span></div>
       <div class="info-row"><span>Sinais detectados</span><span class="val" id="iSignals">--</span></div>
@@ -678,7 +679,7 @@ const CONTROL_SECTIONS=[
 
 const SIGNAL_SECTIONS=[
   {title:"PARÂMETROS DO CARRO",controls:[
-    {key:"PARÂMETROS DO CARRO_Velocidade (m/s)",label:"Velocidade (m/s)",min:0,max:100,default:16,speed:true},
+    {key:"PARÂMETROS DO CARRO_PWM",label:"PWM",min:0,max:255,default:40,speed:true},
     {key:"PARÂMETROS DO CARRO_Velocidade no amarelo (%)",label:"Velocidade no amarelo (%)",min:0,max:100,default:50},
     {key:"PARÂMETROS DO CARRO_Ângulo máximo",label:"Ângulo máximo",min:20,max:90,default:90},
     {key:"PARÂMETROS DO CARRO_Intervalo comando (ms)",label:"Intervalo comando (ms)",min:50,max:1000,default:200},
@@ -736,10 +737,10 @@ function toggleEdit(){
   document.querySelectorAll('input[type=range]').forEach(el=>{el.disabled=!editMode});
 }
 
-function isSpeedKey(key){ return key==="PARÂMETROS DO CARRO_Velocidade (m/s)"; }
-function sliderValue(key,val){ return isSpeedKey(key) ? Math.max(0,Math.min(100,Math.round(parseFloat(val)*10))) : parseInt(val); }
-function controlValue(key,sliderVal){ return isSpeedKey(key) ? Math.round(parseInt(sliderVal))/10.0 : parseInt(sliderVal); }
-function formatValue(key,val){ return isSpeedKey(key) ? parseFloat(val).toFixed(1)+' m/s' : String(val); }
+function isSpeedKey(key){ return key==="PARÂMETROS DO CARRO_PWM"; }
+function sliderValue(key,val){ return isSpeedKey(key) ? Math.max(0,Math.min(255,Math.round(parseFloat(val)))) : parseInt(val); }
+function controlValue(key,sliderVal){ return isSpeedKey(key) ? Math.round(parseInt(sliderVal)) : parseInt(sliderVal); }
+function formatValue(key,val){ return isSpeedKey(key) ? Math.round(parseFloat(val))+' PWM' : String(val); }
 
 function buildSections(containerId, sections){
   const grid=document.getElementById(containerId);
@@ -766,7 +767,7 @@ function buildSections(containerId, sections){
         <div class="range-wrap">
           <input type="range" id="${id}I" min="${ctrl.min}" max="${ctrl.max}" value="${sliderValue(ctrl.key,val)}" disabled>
         </div>
-        ${ctrl.speed?'<span class="ctrl-warning">⚠ Velocidades abaixo de 1,5 m/s são tratadas como 0 — velocidade mínima para movimentar o carro.</span>':''}`;
+        ${ctrl.speed?'<span class="ctrl-warning">Valores abaixo de 30 PWM são tratados como 0 — mínimo para movimentar o carro.</span>':''}`;
       card.appendChild(row);
       row.querySelector('input').addEventListener('input',function(){
         const v=controlValue(ctrl.key,this.value);
@@ -886,9 +887,10 @@ async function syncVehicleInfo(){
 
     document.getElementById('mSpeedReceived').innerHTML=fmtNumber(telemetry.speed,' m/s');
     document.getElementById('mBattery').innerHTML=fmtNumber(telemetry.battery,'%');
-    document.getElementById('mSpeedApplied').innerHTML=fmtNumber(hud.speed,' m/s');
+    document.getElementById('mSpeedApplied').innerHTML=fmtNumber(hud.speed,' PWM');
     document.getElementById('mServo').innerHTML=(hud.servo!==undefined?hud.servo+'°':'--');
 
+    document.getElementById('iControlMode').textContent=hud.control_mode||'--';
     document.getElementById('iError').textContent=(hud.error!==undefined?hud.error:'--');
     document.getElementById('iPidMode').textContent=hud.pid_mode||'--';
     document.getElementById('iSignals').textContent=hud.signals||'--';

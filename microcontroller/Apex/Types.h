@@ -44,7 +44,8 @@ struct CarCommand {
   bool stop;
   bool vehicleState;
   int servo;
-  float speed;
+  int16_t speed;
+  bool reverse;
 };
 
 struct CanModule {
@@ -66,7 +67,6 @@ struct Telemetry {
 
 struct CANStatus {
     unsigned long ultrasonic;
-    unsigned long encoder;
     unsigned long motor;
     unsigned long lighting;
 };

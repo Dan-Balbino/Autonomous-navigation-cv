@@ -1,5 +1,5 @@
 """
-Painel de controle — versão PySide6.
+Interface de Controle — versão PySide6.
 
 API pública mantida idêntica à versão Tkinter, para não quebrar
 código externo que já depende dela:
@@ -22,6 +22,8 @@ import webbrowser
 from io import BytesIO
 
 import qrcode
+
+from core.remote_control import RemoteControl
 
 from PySide6.QtCore import Qt, QTimer, Signal, QObject
 from PySide6.QtGui import QPixmap, QColor, QImage, QTextCursor
@@ -250,12 +252,13 @@ class _ServerBridge(QObject):
     vehicle_info_received = Signal(dict)
     log_received = Signal(str, str)
     camera_ids_received = Signal(int, int)
+    speed_adjust_requested = Signal(float)
 
 
 class ControlPanel:
     def __init__(self, width, height, test_mode=False, dashboard_url="",
                  twin_path="", initial_cam_idx=1, secondary_cam_idx=None,
-                 car=None, nav=None):
+                 car=None, nav=None, remote_control=None):
 
         self._app = QApplication.instance() or QApplication([])
 
@@ -272,6 +275,7 @@ class ControlPanel:
         )
         self.car = car
         self.nav = nav
+        self.remote_control = remote_control if remote_control is not None else RemoteControl()
 
         self.vars       = {}   # key -> valor atual (int)
         self.val_labels = {}   # key -> QLabel
@@ -287,6 +291,8 @@ class ControlPanel:
         self._wheel_speed_bars = {}
         self._wheel_speed_labels = {}
         self._pid_labels = {}
+        self._remote_status_label = None
+        self._remote_feedback_label = None
         self._can_modules_signature = None
         self._stop_point_selectors = {}
         self._selected_stop_points = {"coleta": "A", "entrega": "A"}
@@ -301,6 +307,7 @@ class ControlPanel:
         self._bridge.vehicle_info_received.connect(self._apply_vehicle_info)
         self._bridge.log_received.connect(self._append_log)
         self._bridge.camera_ids_received.connect(self._apply_camera_ids)
+        self._bridge.speed_adjust_requested.connect(self._adjust_speed)
 
         self.window = QMainWindow()
         self.window.setWindowTitle("Controles")
@@ -335,7 +342,7 @@ class ControlPanel:
 
     def _parar(self):
         self.running = False
-        self.log("[CONTROLE MANUAL] veículo parado pelo painel de controle", "warn")
+        self.log("[CONTROLE MANUAL] veículo parado pela interface de controle", "warn")
         if self._dashboard_url and not self._applying_server:
             self._push_key("running", False)
 
@@ -426,9 +433,11 @@ class ControlPanel:
         if os.path.exists(self.config_path):
             with open(self.config_path, "r", encoding="utf-8") as f:
                 config = json.load(f)
-        saved_pwm = config.get("PARÂMETROS DO CARRO_PWM", 40)
-        default_speed = config.get("PARÂMETROS DO CARRO_Velocidade (m/s)",
-                                   round(saved_pwm * 10 / 255, 1))
+        saved_pwm = config.get("PARÂMETROS DO CARRO_PWM")
+        if saved_pwm is None:
+            legacy_speed = config.get("PARÂMETROS DO CARRO_Velocidade (m/s)")
+            saved_pwm = round(float(legacy_speed) * 10) if legacy_speed is not None else 40
+        saved_pwm = max(0, min(255, int(saved_pwm)))
         stop_wait_seconds = config.get("PARE_Tempo de parada (s)")
         if stop_wait_seconds is None:
             stop_wait_seconds = round(float(config.get("PARE_Tempo de parada (ms)", 3000)) / 1000)
@@ -460,7 +469,7 @@ class ControlPanel:
         ]
         signal_sections = [
             ("PARÂMETROS DO CARRO", [
-                ("Velocidade (m/s)", default_speed, 0, 100),
+                ("PWM", saved_pwm, 0, 255),
                 ("Velocidade no amarelo (%)", config.get("PARÂMETROS DO CARRO_Velocidade no amarelo (%)", config.get("PARÂMETROS DO CARRO_PWM amarelo (%)", 50)), 0, 100),
                 ("Ângulo máximo", config.get("PARÂMETROS DO CARRO_Ângulo máximo", 90), 20, 90),
                 ("Intervalo comando (ms)", config.get("PARÂMETROS DO CARRO_Intervalo comando (ms)", 200), 50, 1000),
@@ -493,7 +502,7 @@ class ControlPanel:
         outer.setContentsMargins(12, 8, 12, 10)
 
         header = QHBoxLayout()
-        title = QLabel("Painel de Controle ─ APEX")
+        title = QLabel("Interface de Controle ─ APEX")
         title.setObjectName("Title")
         title.setAlignment(Qt.AlignLeft)
         header.addWidget(title)
@@ -568,6 +577,7 @@ class ControlPanel:
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
         grid.addWidget(self._build_vehicle_info_card("CONTROLE E HUD", [
+            ("control_mode", "Modo de controle"),
             ("error", "Erro da faixa"),
             ("pid_mode", "Modo PID"),
             ("signals", "Sinais detectados"),
@@ -881,7 +891,7 @@ class ControlPanel:
     def _build_pid_info_card(self):
         wrap = QVBoxLayout()
         wrap.setContentsMargins(0, 0, 0, 0)
-        wrap.addWidget(self._section_header("PID UTILIZADO PELO VEÍCULO"))
+        wrap.addWidget(self._section_header("PID DA DIREÇÃO"))
 
         card = QFrame()
         card.setObjectName("Card")
@@ -915,10 +925,12 @@ class ControlPanel:
         if self._dashboard_url:
             grid.addWidget(self._build_connection_box(), 0, 0, 1, 1, Qt.AlignTop)
             grid.addWidget(self._build_dashboard_box(), 0, 1, 1, 1, Qt.AlignTop)
-            log_row = 1
+            grid.addWidget(self._build_remote_box(), 1, 0, 1, 1, Qt.AlignTop)
+            log_row = 2
         else:
             grid.addWidget(self._build_connection_box(), 0, 0, 1, 2, Qt.AlignTop)
-            log_row = 1
+            grid.addWidget(self._build_remote_box(), 1, 0, 1, 2, Qt.AlignTop)
+            log_row = 2
         grid.addWidget(self._build_log_box(), log_row, 0, 1, 2)
         grid.setRowStretch(log_row + 1, 1)
         scroll = QScrollArea()
@@ -978,7 +990,7 @@ class ControlPanel:
             row.addWidget(slider)
 
             if self._is_speed_key(key):
-                warning = QLabel("⚠ Velocidades abaixo de 1,5 m/s são tratadas como 0 — velocidade mínima para movimentar o carro.")
+                warning = QLabel("⚠ Valores abaixo de 30 PWM são tratados como 0 — mínimo para movimentar o carro.")
                 warning.setWordWrap(True)
                 warning.setStyleSheet(f"color: {RED}; font-size: 9px; font-weight: 700;")
                 row.addWidget(warning)
@@ -1019,21 +1031,33 @@ class ControlPanel:
 
     @staticmethod
     def _is_speed_key(key):
-        return key == "PARÂMETROS DO CARRO_Velocidade (m/s)"
+        return key == "PARÂMETROS DO CARRO_PWM"
+
+    def adjust_speed(self, delta):
+        """Solicita um ajuste de velocidade no loop principal do Qt."""
+        self._bridge.speed_adjust_requested.emit(float(delta))
+
+    def _adjust_speed(self, delta):
+        key = "PARÂMETROS DO CARRO_PWM"
+        current = float(self.vars.get(key, 0.0))
+        value = round(max(0.0, min(255.0, current + delta)))
+        self._set_value(key, value)
+        if self._dashboard_url:
+            self._push_key(key, value)
 
     def _control_value(self, key, slider_value):
         if self._is_speed_key(key):
-            return round(int(slider_value) / 10.0, 1)
+            return int(slider_value)
         return int(slider_value)
 
     def _slider_value(self, key, value):
         if self._is_speed_key(key):
-            return max(0, min(100, round(float(value) * 10)))
+            return max(0, min(255, round(float(value))))
         return int(value)
 
     def _format_control_value(self, key, value):
         if self._is_speed_key(key):
-            return f"{float(value):.1f} m/s"
+            return f"{int(value)} PWM"
         return str(value)
 
     def _build_connection_box(self):
@@ -1089,6 +1113,64 @@ class ControlPanel:
         wrap = QWidget()
         wrap.setLayout(wrap_layout)
         return wrap
+
+    def _build_remote_box(self):
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self._section_header("CONTROLE REMOTO"))
+
+        card = QFrame()
+        card.setObjectName("Card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(14, 10, 14, 10)
+        card_layout.setSpacing(8)
+
+        self._remote_status_label = QLabel(self.remote_control.feedback)
+        self._remote_status_label.setObjectName("StateValue")
+        self._remote_status_label.setWordWrap(True)
+        self._remote_status_label.setStyleSheet(f"color: {TEAL}; font-size: 11px;")
+        card_layout.addWidget(self._remote_status_label)
+
+        row = QHBoxLayout()
+        connect_btn = _btn("Conectar", GREEN)
+        connect_btn.clicked.connect(self._connect_remote)
+        disconnect_btn = _btn("Desconectar", RED)
+        disconnect_btn.clicked.connect(self._disconnect_remote)
+        row.addWidget(connect_btn)
+        row.addWidget(disconnect_btn)
+        card_layout.addLayout(row)
+
+        layout.addWidget(card)
+        wrap = QWidget()
+        wrap.setLayout(layout)
+        return wrap
+
+    def _connect_remote(self):
+        try:
+            self.remote_control.connect()
+            msg = self.remote_control.feedback
+            if hasattr(self, "_remote_status_label") and self._remote_status_label is not None:
+                self._remote_status_label.setText(msg)
+            self.log(f"[REMOTE] {msg}", "info" if self.remote_control.connected else "warn")
+        except Exception as exc:
+            msg = f"Erro ao conectar ao controle remoto: {exc}"
+            if hasattr(self, "_remote_status_label") and self._remote_status_label is not None:
+                self._remote_status_label.setText(msg)
+            self.log(f"[REMOTE] {msg}", "error")
+
+    def _disconnect_remote(self):
+        try:
+            if hasattr(self.remote_control, "disconnect"):
+                self.remote_control.disconnect()
+            msg = self.remote_control.feedback
+            if hasattr(self, "_remote_status_label") and self._remote_status_label is not None:
+                self._remote_status_label.setText(msg)
+            self.log(f"[REMOTE] {msg}", "info")
+        except Exception as exc:
+            msg = f"Erro ao desconectar do controle remoto: {exc}"
+            if hasattr(self, "_remote_status_label") and self._remote_status_label is not None:
+                self._remote_status_label.setText(msg)
+            self.log(f"[REMOTE] {msg}", "error")
 
     def _build_actions_box(self):
         layout = QVBoxLayout()
@@ -1236,6 +1318,7 @@ class ControlPanel:
         values = info.get("hud", {})
         car_telemetry = self.car.telemetry if self.car is not None else None
         display = {
+            "control_mode": str(values.get("control_mode", "--")),
             "error": str(values.get("error", "--")),
             "servo": f"{values.get('servo', '--')}°",
             "speed_received": self._format_number(
@@ -1244,7 +1327,7 @@ class ControlPanel:
             "battery": self._format_number(
                 car_telemetry.battery if car_telemetry is not None else None, "%"
             ),
-            "speed_applied": self._format_number(values.get("speed"), " m/s"),
+            "speed_applied": self._format_number(values.get("speed"), " PWM"),
             "pid_mode": str(values.get("pid_mode", "--")),
             "signals": str(values.get("signals", "--")),
             "front": self._format_sensor(

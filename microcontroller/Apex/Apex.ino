@@ -37,8 +37,9 @@ void setup() {
 
   initCAN(cmd, telemetry);
 
-  cmd.speed = 2.5;
+  cmd.speed = 0.0;
   cmd.vehicleState = true;
+  cmd.reverse = false;
 
   telemetry.canModules[MOTOR] = {"Motor", false};
   telemetry.canModules[ULTRASONIC] = {"Ultrasonic", false};
