@@ -28,8 +28,7 @@ enum class UltrassonicZone : uint8_t {
 enum CanModuleID : uint8_t {
     MOTOR = 0,
     ULTRASONIC,
-    ENCODER,
-    LIGHTING,
+    BATERY,
 
     NUM_CAN_MODULES
 };
@@ -39,7 +38,6 @@ enum CanModuleID : uint8_t {
 // Struct to hold the car command data
 struct CarCommand {
   bool run;
-  TrafficLights trafficLight;
   Lights lights;
   bool stop;
   bool vehicleState;
@@ -58,8 +56,9 @@ struct Telemetry {
 
   float speed1, speed2, speed3, speed4;
 
-  int front;
   int left;
+  int f_left;
+  int f_right;
   int right;
 
   CanModule canModules[NUM_CAN_MODULES];
@@ -68,5 +67,5 @@ struct Telemetry {
 struct CANStatus {
     unsigned long ultrasonic;
     unsigned long motor;
-    unsigned long lighting;
+    unsigned long batery;
 };

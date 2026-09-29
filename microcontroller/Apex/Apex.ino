@@ -41,9 +41,9 @@ void setup() {
   cmd.vehicleState = true;
   cmd.reverse = false;
 
-  telemetry.canModules[MOTOR] = {"Motor", false};
-  telemetry.canModules[ULTRASONIC] = {"Ultrasonic", false};
-  telemetry.canModules[LIGHTING] = {"Lighting", false};
+  telemetry.canModules[MOTOR] = {"Controle", false};
+  telemetry.canModules[ULTRASONIC] = {"Sensoriamento", false};
+  telemetry.canModules[BATERY] = {"Carregamento e Alimentação", false};
 }
 
 

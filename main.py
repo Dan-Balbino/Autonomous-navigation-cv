@@ -7,7 +7,7 @@ import json
 import cv2
 import serial
 
-from pid import PID
+from core.pid import PID
 from ctrl_panel import ControlPanel
 from vision.lane_detection import lane_detection_pipeline, get_frame_dimensions, extract_bird_eye_view, set_lane_preference
 from vision.object_detector import ObjectDetector
@@ -420,8 +420,9 @@ def mainLoop():
             "telemetry": {
                 "speed": car.telemetry.speed,
                 "battery": car.telemetry.battery,
-                "front": car.telemetry.front,
                 "left": car.telemetry.left,
+                "f_left": car.telemetry.f_left,
+                "f_right": car.telemetry.f_right,
                 "right": car.telemetry.right,
                 "can": car.telemetry.can,
             },

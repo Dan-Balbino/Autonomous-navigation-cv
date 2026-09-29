@@ -11,7 +11,7 @@
     "CURVA_Kp": 200,
     "CURVA_Ki": 0,
     "CURVA_Kd": 0,
-    "PAR\u00c2METROS DO CARRO_PWM": 40,
+    "PAR\u00c2METROS DO CARRO_PWM": 75,
     "PAR\u00c2METROS DO CARRO_Velocidade no amarelo (%)": 50,
     "PAR\u00c2METROS DO CARRO_\u00c2ngulo m\u00e1ximo": 90,
     "PAR\u00c2METROS DO CARRO_Intervalo comando (ms)": 50,

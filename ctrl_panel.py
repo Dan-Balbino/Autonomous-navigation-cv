@@ -562,9 +562,9 @@ class ControlPanel:
         metrics.setColumnStretch(2, 1)
         metrics.setColumnStretch(3, 1)
         for column, (key, label) in enumerate((
-            ("speed_received", "VELOCIDADE RECEBIDA"),
+            ("speed_received", "VELOCIDADE ESTIMADA"),
             ("battery", "BATERIA"),
-            ("speed_applied", "VELOCIDADE APLICADA"),
+            ("speed_applied", "PWM APLICADO"),
             ("servo", "SERVO"),
         )):
             metrics.addWidget(self._build_metric_card(key, label), 0, column)
@@ -676,8 +676,9 @@ class ControlPanel:
 
     def _build_sensor_card(self):
         return self._build_vehicle_info_card("ULTRASSÔNICOS", [
-            ("front", "Frontal"),
             ("left", "Esquerdo"),
+            ("f_left", "Frontal esquerdo"),
+            ("f_right", "Frontal direito"),
             ("right", "Direito"),
         ])
 
@@ -1330,11 +1331,14 @@ class ControlPanel:
             "speed_applied": self._format_number(values.get("speed"), " PWM"),
             "pid_mode": str(values.get("pid_mode", "--")),
             "signals": str(values.get("signals", "--")),
-            "front": self._format_sensor(
-                car_telemetry.front if car_telemetry is not None else None
-            ),
             "left": self._format_sensor(
                 car_telemetry.left if car_telemetry is not None else None
+            ),
+            "f_left": self._format_sensor(
+                car_telemetry.f_left if car_telemetry is not None else None
+            ),
+            "f_right": self._format_sensor(
+                car_telemetry.f_right if car_telemetry is not None else None
             ),
             "right": self._format_sensor(
                 car_telemetry.right if car_telemetry is not None else None

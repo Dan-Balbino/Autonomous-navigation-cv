@@ -10,8 +10,9 @@ class CarTelemetry:
     speed3: float = 0.0
     speed4: float = 0.0
     
-    front: int = 0
     left: int = 0
+    f_left: int = 0
+    f_right: int = 0
     right: int = 0
 
     can: dict = field(default_factory=dict)
@@ -47,8 +48,9 @@ class CarTelemetry:
             speed2=wheel_speeds[1],
             speed3=wheel_speeds[2],
             speed4=wheel_speeds[3],
-            front=int(ultrasonic.get("front", 0)),
             left=int(ultrasonic.get("left", 0)),
+            f_left=int(ultrasonic.get("f_left", 0)),
+            f_right=int(ultrasonic.get("f_right", 0)),
             right=int(ultrasonic.get("right", 0)),
             can=dict(can),
         )

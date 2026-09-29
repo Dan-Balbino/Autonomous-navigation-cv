@@ -1,159 +1,63 @@
+// MÓDULO ULTRASSÔNICO — APEX
+//
+// Lê 4 sensores ultrassônicos (NewPing) de forma sequencial,
+// classifica cada distância em 4 estados (FREE, DISTANT, NEAR,
+// CRITICAL) e envia o resultado para a ECU pela CAN (ID 0x200).
+//
+// Índice dos sensores (vale para sonar[], cm[] e sensorState[]):
+//
+//   [0] Lateral esquerdo
+//   [1] Frontal esquerdo
+//   [2] Frontal direito
+//   [3] Lateral direito
+//
+// Os limites de cada região e as configurações de pinos, CAN e
+// tempo entre disparos ficam em Config.h.
+// ============================================================
+
 #include <CAN.h>
 #include <NewPing.h>
 
-// ============================================================
-// CONFIGURAÇÕES - ALTERE AQUI
-// ============================================================
+#include "Config.h"
 
-#define SONAR_NUM 5
 
-// Velocidade CAN
-#define CAN_SPEED 500E3
-
-// Pinos do transceptor CAN/MCP2515 neste módulo.
-#define CAN_CS_PIN 10
-#define CAN_INTERRUPT_PIN 2
-
-// ID da mensagem CAN
-#define ULTRASONIC_DATA 0x200
-
-// Intervalo para tentar reconectar a CAN
-#define CAN_RECONNECT_INTERVAL 1000
-
-// Tempo entre disparos dos ultrassônicos
-// Aumente se houver interferência entre os sensores
-#define SENSOR_DELAY 60
-
-// ------------------------------------------------------------
-// PINOS DOS ULTRASSÔNICOS
-// ------------------------------------------------------------
-
-// FRONT
-#define FRONT_TRIG 6
-#define FRONT_ECHO 5
-
-// LEFT
-#define LEFT_TRIG 8
-#define LEFT_ECHO 7
-
-// RIGHT
-#define RIGHT_TRIG 4
-#define RIGHT_ECHO 3
-
-// REAR
-#define REAR_TRIG 10
-#define REAR_ECHO 9
-
-// EXTRA
-#define EXTRA_TRIG 12
-#define EXTRA_ECHO 11
-
-// ------------------------------------------------------------
-// DISTÂNCIA MÁXIMA DE CADA SENSOR
-// ------------------------------------------------------------
-
-#define FRONT_MAX_DISTANCE 150
-#define LEFT_MAX_DISTANCE 100
-#define RIGHT_MAX_DISTANCE 100
-#define REAR_MAX_DISTANCE 150
-#define EXTRA_MAX_DISTANCE 100
-
-// ------------------------------------------------------------
-// LIMITES DO FRONT
-// ------------------------------------------------------------
-
-#define FRONT_SAFE_DISTANCE 90
-#define FRONT_MID_DISTANCE 70
-#define FRONT_CRITICAL_DISTANCE 50
-
-// ------------------------------------------------------------
-// LIMITES DO LEFT
-// ------------------------------------------------------------
-
-#define LEFT_SAFE_DISTANCE 75
-#define LEFT_MID_DISTANCE 55
-#define LEFT_CRITICAL_DISTANCE 35
-
-// ------------------------------------------------------------
-// LIMITES DO RIGHT
-// ------------------------------------------------------------
-
-#define RIGHT_SAFE_DISTANCE 75
-#define RIGHT_MID_DISTANCE 55
-#define RIGHT_CRITICAL_DISTANCE 35
-
-// ------------------------------------------------------------
-// LIMITES DO REAR
-// ------------------------------------------------------------
-
-#define REAR_SAFE_DISTANCE 90
-#define REAR_MID_DISTANCE 70
-#define REAR_CRITICAL_DISTANCE 50
-
-// ------------------------------------------------------------
-// LIMITES DO EXTRA
-// ------------------------------------------------------------
-
-#define EXTRA_SAFE_DISTANCE 75
-#define EXTRA_MID_DISTANCE 55
-#define EXTRA_CRITICAL_DISTANCE 35
-
-// ------------------------------------------------------------
-// QUAIS SENSORES FAZEM O VEÍCULO PARAR?
-//
-// true  = sensor pode mandar PARE
-// false = sensor não influencia vehicleState
-// ------------------------------------------------------------
-
-#define FRONT_CAUSES_STOP true
-#define LEFT_CAUSES_STOP true
-#define RIGHT_CAUSES_STOP true
-#define REAR_CAUSES_STOP false
-#define EXTRA_CAUSES_STOP false
-
-// ============================================================
-// ESTADOS
-// ============================================================
-
-enum SensorState {
-  FREE = 0,
-  DISTANT = 1,
-  NEAR = 2,
-  CRITICAL = 3
-};
-
-// ============================================================
 // SENSORES
+// Ordem igual ao índice descrito no cabeçalho.
 // ============================================================
 
 NewPing sonar[SONAR_NUM] = {
-  NewPing(FRONT_TRIG, FRONT_ECHO, FRONT_MAX_DISTANCE),
-  NewPing(LEFT_TRIG, LEFT_ECHO, LEFT_MAX_DISTANCE),
-  NewPing(RIGHT_TRIG, RIGHT_ECHO, RIGHT_MAX_DISTANCE),
-  NewPing(REAR_TRIG, REAR_ECHO, REAR_MAX_DISTANCE),
-  NewPing(EXTRA_TRIG, EXTRA_ECHO, EXTRA_MAX_DISTANCE)
+  NewPing(LEFT_TRIG,    LEFT_ECHO,    SIDE_MAX_DISTANCE),
+  NewPing(F_LEFT_TRIG,  F_LEFT_ECHO,  FRONTAL_MAX_DISTANCE),
+  NewPing(F_RIGHT_TRIG, F_RIGHT_ECHO, FRONTAL_MAX_DISTANCE),
+  NewPing(RIGHT_TRIG,   RIGHT_ECHO,   SIDE_MAX_DISTANCE),
 };
 
-// ============================================================
+
 // VARIÁVEIS
 // ============================================================
 
-unsigned int cm[SONAR_NUM] = {0, 0, 0, 0, 0};
+// Última distância lida em cada sensor, em cm.
+// 0 = sem eco ou acima da distância máxima do sensor.
+unsigned int cm[SONAR_NUM] = {0, 0, 0, 0};
 
+// Estado de cada sensor após a classificação.
 SensorState sensorState[SONAR_NUM] = {
   FREE,
   FREE,
   FREE,
   FREE,
-  FREE
 };
 
+// true  = PROSSIGA
+// false = PARE (algum sensor em CRITICAL)
 bool vehicleState = true;
+
 bool canConnected = false;
 
+// Instante (millis) da última tentativa de conexão com a CAN.
 unsigned long lastCANAttempt = 0;
 
-// ============================================================
+
 // SETUP
 // ============================================================
 
@@ -166,64 +70,65 @@ void setup() {
   connectCAN();
 }
 
-// ============================================================
-// LOOP
+
+// LOOP.
 // ============================================================
 
 void loop() {
 
-  // ----------------------------------------------------------
   // Reconexão CAN
-  // ----------------------------------------------------------
+  // Tenta de novo a cada CAN_RECONNECT_INTERVAL ms.
 
   if (!canConnected && millis() - lastCANAttempt >= CAN_RECONNECT_INTERVAL) {
     connectCAN();
   }
 
-  // ----------------------------------------------------------
   // Leitura dos sensores
-  // ----------------------------------------------------------
   lerSensores();
 
-  // ----------------------------------------------------------
   // Processamento
-  // ----------------------------------------------------------
   processarLeituras();
 
-  // ----------------------------------------------------------
   // Envio CAN
-  // ----------------------------------------------------------
   if (canConnected) {
     sendData();
   }
 
-  // ----------------------------------------------------------
   // Debug
-  // ----------------------------------------------------------
-  printDebug();
-
-  delay(50);
+  //printDebug();
 }
 
-// ============================================================
-// LEITURA DOS 5 ULTRASSÔNICOS
+// LEITURA DOS 4 ULTRASSÔNICOS
+//
+// Leitura sequencial, com SENSOR_DELAY ms entre um sensor e
+// outro para o eco anterior sumir antes do próximo disparo.
+// Não há delay depois do último sensor.
 // ============================================================
 void lerSensores() {
 
   for (uint8_t i = 0; i < SONAR_NUM; i++) {
 
+    // ping_cm() bloqueia até o eco voltar ou estourar o
+    // timeout (definido pela distância máxima do sensor).
     cm[i] = sonar[i].ping_cm();
 
-    // Pequeno intervalo para evitar interferência
-    // entre os sensores.
     if (i < SONAR_NUM - 1) {
       delay(SENSOR_DELAY);
     }
   }
 }
 
-// ============================================================
+
 // CLASSIFICA DISTÂNCIA
+//
+// Converte uma distância em um estado, usando os limites da
+// região do sensor (frontal ou lateral):
+//
+//   distance == 0        -> FREE (sem eco)
+//   distance <= critical -> CRITICAL
+//   distance <= mid      -> NEAR
+//   distance <= safe     -> DISTANT
+//   acima de safe        -> FREE
 // ============================================================
 SensorState classifyDistance(
   unsigned int distance,
@@ -232,126 +137,97 @@ SensorState classifyDistance(
   unsigned int critical
 ) {
 
-  // ----------------------------------------------------------
-  // Sem eco
-  // ----------------------------------------------------------
+  // Sem eco ou acima do alcance máximo: tratado como livre.
   if (distance == 0) {
     return FREE;
   }
 
-  // ----------------------------------------------------------
   // CRÍTICO
-  // ----------------------------------------------------------
   if (distance <= critical) {
     return CRITICAL;
   }
 
-  // ----------------------------------------------------------
   // PRÓXIMO
-  // ----------------------------------------------------------
   if (distance <= mid) {
     return NEAR;
   }
 
-  // ----------------------------------------------------------
   // DISTANTE
-  // ----------------------------------------------------------
   if (distance <= safe) {
     return DISTANT;
   }
 
-  // ----------------------------------------------------------
   // LIVRE
-  // ----------------------------------------------------------
   return FREE;
 }
 
-// ============================================================
 // PROCESSAMENTO
+//
+// Classifica os 4 sensores e define o estado do veículo.
+// Se qualquer sensor estiver em CRITICAL, vehicleState = PARE.
 // ============================================================
 void processarLeituras() {
 
-  // ----------------------------------------------------------
-  // FRONT
-  // ----------------------------------------------------------
+  // [0] Lateral esquerdo
   sensorState[0] = classifyDistance(
     cm[0],
-    FRONT_SAFE_DISTANCE,
-    FRONT_MID_DISTANCE,
-    FRONT_CRITICAL_DISTANCE
+    SIDE_SAFE_DISTANCE,
+    SIDE_MID_DISTANCE,
+    SIDE_CRITICAL_DISTANCE
   );
 
-  // ----------------------------------------------------------
-  // LEFT
-  // ----------------------------------------------------------
+  // [1] Frontal esquerdo
   sensorState[1] = classifyDistance(
     cm[1],
-    LEFT_SAFE_DISTANCE,
-    LEFT_MID_DISTANCE,
-    LEFT_CRITICAL_DISTANCE
+    FRONTAL_SAFE_DISTANCE,
+    FRONTAL_MID_DISTANCE,
+    FRONTAL_CRITICAL_DISTANCE
   );
 
-  // ----------------------------------------------------------
-  // RIGHT
-  // ----------------------------------------------------------
+  // [2] Frontal direito
   sensorState[2] = classifyDistance(
     cm[2],
-    RIGHT_SAFE_DISTANCE,
-    RIGHT_MID_DISTANCE,
-    RIGHT_CRITICAL_DISTANCE
+    FRONTAL_SAFE_DISTANCE,
+    FRONTAL_MID_DISTANCE,
+    FRONTAL_CRITICAL_DISTANCE
   );
 
-  // ----------------------------------------------------------
-  // REAR
-  // ----------------------------------------------------------
+  // [3] Lateral direito
   sensorState[3] = classifyDistance(
     cm[3],
-    REAR_SAFE_DISTANCE,
-    REAR_MID_DISTANCE,
-    REAR_CRITICAL_DISTANCE
+    SIDE_SAFE_DISTANCE,
+    SIDE_MID_DISTANCE,
+    SIDE_CRITICAL_DISTANCE
   );
 
-  // ----------------------------------------------------------
-  // EXTRA
-  // ----------------------------------------------------------
-  sensorState[4] = classifyDistance(
-    cm[4],
-    EXTRA_SAFE_DISTANCE,
-    EXTRA_MID_DISTANCE,
-    EXTRA_CRITICAL_DISTANCE
-  );
-
-  // ----------------------------------------------------------
   // ESTADO DO VEÍCULO
   //
   // true  = PROSSIGA
   // false = PARE
-  // ----------------------------------------------------------
   vehicleState = true;
 
-  if (FRONT_CAUSES_STOP && sensorState[0] == CRITICAL) {
+  if (sensorState[0] == CRITICAL) {
     vehicleState = false;
   }
 
-  if (LEFT_CAUSES_STOP && sensorState[1] == CRITICAL) {
+  if (sensorState[1] == CRITICAL) {
     vehicleState = false;
   }
 
-  if (RIGHT_CAUSES_STOP && sensorState[2] == CRITICAL) {
+  if (sensorState[2] == CRITICAL) {
     vehicleState = false;
   }
 
-  if (REAR_CAUSES_STOP && sensorState[3] == CRITICAL) {
-    vehicleState = false;
-  }
-
-  if (EXTRA_CAUSES_STOP && sensorState[4] == CRITICAL) {
+  if (sensorState[3] == CRITICAL) {
     vehicleState = false;
   }
 }
 
-// ============================================================
+
 // CONEXÃO CAN
+//
+// Inicializa o MCP2515. Se conectar, envia o estado inicial.
+// Se falhar, o loop() tenta de novo após CAN_RECONNECT_INTERVAL.
 // ============================================================
 void connectCAN() {
 
@@ -379,23 +255,25 @@ void connectCAN() {
   lastCANAttempt = millis();
 }
 
-// ============================================================
 // ENVIO CAN
-// ============================================================
 //
-// UMA ÚNICA MENSAGEM
+// UMA ÚNICA MENSAGEM, 2 BYTES
 //
 // ID: 0x200
 //
-// BYTE:
+// BYTE 0 (estado dos sensores, 2 bits cada):
 //
-// Bit 0-1 = LEFT
-// Bit 2-3 = FRONT
-// Bit 4-5 = RIGHT
-// Bit 6   = VEHICLE
-// Bit 7   = RESERVADO
+// Bit 0-1 = Frontal esquerdo  (sensorState[1])
+// Bit 2-3 = Lateral esquerdo  (sensorState[0])
+// Bit 4-5 = Frontal direito   (sensorState[2])
+// Bit 6-7 = Lateral direito   (sensorState[3])
 //
-// ESTADOS:
+// BYTE 1 (estado do veículo):
+//
+// Bit 0   = VEHICLE
+// Bit 1-7 = RESERVADO
+//
+// ESTADOS DOS SENSORES:
 //
 // 00 = FREE
 // 01 = DISTANT
@@ -410,105 +288,66 @@ void connectCAN() {
 // ============================================================
 void sendData() {
 
-  uint8_t data = 0;
+  uint8_t byte0 = 0;
+  byte0 |= (sensorState[1] & 0x03) << 0;  // Frontal esquerdo
+  byte0 |= (sensorState[0] & 0x03) << 2;  // Lateral esquerdo
+  byte0 |= (sensorState[2] & 0x03) << 4;  // Frontal direito
+  byte0 |= (sensorState[3] & 0x03) << 6;  // Lateral direito
 
-  // ----------------------------------------------------------
-  // LEFT
-  // Bits 0-1
-  // ----------------------------------------------------------
-  data |= (sensorState[1] & 0x03) << 0;
+  uint8_t byte1 = vehicleState & 0x01;    // Bit 0: PROSSIGA/PARE
 
-  // ----------------------------------------------------------
-  // FRONT
-  // Bits 2-3
-  // ----------------------------------------------------------
-  data |= (sensorState[0] & 0x03) << 2;
-
-  // ----------------------------------------------------------
-  // RIGHT
-  // Bits 4-5
-  // ----------------------------------------------------------
-  data |= (sensorState[2] & 0x03) << 4;
-
-  // ----------------------------------------------------------
-  // VEHICLE
-  // Bit 6
-  // ----------------------------------------------------------
-  data |= (vehicleState & 0x01) << 6;
-
-  // ----------------------------------------------------------
-  // Bit 7 reservado
-  // ----------------------------------------------------------
-
-  // ----------------------------------------------------------
-  // Envia
-  // ----------------------------------------------------------
   CAN.beginPacket(ULTRASONIC_DATA);
-  CAN.write(data);
+  CAN.write(byte0);
+  CAN.write(byte1);
   CAN.endPacket();
 }
 
-// ============================================================
+
 // DEBUG SERIAL
+//
+// Imprime distância e estado de cada sensor, o estado do
+// veículo e os 2 bytes montados da mesma forma que em sendData().
 // ============================================================
 void printDebug() {
 
-  uint8_t data = 0;
+  // Monta exatamente os mesmos bytes enviados pela CAN
+  uint8_t byte0 = 0;
+  byte0 |= (sensorState[1] & 0x03) << 0;
+  byte0 |= (sensorState[0] & 0x03) << 2;
+  byte0 |= (sensorState[2] & 0x03) << 4;
+  byte0 |= (sensorState[3] & 0x03) << 6;
 
-  // Monta exatamente o mesmo byte enviado pela CAN
-  data |= (sensorState[1] & 0x03) << 0;
-  data |= (sensorState[0] & 0x03) << 2;
-  data |= (sensorState[2] & 0x03) << 4;
-  data |= (vehicleState & 0x01) << 6;
+  uint8_t byte1 = vehicleState & 0x01;
 
-  // ----------------------------------------------------------
-  // FRONT
-  // ----------------------------------------------------------
-  Serial.print("FRONT: ");
+  // LEFT (lateral esquerdo)
+  Serial.print("LEFT: ");
   Serial.print(cm[0]);
   Serial.print("cm [");
   Serial.print(sensorState[0]);
   Serial.print("]");
 
-  // ----------------------------------------------------------
-  // LEFT
-  // ----------------------------------------------------------
-  Serial.print(" | LEFT: ");
+  // F_LEFT (frontal esquerdo)
+  Serial.print(" | F_LEFT: ");
   Serial.print(cm[1]);
   Serial.print("cm [");
   Serial.print(sensorState[1]);
   Serial.print("]");
 
-  // ----------------------------------------------------------
-  // RIGHT
-  // ----------------------------------------------------------
-  Serial.print(" | RIGHT: ");
+  // F_RIGHT (frontal direito)
+  Serial.print(" | F_RIGHT: ");
   Serial.print(cm[2]);
   Serial.print("cm [");
   Serial.print(sensorState[2]);
   Serial.print("]");
 
-  // ----------------------------------------------------------
-  // REAR
-  // ----------------------------------------------------------
-  Serial.print(" | REAR: ");
+  // RIGHT (lateral direito)
+  Serial.print(" | RIGHT: ");
   Serial.print(cm[3]);
   Serial.print("cm [");
   Serial.print(sensorState[3]);
   Serial.print("]");
 
-  // ----------------------------------------------------------
-  // EXTRA
-  // ----------------------------------------------------------
-  Serial.print(" | EXTRA: ");
-  Serial.print(cm[4]);
-  Serial.print("cm [");
-  Serial.print(sensorState[4]);
-  Serial.print("]");
-
-  // ----------------------------------------------------------
   // VEHICLE
-  // ----------------------------------------------------------
   Serial.print(" | VEHICLE: ");
 
   if (vehicleState) {
@@ -517,26 +356,33 @@ void printDebug() {
     Serial.print("PARE");
   }
 
-  // ----------------------------------------------------------
-  // CAN
-  // ----------------------------------------------------------
+  // CAN (hexadecimal)
   Serial.print(" | CAN: 0x");
 
-  if (data < 0x10) {
+  if (byte0 < 0x10) {
     Serial.print("0");
   }
+  Serial.print(byte0, HEX);
 
-  Serial.print(data, HEX);
+  Serial.print(" 0x");
 
-  // ----------------------------------------------------------
-  // BINÁRIO
-  // ----------------------------------------------------------
+  if (byte1 < 0x10) {
+    Serial.print("0");
+  }
+  Serial.print(byte1, HEX);
+
+  // BINÁRIO (byte 0 e byte 1)
   Serial.print(" | BIN: ");
 
   for (int i = 7; i >= 0; i--) {
-    Serial.print((data >> i) & 1);
+    Serial.print((byte0 >> i) & 1);
+  }
+
+  Serial.print(" ");
+
+  for (int i = 7; i >= 0; i--) {
+    Serial.print((byte1 >> i) & 1);
   }
 
   Serial.println();
 }
-
