@@ -61,7 +61,7 @@ def _load_test_image(filename):
     return None
 
 
-_test_road_frame = None#_load_test_image("road.png")
+_test_road_frame = None #_load_test_image("road.png")
 _test_stop_frame = None #_load_test_image("pare.png")
 _use_test_images = _test_road_frame is not None and _test_stop_frame is not None
 
@@ -109,7 +109,7 @@ allow_dashboard_firewall_rule(DASHBOARD_PORT)
 
 # ── Inicialização dos objetos ───────────────
 corrector = FisheyeCorrector("calibration/fisheye_calibration.npz", width, height, balance=0.4, offset_x=-86)
-sign_det = ObjectDetector("model/Modelo_4.pt")
+sign_det = ObjectDetector("model/modelo_5.pt")
 car = Car(COM)
 rc = RemoteControl()
 nav = Navigation()
