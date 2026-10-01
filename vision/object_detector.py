@@ -35,7 +35,11 @@ class ObjectDetector:
     PERSON_VALID_COLOR = (255, 0, 0)            # Azul
     PERSON_INVALID_COLOR = INVALID_COLOR
     RIGHT_DETOUR_VALID_COLOR = (153, 255, 180)  # Verde claro para placa de desvio válida
-    STOP_POINT_COLOR = (255, 0, 255)            # Magenta para pontos A/B/C
+    STOP_POINT_COLORS = {
+        "ponto_a": (255, 128, 0),
+        "ponto_b": (0, 200, 255),
+        "ponto_c": (255, 0, 180),
+    }
 
     TRAFFIC_LIGHT_LABELS = ("semaforo", "semáforo", "light")
     RIGHT_DETOUR_LABELS = ("desvio_direita",)
@@ -65,6 +69,14 @@ class ObjectDetector:
             conf_threshold = self.CONF_THRESHOLD
         self._conf = max(0.0, min(1.0, conf_threshold))
         self._min_stop_diagonal = 0
+        self._stop_point_confidences = {
+            self._normalize_label(label): self.MIN_STOP_POINT_CONF
+            for label in self.STOP_POINTS_LABELS
+        }
+        self._min_stop_point_diagonals = {
+            self._normalize_label(label): 0
+            for label in self.STOP_POINTS_LABELS
+        }
         self._min_light_diagonal = 0
         self._min_light_confidence = 0.0
         self._min_person_diagonal = 0
@@ -95,7 +107,14 @@ class ObjectDetector:
                   right_detour_confidence=None,
                   min_right_detour_diagonal=None,
                   right_detour_required_frames=None,
-                  stop_point_confidence=None):
+                  stop_point_confidence=None,
+                  min_stop_point_diagonal=None,
+                  stop_point_a_confidence=None,
+                  min_stop_point_a_diagonal=None,
+                  stop_point_b_confidence=None,
+                  min_stop_point_b_diagonal=None,
+                  stop_point_c_confidence=None,
+                  min_stop_point_c_diagonal=None):
         """Atualiza os parâmetros de detecção em tempo real.
 
         As atribuições são escalares e podem ser feitas pelo loop de controle
@@ -128,7 +147,24 @@ class ObjectDetector:
         if right_detour_required_frames is not None:
             self.RIGHT_DETOUR_REQUIRED_FRAMES = max(1, int(right_detour_required_frames))
         if stop_point_confidence is not None:
-            self.MIN_STOP_POINT_CONF = max(0.0, min(1.0, float(stop_point_confidence)))
+            confidence = max(0.0, min(1.0, float(stop_point_confidence)))
+            for label in self._stop_point_confidences:
+                self._stop_point_confidences[label] = confidence
+        if min_stop_point_diagonal is not None:
+            diagonal = max(0, int(min_stop_point_diagonal))
+            for label in self._min_stop_point_diagonals:
+                self._min_stop_point_diagonals[label] = diagonal
+
+        point_settings = (
+            ("ponto_a", stop_point_a_confidence, min_stop_point_a_diagonal),
+            ("ponto_b", stop_point_b_confidence, min_stop_point_b_diagonal),
+            ("ponto_c", stop_point_c_confidence, min_stop_point_c_diagonal),
+        )
+        for label, confidence, diagonal in point_settings:
+            if confidence is not None:
+                self._stop_point_confidences[label] = max(0.0, min(1.0, float(confidence)))
+            if diagonal is not None:
+                self._min_stop_point_diagonals[label] = max(0, int(diagonal))
 
     def update(self, frame) -> list:
         """Atualiza as detecções; a inferência ocorre a cada N frames."""
@@ -161,8 +197,9 @@ class ObjectDetector:
                 color_name = self._code_to_name(self._light_code)
                 color = self.LIGHT_TO_BGR.get(color_name, self.INVALID_COLOR)
             elif self._is_stop_point_label(lbl):
-                color = (self.STOP_POINT_COLOR
-                         if conf >= self.MIN_STOP_POINT_CONF
+                normalized = self._normalize_label(lbl)
+                color = (self.STOP_POINT_COLORS[normalized]
+                         if self._is_valid_stop_point(label, x1, y1, x2, y2, conf)
                          else self.INVALID_COLOR)
             elif self._is_stop_label(lbl):
                 color = (self.STOP_VALID_COLOR
@@ -279,14 +316,35 @@ class ObjectDetector:
         """Retorna as caixas de pessoas da última inferência."""
         return list(self._person_boxes)
 
+    def has_valid_person(self) -> bool:
+        """Verifica se há alguma pessoa que atende aos limites configurados."""
+        return any(
+            self._is_valid_person(x1, y1, x2, y2, conf)
+            for x1, y1, x2, y2, conf in self._person_boxes
+        )
+
     # ── PONTOS A/B/C ──────────────────────────────────────────────────────────
     def get_stop_points(self) -> list:
         """Retorna os pontos detectados na última inferência: [(label, conf, (x1,y1,x2,y2)), ...]"""
         return [
             (label, conf, (x1, y1, x2, y2))
             for x1, y1, x2, y2, label, conf in self._boxes
-            if self._is_stop_point_label(label) and conf >= self.MIN_STOP_POINT_CONF
+            if self._is_stop_point_label(label)
+            and self._is_valid_stop_point(label, x1, y1, x2, y2, conf)
         ]
+
+    def has_valid_stop_point(self, route_point) -> bool:
+        """Verifica se a placa válida corresponde ao destino atual da rota."""
+        if route_point is None or not str(route_point).strip():
+            return False
+        expected = self._normalize_label(str(route_point))
+        if not expected.startswith("ponto_"):
+            expected = f"ponto_{expected}"
+        for x1, y1, x2, y2, label, conf in self._boxes:
+            if (self._normalize_label(label) == expected
+                    and self._is_valid_stop_point(label, x1, y1, x2, y2, conf)):
+                return True
+        return False
 
     # ── SEMÁFORO ──────────────────────────────────────────────────────────────
     def _find_traffic_light_box(self):
@@ -371,8 +429,21 @@ class ObjectDetector:
 
     @classmethod
     def _is_stop_point_label(cls, label: str) -> bool:
-        normalized = label.lower().strip().replace("-", "_").replace(" ", "_")
+        normalized = cls._normalize_label(label)
         return normalized in cls._STOP_POINTS_NORM
+
+    @staticmethod
+    def _normalize_label(label: str) -> str:
+        return label.lower().strip().replace("-", "_").replace(" ", "_")
+
+    def _is_valid_stop_point(self, label, x1, y1, x2, y2, conf):
+        normalized = self._normalize_label(label)
+        min_confidence = self._stop_point_confidences[normalized]
+        min_diagonal = self._min_stop_point_diagonals[normalized]
+        if conf < min_confidence:
+            return False
+        diagonal = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
+        return diagonal >= min_diagonal
 
     @staticmethod
     def _is_stop_label(label: str) -> bool:
@@ -421,7 +492,7 @@ class ObjectDetector:
             return False
         return True
 
-    def get_state(self):
+    def get_state(self, current_route_point=None):
         now = time.time()
         if self.stop_active and now >= self._stop_until:
             self.stop_active = False
@@ -434,6 +505,8 @@ class ObjectDetector:
                 if self._is_valid_stop(x1, y1, x2, y2, conf):
                     raw_stop = True
                     break
+        if not raw_stop and self.has_valid_stop_point(current_route_point):
+            raw_stop = True
 
         # ATIVA STOP
         if raw_stop and not self.stop_active and now >= self._cooldown_until:

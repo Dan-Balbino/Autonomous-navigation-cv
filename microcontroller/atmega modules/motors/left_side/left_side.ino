@@ -9,7 +9,7 @@
 #define MOTOR_DATA    0x110
 
 #ifndef MOTOR_COMMAND_SIZE
-#define MOTOR_COMMAND_SIZE (sizeof(int16_t) + sizeof(int16_t) + sizeof(bool))
+#define MOTOR_COMMAND_SIZE (sizeof(int16_t) + sizeof(int16_t) + sizeof(bool) + sizeof(bool))
 #endif
 
 // ================= HARDWARE PINOUT =================
@@ -36,6 +36,7 @@ bool motor_enabled = false;
 bool accelerating_active = false;
 bool stopping_active = false;
 bool reverse = false;
+bool stop_car = false;
 
 int16_t target_pwm = 0;      // PWM base recebido direto pela CAN (0..OUTPUT_LIMIT)
 int16_t steering_angle = 0;
@@ -146,7 +147,7 @@ void loop() {
     startMotors();
   }
 
-  if (new_command && target_pwm <= 0 && motor_enabled) {
+  if (new_command && target_pwm <= 0 && motor_enabled && !stopping_active) {
     beginSmoothStop();
     return;
   }
@@ -302,18 +303,28 @@ bool receiveCANData() {
   int16_t received_pwm;
   int16_t received_angle;
   bool received_reverse;
+    bool received_stop;
 
   if (CAN.readBytes((uint8_t *)&received_pwm, sizeof(received_pwm)) != sizeof(received_pwm) ||
       CAN.readBytes((uint8_t *)&received_angle, sizeof(received_angle)) != sizeof(received_angle) ||
-      CAN.readBytes((uint8_t *)&received_reverse, sizeof(received_reverse)) != sizeof(received_reverse)) {
+      CAN.readBytes((uint8_t *)&received_reverse, sizeof(received_reverse)) != sizeof(received_reverse) ||
+      CAN.readBytes((uint8_t *)&received_stop, sizeof(received_stop)) != sizeof(received_stop)) {
 
     Serial.println("Leitura do comando CAN incompleta.");
     return false;
   }
 
+  stop_car = received_stop;
   received_pwm = constrain(received_pwm, (int16_t)-OUTPUT_LIMIT, (int16_t)OUTPUT_LIMIT);
 
-  if (received_pwm == 0) {
+  if (stop_car) {
+    target_pwm = 0;
+    reverse = false;
+    stop_counter = 0;
+    if (motor_enabled && !stopping_active) {
+      beginSmoothStop();
+    }
+  } else if (received_pwm == 0) {
     stop_counter++;
 
     if (stop_counter >= 2) {
@@ -335,7 +346,9 @@ bool receiveCANData() {
     steering_angle = received_angle;
   }
 
-  reverse = received_reverse;
+  if (!stop_car) {
+    reverse = received_reverse;
+  }
   last_command_received = millis();
 
   return true;
@@ -375,6 +388,7 @@ void sendCommandWire() {
   Wire.write((uint8_t *)&target_pwm, sizeof(target_pwm));
   Wire.write((uint8_t *)&steering_angle, sizeof(steering_angle));
   Wire.write((uint8_t *)&reverse, sizeof(reverse));
+  Wire.write((uint8_t *)&stop_car, sizeof(stop_car));
 
   byte error = Wire.endTransmission();
 

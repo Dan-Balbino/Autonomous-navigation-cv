@@ -91,11 +91,15 @@ void sendCommand(int id, int data) {
   CAN.endPacket();
 }
 
-void sendMotorCommand(int id, int16_t ang, int16_t pwm, bool reverse) {
+void sendMotorCommand(int id, int16_t ang, int16_t pwm, bool reverse, bool stop, bool vehicle_state) {
+  bool stop_car = stop || !vehicle_state;
+
   CAN.beginPacket(id);
   CAN.write((uint8_t*)&pwm, sizeof(pwm));
   CAN.write((uint8_t*)&ang, sizeof(ang));
   CAN.write((uint8_t*)&reverse, sizeof(reverse));
+  CAN.write((uint8_t*)&stop_car, sizeof(stop_car));
+
   CAN.endPacket();
 }
 

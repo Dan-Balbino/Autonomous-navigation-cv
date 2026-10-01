@@ -23,21 +23,27 @@ class Navigation:
         if self.current_route:
             print(f"Current route updated to: {self.current_route}")
 
+    def confirm_current_point(self, point):
+        """Avança a rota somente quando a placa do destino atual foi detectada."""
+        if not self.route or str(self.route[0]).casefold() != str(point).casefold():
+            return False
+        self._next_point()
+        return True
+
     def update_lane(self):
         if not self.route:
             return "left"  # Faixa de preferência padrão quando não há rota definida
 
         lanes = lane_guide_map.get(self.current_route, [])
         if not lanes:
-            # Ponto desconhecido no mapa — descarta e segue com a padrão
-            self._next_point()
+            # Um ponto desconhecido permanece na rota até confirmação explícita.
             return "left"
+
+        if self.action_counter >= len(lanes):
+            return lanes[-1]
 
         lane_preference = lanes[self.action_counter]
         self.action_counter += 1
-
-        if self.action_counter >= len(lanes):
-            self._next_point()
 
         return lane_preference
         

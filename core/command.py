@@ -3,7 +3,6 @@ from dataclasses import dataclass
 @dataclass
 class CarCommand:
     run: bool = False
-    traffic_light: int = 0
     lights: int = 0
     stop: bool = False
     servo: int = 90
@@ -13,7 +12,6 @@ class CarCommand:
     def to_dict(self):
         return {
             "run": self.run,
-            "tl": self.traffic_light,
             "lights": self.lights,
             "stop": self.stop,
             "servo": self.servo,

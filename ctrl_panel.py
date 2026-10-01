@@ -251,13 +251,13 @@ class _ServerBridge(QObject):
     config_received = Signal(dict)
     vehicle_info_received = Signal(dict)
     log_received = Signal(str, str)
-    camera_ids_received = Signal(int, int)
+    camera_id_received = Signal(int)
     speed_adjust_requested = Signal(float)
 
 
 class ControlPanel:
     def __init__(self, width, height, test_mode=False, dashboard_url="",
-                 twin_path="", initial_cam_idx=1, secondary_cam_idx=None,
+                 twin_path="", camera_idx=1,
                  car=None, nav=None, remote_control=None):
 
         self._app = QApplication.instance() or QApplication([])
@@ -269,10 +269,7 @@ class ControlPanel:
         self._initial_test_mode = test_mode
         self._dashboard_url = dashboard_url
         self._twin_path     = twin_path
-        self._initial_cam_idx = initial_cam_idx
-        self._secondary_cam_idx = (
-            initial_cam_idx if secondary_cam_idx is None else secondary_cam_idx
-        )
+        self._camera_idx = camera_idx
         self.car = car
         self.nav = nav
         self.remote_control = remote_control if remote_control is not None else RemoteControl()
@@ -296,17 +293,13 @@ class ControlPanel:
         self._can_modules_signature = None
         self._stop_point_selectors = {}
         self._selected_stop_points = {"coleta": "A", "entrega": "A"}
-        self._camera_id_labels = {}
-        self._camera_ids = {
-            "primary": self._initial_cam_idx,
-            "secondary": self._secondary_cam_idx,
-        }
+        self._camera_id_label = None
 
         self._bridge = _ServerBridge()
         self._bridge.config_received.connect(self._apply_config)
         self._bridge.vehicle_info_received.connect(self._apply_vehicle_info)
         self._bridge.log_received.connect(self._append_log)
-        self._bridge.camera_ids_received.connect(self._apply_camera_ids)
+        self._bridge.camera_id_received.connect(self._apply_camera_id)
         self._bridge.speed_adjust_requested.connect(self._adjust_speed)
 
         self.window = QMainWindow()
@@ -370,7 +363,7 @@ class ControlPanel:
         if self._reconnect_pending:
             self._reconnect_pending = False
             com = None if self._test_mode_check.isChecked() else self._com_combo.currentText()
-            return com, self._camera_ids["primary"]
+            return com, self._camera_idx
         return None
 
     def _refresh_ports(self):
@@ -388,10 +381,10 @@ class ControlPanel:
             return
         self._reconnect_pending = True
         if self._test_mode_check.isChecked():
-            self.log(f"[CONEXÃO] Modo teste ativado  CAM={self._camera_ids['primary']}", "info")
+            self.log(f"[CONEXÃO] Modo teste ativado  CAM={self._camera_idx}", "info")
         else:
             self.log(f"[CONEXÃO] Reconectando → COM={self._com_combo.currentText()}  "
-                      f"CAM={self._camera_ids['primary']}", "info")
+                      f"CAM={self._camera_idx}", "info")
 
     def _show_qrcode(self):
         qr = qrcode.QRCode(box_size=6, border=3)
@@ -494,6 +487,18 @@ class ControlPanel:
             ("PESSOAS", [
                 ("Confiança (%)", config.get("PESSOAS_Confiança (%)", 50), 0, 100),
                 ("Diagonal mínima da caixa (px)", config.get("PESSOAS_Diagonal mínima da caixa (px)", config.get("PESSOAS_Box diagonal", 0)), 0, 1000),
+            ]),
+            ("PONTO A", [
+                ("Confiança (%)", config.get("PONTO A_Confiança (%)", config.get("PONTOS A/B/C_Confiança (%)", 40)), 0, 100),
+                ("Diagonal mínima da caixa (px)", config.get("PONTO A_Diagonal mínima da caixa (px)", config.get("PONTOS A/B/C_Diagonal mínima da caixa (px)", 0)), 0, 1000),
+            ]),
+            ("PONTO B", [
+                ("Confiança (%)", config.get("PONTO B_Confiança (%)", config.get("PONTOS A/B/C_Confiança (%)", 40)), 0, 100),
+                ("Diagonal mínima da caixa (px)", config.get("PONTO B_Diagonal mínima da caixa (px)", config.get("PONTOS A/B/C_Diagonal mínima da caixa (px)", 0)), 0, 1000),
+            ]),
+            ("PONTO C", [
+                ("Confiança (%)", config.get("PONTO C_Confiança (%)", config.get("PONTOS A/B/C_Confiança (%)", 40)), 0, 100),
+                ("Diagonal mínima da caixa (px)", config.get("PONTO C_Diagonal mínima da caixa (px)", config.get("PONTOS A/B/C_Diagonal mínima da caixa (px)", 0)), 0, 1000),
             ]),
         ]
 
@@ -852,21 +857,14 @@ class ControlPanel:
         layout.addLayout(frames, 1)
         return area
 
-    def update_camera_ids(self, primary_id, secondary_id=None):
-        """Atualiza os IDs exibidos sem acessar widgets fora do thread do Qt."""
-        if secondary_id is None:
-            secondary_id = self._camera_ids.get("secondary", primary_id)
-        self._bridge.camera_ids_received.emit(int(primary_id), int(secondary_id))
+    def update_camera_id(self, camera_id):
+        """Atualiza o ID exibido sem acessar widgets fora do thread do Qt."""
+        self._bridge.camera_id_received.emit(int(camera_id))
 
-    def _apply_camera_ids(self, primary_id, secondary_id):
-        self._camera_ids = {
-            "primary": primary_id,
-            "secondary": secondary_id,
-        }
-        for camera_key, camera_id in self._camera_ids.items():
-            label = self._camera_id_labels.get(camera_key)
-            if label is not None:
-                label.setText(str(camera_id))
+    def _apply_camera_id(self, camera_id):
+        self._camera_idx = camera_id
+        if self._camera_id_label is not None:
+            self._camera_id_label.setText(str(camera_id))
 
     def _build_sections_tab(self, sections, show_pid=False):
         scroll = QScrollArea()
@@ -1086,20 +1084,16 @@ class ControlPanel:
         com_row.addWidget(refresh_btn)
         card_layout.addLayout(com_row)
 
-        for camera_key, label_text in (
-            ("primary", "ID da câmera primária"),
-            ("secondary", "ID da câmera secundária"),
-        ):
-            camera_id_row = QHBoxLayout()
-            camera_id_row.addWidget(QLabel(label_text))
-            camera_id_row.addStretch()
-            camera_id = QLabel(str(self._camera_ids[camera_key]))
-            camera_id.setObjectName("StateValue")
-            camera_id.setMinimumWidth(42)
-            camera_id.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            camera_id_row.addWidget(camera_id)
-            self._camera_id_labels[camera_key] = camera_id
-            card_layout.addLayout(camera_id_row)
+        camera_id_row = QHBoxLayout()
+        camera_id_row.addWidget(QLabel("ID da câmera"))
+        camera_id_row.addStretch()
+        camera_id = QLabel(str(self._camera_idx))
+        camera_id.setObjectName("StateValue")
+        camera_id.setMinimumWidth(42)
+        camera_id.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        camera_id_row.addWidget(camera_id)
+        self._camera_id_label = camera_id
+        card_layout.addLayout(camera_id_row)
 
         self._test_mode_check = QCheckBox("Sem Arduino (modo teste)")
         self._test_mode_check.setChecked(self._initial_test_mode)
@@ -1492,3 +1486,4 @@ class ControlPanel:
 if __name__ == "__main__":
     panel = ControlPanel(1280, 720)
     panel.run()
+

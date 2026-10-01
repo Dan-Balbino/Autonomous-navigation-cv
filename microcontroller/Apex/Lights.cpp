@@ -1,506 +1,204 @@
+#include "Lights.h"
 
+// Mapa dos LEDs (índices)
+//  0–9    lanterna/farol esquerdo
+// 10–13   seta esquerda (frente)
+// 14–15   traseira esquerda (freio / ré)
+// 16–25   lanterna/farol direito
+// 26–29   seta direita (frente)
+// 30–31   traseira direita (freio / ré)
+// 32–33   seta esquerda (traseira)
+// 34–39   logo
+// 40–41   seta direita (traseira)
 
-// ==================================================
-// CONFIGURAÇÃO
-// ==================================================
+Lights::Lights(int pin, int numPixels)
+  : PIN(pin),
+    NUMPIXELS(numPixels),
+    pixels(numPixels, pin, NEO_GBR + NEO_KHZ800) {
 
-#define PIN 6
-#define NUMPIXELS 42
+  hazard_lights_on = false;
+  left_turn_signal_on = false;
+  right_turn_signal_on = false;
+  brake_lights_on = false;
+  reverse_lights_on = false;
+  headlight_on = false;
+  control_enabled = false;
+}
 
-#define LIGHTS_COMMAND   0x
-#define LIGHTS_HEARTBEAT 0x
-
-Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GBR + NEO_KHZ800);
-
-Bit 0 → seta esquerda
-Bit 1 → seta direita
-Bit 2 → alerta
-Bit 3 → luz de freio
-Bit 4 → farol
-Bit 5 → luz de ré
-Bit 6 → reservado
-Bit 7 → reservado
-
-bool alerta;
-bool freio, re;
-bool seta_esquerda, seta_direita;
-bool logo;
-
-
-
-
-
-
-
-
-// ==================================================
-// ESTADOS - ESQUERDA
-// ==================================================
-
-bool lanternaLigadaE = false;
-bool setaLigadaE = false;
-bool reLigadaE = false;
-
-
-// ==================================================
-// ESTADOS - DIREITA
-// ==================================================
-
-bool lanternaLigadaD = false;
-bool setaLigadaD = false;
-bool reLigadaD = false;
-
-
-// ==================================================
-// CONTROLE DAS SETAS
-// ==================================================
-
-unsigned long tempoAnteriorD = 0;
-unsigned long tempoAnteriorE = 0;
-
-const unsigned long intervaloSetaD = 1000;
-const unsigned long intervaloSetaE = 1000;
-
-bool setaEstadoD = false;
-bool setaEstadoE = false;
-
-
-// ==================================================
-// CONTROLE DO LOGO
-// ==================================================
-
-bool logoLigado = false;
-bool logoRGB = false;
-
-unsigned long tempoAnteriorLogo = 0;
-const unsigned long intervaloLogo = 10;
-
-int logoHue = 0;
-
-
-// ==================================================
-// SETUP
-// ==================================================
-
-void setup() {
-
-  Serial.begin(9600);
-
+void Lights::begin() {
   pixels.begin();
   pixels.clear();
   pixels.show();
-
-  Serial.println("Sistema iniciado");
 }
 
+void Lights::fill(int from, int to, uint32_t color) {
+  for (int i = from; i < to && i < NUMPIXELS; i++) {
+    pixels.setPixelColor(i, color);
+  }
+}
 
 // ==================================================
-// LOOP
+// COMUNICAÇÃO
 // ==================================================
 
-void loop() {
+void Lights::handleCommand(uint8_t command) {
+  left_turn_signal_on  = command & (1 << LIGHTS_BIT_LEFT);
+  right_turn_signal_on = command & (1 << LIGHTS_BIT_RIGHT);
+  hazard_lights_on     = command & (1 << LIGHTS_BIT_HAZARD);
+  brake_lights_on      = command & (1 << LIGHTS_BIT_BRAKE);
+  headlight_on         = command & (1 << LIGHTS_BIT_HEADLIGHT);
+  reverse_lights_on    = command & (1 << LIGHTS_BIT_REVERSE);
+  control_enabled      = command & (1 << LIGHTS_BIT_CONTROL);
 
-  // ==================================================
-  // RECEBE COMANDO DA SERIAL
-  // ==================================================
+  // um comando válido tira do failsafe
+  failsafe_active = false;
+}
 
-  if (Serial.available()) {
+void Lights::heartbeat() {
+  last_heartbeat = millis();
+  heartbeat_seen = true;
+}
 
-    String comando = Serial.readStringUntil('\n');
-    comando.trim();
+// ==================================================
+// LOGO
+// ==================================================
 
+void Lights::setLogo(LogoMode mode, uint8_t r, uint8_t g, uint8_t b) {
+  logo_mode = mode;
+  logo_r = r;
+  logo_g = g;
+  logo_b = b;
+}
 
-    // ==================================================
-    // ESQUERDA
-    // ==================================================
-
-    if (comando == "LIGAE") {
-
-      lanternaLigadaE = true;
-    }
-
-    else if (comando == "DESLIGAE") {
-
-      lanternaLigadaE = false;
-    }
-
-    else if (comando == "SETAE") {
-
-      setaLigadaE = true;
-    }
-
-    else if (comando == "SETA_OFFE") {
-
-      setaLigadaE = false;
-      setaEstadoE = false;
-    }
-
-    else if (comando == "REE") {
-
-      reLigadaE = true;
-    }
-
-    else if (comando == "RE_OFFE") {
-
-      reLigadaE = false;
-    }
-
-
-    // ==================================================
-    // DIREITA
-    // ==================================================
-
-    else if (comando == "LIGAD") {
-
-      lanternaLigadaD = true;
-    }
-
-    else if (comando == "DESLIGAD") {
-
-      lanternaLigadaD = false;
-    }
-
-    else if (comando == "SETAD") {
-
-      setaLigadaD = true;
-    }
-
-    else if (comando == "SETA_OFFD") {
-
-      setaLigadaD = false;
-      setaEstadoD = false;
-    }
-
-    else if (comando == "RED") {
-
-      reLigadaD = true;
-    }
-
-    else if (comando == "RE_OFFD") {
-
-      reLigadaD = false;
-    }
-
-
-    // ==================================================
-    // LOGO
-    // ==================================================
-
-    else if (comando == "LOGO_ON") {
-
-      logoLigado = true;
-      logoRGB = false;
-    }
-
-    else if (comando == "LOGO_OFF") {
-
-      logoLigado = false;
-      logoRGB = false;
-    }
-
-    else if (comando == "LOGO_RGB") {
-
-      logoLigado = true;
-      logoRGB = true;
-    }
-
-    else if (comando == "LOGO_RGB_OFF") {
-
-      logoRGB = false;
-    }
-
-    // COR VERMELHA
-    else if (comando == "LOGO_R") {
-
-      logoLigado = true;
-      logoRGB = false;
-
-      for (int i = 34; i < 40; i++) {
-
-        pixels.setPixelColor(
-          i,
-          pixels.Color(255, 0, 0)
-        );
-      }
-
-      pixels.show();
-    }
-
-    // COR VERDE
-    else if (comando == "LOGO_G") {
-
-      logoLigado = true;
-      logoRGB = false;
-
-      for (int i = 34; i < 40; i++) {
-
-        pixels.setPixelColor(
-          i,
-          pixels.Color(0, 255, 0)
-        );
-      }
-
-      pixels.show();
-    }
-
-    // COR AZUL
-    else if (comando == "LOGO_B") {
-
-      logoLigado = true;
-      logoRGB = false;
-
-      for (int i = 34; i < 40; i++) {
-
-        pixels.setPixelColor(
-          i,
-          pixels.Color(0, 0, 255)
-        );
-      }
-
-      pixels.show();
-    }
+void Lights::updateLogo() {
+  if (stopped_state) {
+    fill(34, 40, pixels.Color(255, 0, 0));
+    return;
   }
 
+  if (logo_mode == LOGO_OFF) return;
 
-  // ==================================================
-  // PISCA-PISCA DIREITA
-  // ==================================================
-
-  if (setaLigadaD) {
-
-    unsigned long agora = millis();
-
-    if (agora - tempoAnteriorD >= intervaloSetaD) {
-
-      tempoAnteriorD = agora;
-
-      setaEstadoD = !setaEstadoD;
-    }
+  // Controle ativado: logo azul fixo, em qualquer modo
+  if (control_enabled) {
+    fill(34, 40, pixels.Color(0, 0, 255));
+    return;
   }
 
-
-  // ==================================================
-  // PISCA-PISCA ESQUERDA
-  // ==================================================
-
-  if (setaLigadaE) {
-
-    unsigned long agora = millis();
-
-    if (agora - tempoAnteriorE >= intervaloSetaE) {
-
-      tempoAnteriorE = agora;
-
-      setaEstadoE = !setaEstadoE;
-    }
-  }
-
-
-  // ==================================================
-  // EFEITO RGB DO LOGO
-  // LEDs 35 até 40
-  // Índices 34 até 39
-  // ==================================================
-
-  if (logoLigado && logoRGB) {
-
-    unsigned long agora = millis();
-
-    if (agora - tempoAnteriorLogo >= intervaloLogo) {
-
-      tempoAnteriorLogo = agora;
-
-      logoHue++;
-
-      if (logoHue >= 256) {
-        logoHue = 0;
+  if (logo_mode == LOGO_RANDOM) {
+    unsigned long now = millis();
+    if (now - last_logo_random_update >= logo_random_interval) {
+      last_logo_random_update = now;
+      for (uint8_t i = 0; i < LOGO_LEDS; i++) {
+        logo_random_colors[i] = pixels.ColorHSV(random(0, 65536));
       }
+    }
+    for (uint8_t i = 0; i < LOGO_LEDS; i++) {
+      pixels.setPixelColor(34 + i, logo_random_colors[i]);
+    }
+    return;
+  }
 
-      uint32_t cor = pixels.ColorHSV(logoHue * 256);
+  if (logo_mode == LOGO_RAINBOW) {
+    unsigned long now = millis();
+    if (now - last_logo_update >= logo_interval) {
+      last_logo_update = now;
+      logo_hue = (logo_hue + 256) & 0xFFFF;  // avança 1/256 do ciclo, dá a volta sozinho
+    }
+    fill(34, 40, pixels.ColorHSV(logo_hue));
+  } else {
+    fill(34, 40, pixels.Color(logo_r, logo_g, logo_b));
+  }
+}
 
-      for (int i = 34; i < 40; i++) {
+// ==================================================
+// PISCA
+// ==================================================
 
-        pixels.setPixelColor(i, cor);
+void Lights::updateBlink(bool any_signal) {
+  if (!any_signal) {
+    // sem seta ativa: reseta para acender assim que for ligada
+    blink_state = true;
+    last_blink_update = millis();
+    return;
+  }
+
+  unsigned long now = millis();
+  if (now - last_blink_update >= blink_interval) {
+    last_blink_update = now;
+    blink_state = !blink_state;
+  }
+}
+
+// ==================================================
+// UPDATE
+// ==================================================
+
+void Lights::update() {
+
+  // Failsafe: heartbeat perdido -> pisca-alerta
+  if (heartbeat_timeout > 0 && heartbeat_seen) {
+    if (millis() - last_heartbeat > heartbeat_timeout) {
+      if (!failsafe_active) {
+        failsafe_active = true;
+        left_turn_signal_on = false;
+        right_turn_signal_on = false;
+        brake_lights_on = true;
+        reverse_lights_on = false;
+        hazard_lights_on = true;
+        control_enabled = false;
       }
     }
   }
 
+  bool hazard = hazard_lights_on || stopped_state;
+  bool left  = (left_turn_signal_on || hazard);
+  bool right = (right_turn_signal_on || hazard);
 
-  // ==================================================
-  // LIMPA OS 42 LEDs
-  // ==================================================
+  updateBlink(left || right);
 
   pixels.clear();
 
+  const uint32_t turnColor  = pixels.Color(68, 0, 255);
+  const uint32_t whiteColor = pixels.Color(0, 0, 255);  // mesma cor usada no sketch original
+  const uint32_t brakeColor = pixels.Color(255, 0, 0);
 
-  // ==================================================
-  // LANTERNA ESQUERDA
-  // LEDs 1 até 10
-  // Índices 0 até 9
-  // ==================================================
-
-  if (lanternaLigadaE) {
-
-    for (int i = 0; i < 10; i++) {
-
-      pixels.setPixelColor(
-        i,
-        pixels.Color(0, 0, 255)
-      );
-    }
+  // Farol / lanternas
+  if (headlight_on) {
+    fill(0, 10, whiteColor);
+    fill(16, 26, whiteColor);
   }
 
-
-  // ==================================================
-  // SETA ESQUERDA
-  // LEDs 11 até 14
-  // Índices 10 até 13
-  // ==================================================
-
-  if (setaLigadaE && setaEstadoE) {
-
-    for (int i = 10; i < 14; i++) {
-
-      pixels.setPixelColor(
-        i,
-        pixels.Color(68, 0, 255)
-      );
-    }
+  // Ré (os LEDs traseiros são compartilhados com o freio)
+  if (reverse_lights_on) {
+    fill(14, 16, whiteColor);
+    fill(30, 32, whiteColor);
   }
 
-
-  // ==================================================
-  // RÉ ESQUERDA
-  // LEDs 15 e 16
-  // Índices 14 até 15
-  // ==================================================
-
-  if (reLigadaE) {
-
-    for (int i = 14; i < 16; i++) {
-
-      pixels.setPixelColor(
-        i,
-        pixels.Color(0, 0, 255)
-      );
-    }
+  // Freio sobrescreve a ré nos mesmos LEDs
+  if (brake_lights_on) {
+    fill(14, 16, brakeColor);
+    fill(30, 32, brakeColor);
   }
 
-
-  // ==================================================
-  // LANTERNA DIREITA
-  // LEDs 17 até 26
-  // Índices 16 até 25
-  // ==================================================
-
-  if (lanternaLigadaD) {
-
-    for (int i = 16; i < 26; i++) {
-
-      pixels.setPixelColor(
-        i,
-        pixels.Color(0, 0, 255)
-      );
-    }
+  // Setas
+  if (left && blink_state) {
+    fill(10, 14, turnColor);   // frente
+    fill(32, 34, turnColor);   // trás
   }
 
-
-  // ==================================================
-  // SETA DIREITA
-  // LEDs 27 até 30
-  // Índices 26 até 29
-  // ==================================================
-
-  if (setaLigadaD && setaEstadoD) {
-
-    for (int i = 26; i < 30; i++) {
-
-      pixels.setPixelColor(
-        i,
-        pixels.Color(68, 0, 255)
-      );
-    }
+  if (right && blink_state) {
+    fill(26, 30, turnColor);   // frente
+    fill(40, 42, turnColor);   // trás
   }
 
-
-  // ==================================================
-  // RÉ DIREITA
-  // LEDs 31 e 32
-  // Índices 30 até 31
-  // ==================================================
-
-  if (reLigadaD) {
-
-    for (int i = 30; i < 32; i++) {
-
-      pixels.setPixelColor(
-        i,
-        pixels.Color(0, 0, 255)
-      );
-    }
+  if (stopped_state) {
+    const uint32_t stopColor = pixels.Color(255, 0, 0);
+    fill(0, 10, stopColor);
+    fill(16, 26, stopColor);
   }
 
-
-  // ==================================================
-  // LEDs 33 E 34
-  // JUNTO COM SETA ESQUERDA
-  // Índices 32 e 33
-  // ==================================================
-
-  if (setaLigadaE && setaEstadoE) {
-
-    for (int i = 32; i < 34; i++) {
-
-      pixels.setPixelColor(
-        i,
-        pixels.Color(68, 0, 255)
-      );
-    }
-  }
-
-
-  // ==================================================
-  // LOGO
-  // LEDs 35 até 40
-  // Índices 34 até 39
-  // ==================================================
-
-  if (logoLigado) {
-
-    if (logoRGB) {
-
-      uint32_t cor = pixels.ColorHSV(logoHue * 256);
-
-      for (int i = 34; i < 40; i++) {
-
-        pixels.setPixelColor(i, cor);
-      }
-
-    }
-  }
-
-
-  // ==================================================
-  // LEDs 41 E 42
-  // JUNTO COM SETA DIREITA
-  // Índices 40 e 41
-  // ==================================================
-
-  if (setaLigadaD && setaEstadoD) {
-
-    for (int i = 40; i < 42; i++) {
-
-      pixels.setPixelColor(
-        i,
-        pixels.Color(68, 0, 255)
-      );
-    }
-  }
-
-
-  // ==================================================
-  // ENVIA PARA OS 42 LEDs
-  // ==================================================
+  // Logo
+  updateLogo();
 
   pixels.show();
 }

@@ -39,6 +39,7 @@ int pwm_2 = 0;
 volatile int16_t received_target_pwm = 0;
 volatile int16_t received_steering_angle = 0;
 volatile bool received_reverse = false;
+volatile bool received_stop_car = false;
 volatile unsigned long last_command_received = 0;
 const unsigned long COMMAND_TIMEOUT_MS = 1500;
 
@@ -101,7 +102,16 @@ void loop() {
   target_pwm = received_target_pwm;
   steering_angle = received_steering_angle;
   reverse = received_reverse;
+  bool stop_car = received_stop_car;
   interrupts();
+
+  if (stop_car) {
+    target_pwm = 0;
+    reverse = false;
+    if (motor_enabled && !stopping_active) {
+      beginSmoothStop();
+    }
+  }
 
   angle_target = steering_angle + 90;
 
@@ -127,7 +137,7 @@ void loop() {
     reverse = false;
   }
 
-  if (reverse) {
+  if (reverse && !stop_car) {
     motor_enabled = true;
 
     motor1.move(REVERSE_PWM);
@@ -292,7 +302,7 @@ void taskSmoothStop() {
 // ================= I2C =================
 
 void onReceive(int packetSize) {
-  constexpr int MOTOR_COMMAND_SIZE = sizeof(int16_t) + sizeof(int16_t) + sizeof(bool);
+  constexpr int MOTOR_COMMAND_SIZE = sizeof(int16_t) + sizeof(int16_t) + sizeof(bool) + sizeof(bool);
 
   if (packetSize != MOTOR_COMMAND_SIZE) {
     return;
@@ -301,16 +311,19 @@ void onReceive(int packetSize) {
   int16_t received_pwm;
   int16_t received_angle;
   bool received_reverse_cmd;
+  bool received_stop_cmd;
 
   if (Wire.readBytes((uint8_t *)&received_pwm, sizeof(received_pwm)) == sizeof(received_pwm) &&
       Wire.readBytes((uint8_t *)&received_angle, sizeof(received_angle)) == sizeof(received_angle) &&
-      Wire.readBytes((uint8_t *)&received_reverse_cmd, sizeof(received_reverse_cmd)) == sizeof(received_reverse_cmd)) {
-    received_target_pwm = constrain(received_pwm, 0, 255);
+      Wire.readBytes((uint8_t *)&received_reverse_cmd, sizeof(received_reverse_cmd)) == sizeof(received_reverse_cmd) &&
+      Wire.readBytes((uint8_t *)&received_stop_cmd, sizeof(received_stop_cmd)) == sizeof(received_stop_cmd)) {
+    received_stop_car = received_stop_cmd;
+    received_target_pwm = received_stop_cmd ? 0 : constrain(received_pwm, 0, 255);
     if (received_target_pwm < 30) {
       received_target_pwm = 0;
     }
     received_steering_angle = received_angle;
-    received_reverse = received_reverse_cmd;
+    received_reverse = received_stop_cmd ? false : received_reverse_cmd;
     last_command_received = millis();
   }
 }

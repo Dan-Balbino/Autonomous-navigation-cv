@@ -19,6 +19,6 @@ bool isModuleOnline(unsigned long lastMessage, unsigned long timeout);
 
 void sendCommand(int id, int data);
 
-void sendMotorCommand(int id, int16_t ang, int16_t pwm, bool reverse);
+void sendMotorCommand(int id, int16_t ang, int16_t pwm, bool reverse, bool stop, bool vehicle_state);
 
 void updateCANStatus();

@@ -3,15 +3,19 @@
 #include "SerialProtocol.h"
 #include "Types.h"
 #include "CANProtocol.h"
+#include "Lights.h"
+
 
 #define CAN_CS_PIN 53
 #define CAN_INTERRUPT_PIN 2
+Lights lights(6, 43);
 
 CarCommand cmd;
 Telemetry telemetry;
 
 unsigned long last = 0;
 unsigned long lastTelemetry = 0;
+bool lastVehicleState = true;
 
 // =====================================================
 // SERIAL1
@@ -32,6 +36,8 @@ void setup() {
   Serial1.begin(9600);
 
   pinMode(LED_BUILTIN, OUTPUT);
+  randomSeed(analogRead(A0));
+  lights.begin();
 
   beginCAN(CAN_CS_PIN, CAN_INTERRUPT_PIN);
 
@@ -40,6 +46,7 @@ void setup() {
   cmd.speed = 0.0;
   cmd.vehicleState = true;
   cmd.reverse = false;
+  lastVehicleState = cmd.vehicleState;
 
   telemetry.canModules[MOTOR] = {"Controle", false};
   telemetry.canModules[ULTRASONIC] = {"Sensoriamento", false};
@@ -55,10 +62,17 @@ void loop() {
 
   pollCAN();
   updateCANStatus();
+  bool vehicleStateChanged = cmd.vehicleState != lastVehicleState;
 
   if (receiveCommand(cmd)) {
     processCommand(cmd);
+    // Realiza o controle dos LEDs com base no comando recebido
+    lights.handleCommand((uint8_t)cmd.lights);
+  } else if (vehicleStateChanged) {
+    processCommand(cmd);
   }
+  lastVehicleState = cmd.vehicleState;
+  lights.setStopped(cmd.stop || !cmd.vehicleState);
 
   // Lê Serial1
   readSerial1();
@@ -68,6 +82,8 @@ void loop() {
     lastTelemetry = millis();
     sendTelemetry(telemetry);
   }
+
+  lights.update();
 }
 
 

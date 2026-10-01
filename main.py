@@ -42,6 +42,7 @@ shared_frame_id = 0
 flag_stop = False
 flag_tl = -1
 flag_right_detour = False
+flag_person_detected = False
 right_detour = False
 
 # ── Fonte opcional de imagens para teste ───────────────────────────────
@@ -69,16 +70,15 @@ frame_lock = threading.Lock()
 sign_lock = threading.Lock()
 
 _usb_cams = scan_usb_devices()
-cap_1, _cam_idx_1, cap_2, _cam_idx_2 = open_camera(_usb_cams)
-cap_1.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-cap_2.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+camera, camera_idx = open_camera(_usb_cams)
+camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
 
 # ── Inicialização da cãmera ────────────────────────────
 if _use_test_images:
     ret_1, frame_1 = True, _test_road_frame.copy()
 else:
-    ret_1, frame_1 = cap_1.read()
+    ret_1, frame_1 = camera.read()
 
 
 if not ret_1:
@@ -110,8 +110,7 @@ nav = Navigation()
 panel = ControlPanel(width, height, test_mode=(COM is None),
                      dashboard_url=f"http://{_dashboard_ip}:{DASHBOARD_PORT}",
                      twin_path=_twin_path if os.path.exists(_twin_path) else "",
-                     initial_cam_idx=_cam_idx_1,
-                     secondary_cam_idx=_cam_idx_2,
+                     camera_idx=camera_idx,
                      car=car, nav=nav, remote_control=rc)
 
 # ── Inicialização dos PIDs ───────────────
@@ -133,8 +132,8 @@ def pidHub(erro, pid_straight, pid_curve, dt=0.2):
 
 # ── Loop principal ───────────────
 def mainLoop():
-    global cap_1, cap_2, _cam_idx_1, _cam_idx_2
-    global shared_frame, shared_frame_id, right_detour
+    global camera, camera_idx
+    global shared_frame, shared_frame_id, right_detour, flag_person_detected
 
     error = 0
     angle = 0
@@ -147,12 +146,13 @@ def mainLoop():
     remote_control_active = False
     right_trigger_active = False
     left_trigger_active = False
+    flag_point_detected = False
 
     while True:
         # ── Reconexão dinâmica (solicitada pelo painel) ───────────────
         req = panel.get_connection()
         if req:
-            new_com, new_cam_idx = req
+            new_com, new_camera_idx = req
             try:
                 car.reconnect(new_com)
                 if new_com is not None:
@@ -161,21 +161,19 @@ def mainLoop():
                     log("[SERIAL] Modo teste — sem Arduino", "info")
             except (serial.SerialException, OSError) as e:
                 log(f"[SERIAL] Falha ao reconectar: {e}", "error")
-            _nc = cv2.VideoCapture(new_cam_idx, cv2.CAP_DSHOW)
+            _nc = cv2.VideoCapture(new_camera_idx, cv2.CAP_DSHOW)
             if _nc.isOpened() and _nc.read()[0]:
                 _nc.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                cap_1.release()   # só libera a antiga depois de confirmar a nova
-                cap_1 = _nc
-                cap_2 = _nc
-                _cam_idx_1 = new_cam_idx
-                _cam_idx_2 = new_cam_idx
-                panel.update_camera_ids(_cam_idx_1, _cam_idx_2)
-                log(f"[CAM] Reconectada: indice {new_cam_idx}", "ok")
+                camera.release()   # só libera a antiga depois de confirmar a nova
+                camera = _nc
+                camera_idx = new_camera_idx
+                panel.update_camera_id(camera_idx)
+                log(f"[CAM] Reconectada: indice {new_camera_idx}", "ok")
             else:
                 _nc.release()
-                log(f"[CAM] Falha no indice {new_cam_idx} — mantendo camera atual", "warn")
+                log(f"[CAM] Falha no indice {new_camera_idx} — mantendo camera atual", "warn")
 
-        ret_1, frame_1 = cap_1.read()
+        ret_1, frame_1 = camera.read()
         if not ret_1:
             break
         
@@ -212,6 +210,12 @@ def mainLoop():
             right_detour_confidence=panel.get("DESVIO DIREITA", "Confiança (%)") / 100.0,
             min_right_detour_diagonal=panel.get("DESVIO DIREITA", "Diagonal mínima da caixa (px)"),
             right_detour_required_frames=panel.get("DESVIO DIREITA", "Frames seguidos"),
+            stop_point_a_confidence=panel.get("PONTO A", "Confiança (%)") / 100.0,
+            min_stop_point_a_diagonal=panel.get("PONTO A", "Diagonal mínima da caixa (px)"),
+            stop_point_b_confidence=panel.get("PONTO B", "Confiança (%)") / 100.0,
+            min_stop_point_b_diagonal=panel.get("PONTO B", "Diagonal mínima da caixa (px)"),
+            stop_point_c_confidence=panel.get("PONTO C", "Confiança (%)") / 100.0,
+            min_stop_point_c_diagonal=panel.get("PONTO C", "Diagonal mínima da caixa (px)"),
         )
 
         kp_straight = panel.get("RETA", "Kp") / 100.0
@@ -281,6 +285,7 @@ def mainLoop():
         _, limiar = cv2.threshold(gray, limiar_value, 255, cv2.THRESH_BINARY)
         limiar_bgr = cv2.cvtColor(limiar, cv2.COLOR_GRAY2BGR)
 
+        # ── Detecção de Desvio ──────────────────────────────────────────────
         if flag_right_detour and not right_detour:    
             lane = nav.update_lane()
             set_lane_preference(lane)
@@ -290,18 +295,25 @@ def mainLoop():
 
         error, limiar_bgr, lane_state = lane_detection_pipeline(ROI_H, ROI_W, limiar, limiar_bgr, last_error=error)
 
-        # ── Digital Twin ──────────────────────────────────────────────
-        if not run or flag_stop or flag_tl == 0 or pwm_value < MIN_MOVING_PWM:
+        # ── Dtecções da IA ──────────────────────────────────────────────
+        if (not run or flag_stop or flag_tl == 0 or pwm_value < MIN_MOVING_PWM
+            or flag_point_detected or flag_person_detected):
             effective_pwm = 0
         elif flag_tl == 1:
             effective_pwm = yellow_pwm
         else:
             effective_pwm = pwm_value
 
+        if flag_person_detected:
+            car.command.stop = True
+        else:
+            car.command.stop = False
+
         effective_pwm = int(round(max(0, min(MAX_PWM, effective_pwm))))
         if effective_pwm < MIN_MOVING_PWM:
             effective_pwm = 0
         
+        # ── Digital Twin ──────────────────────────────────────────────
         update_state(
             effective_pwm, run,
             real_speed=car.telemetry.speed,
@@ -342,10 +354,11 @@ def mainLoop():
             else:
                 reverse = False
 
-            car.command.traffic_light = flag_tl
             car.command.lights = 1
             car.command.servo = int(angle + 90)
-            car.command.stop = flag_stop if run else True
+            car.command.stop = flag_person_detected or (
+                car.command.stop and not remote_control_active
+            )
             car.command.speed = effective_pwm if (run or remote_control_active) else 0
             car.command.reverse = reverse if (run or remote_control_active) else False
 
@@ -417,18 +430,18 @@ def mainLoop():
             },
         })
 
-        sign_det.draw(sign_view)
-        panel.update_frames(img, limiar_bgr, sign_view)
-        dashboard_update_frames(img, limiar_bgr, sign_view)
+        sign_det.draw(frame_1)
+        panel.update_frames(img, limiar_bgr, frame_1)
+        dashboard_update_frames(img, limiar_bgr, frame_1)
 
-    cap_1.release()
+    camera.release()
     car.serial.close()
     cv2.destroyAllWindows()
 
 
 def sign_thread():
 
-    global flag_stop, flag_tl, flag_right_detour
+    global flag_stop, flag_tl, flag_right_detour, flag_point_detected, flag_person_detected
     last_frame_id = -1
 
     while True:
@@ -446,13 +459,20 @@ def sign_thread():
 
         sign_det.update(frame)
 
-        stop, right_detour = sign_det.get_state()
+        current_route_point = nav.current_route
+        point_detected = sign_det.has_valid_stop_point(current_route_point)
+        person_detected = sign_det.has_valid_person()
+        stop, right_detour = sign_det.get_state(current_route_point)
         traffic_light = sign_det.get_light_state()
+        if point_detected:
+            nav.confirm_current_point(current_route_point)
 
         with sign_lock:
             flag_stop = stop
             flag_tl = traffic_light
             flag_right_detour = right_detour
+            flag_point_detected = point_detected
+            flag_person_detected = person_detected
 
 
 # ── Inicialização das threads ────────────────────────────

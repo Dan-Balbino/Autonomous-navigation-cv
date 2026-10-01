@@ -17,13 +17,8 @@ bool receiveCommand(CarCommand &cmd) {
         buffer = "";
         return false;
       }
-
-      int tl = doc["tl"];
-      int ls = doc["lights"];
-
       cmd.run = doc["run"];
-      cmd.trafficLight = (TrafficLights)tl;
-      cmd.lights = (Lights)ls;
+      cmd.lights = doc["lights"];
       cmd.stop = doc["stop"];
       cmd.servo = doc["servo"];
       cmd.speed = constrain((int)doc["speed"], 0, 255);
@@ -44,7 +39,9 @@ bool receiveCommand(CarCommand &cmd) {
 
 
 void processCommand(CarCommand &cmd) {
-  sendMotorCommand(MOTOR_COMMAND, (int16_t)(cmd.servo - 90), cmd.speed, cmd.reverse);
+  // Envia o comando para o módulo de controle via CAN
+  sendMotorCommand(MOTOR_COMMAND, (int16_t)(cmd.servo - 90), cmd.speed,
+                   cmd.reverse, cmd.stop, cmd.vehicleState);
 }
 
 
@@ -60,8 +57,9 @@ void sendTelemetry(const Telemetry& telemetry) {
   speed["speed4"] = telemetry.speed4;
 
   JsonObject ultrasonic = doc.createNestedObject("ultrasonic");
-  ultrasonic["front"] = telemetry.front;
   ultrasonic["left"]  = telemetry.left;
+  ultrasonic["f_left"] = telemetry.f_left;
+  ultrasonic["f_right"]  = telemetry.f_right;
   ultrasonic["right"] = telemetry.right;
 
   JsonObject can = doc.createNestedObject("can");

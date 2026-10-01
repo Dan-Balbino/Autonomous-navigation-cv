@@ -70,21 +70,21 @@ def select_com() -> str:
     return chosen
 
 
-def open_camera(cam_indices: list[int]) -> tuple[cv2.VideoCapture, int, cv2.VideoCapture, int]:
+def open_camera(cam_indices: list[int]) -> tuple[cv2.VideoCapture, int]:
     """Abre somente a câmera disponível de maior índice."""
     if not cam_indices:
         print(f"{_R}{_B}[ERRO]{_RS} Nenhuma câmera disponível.")
         exit()
 
     idx = max(cam_indices)
-    cam = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
-    if not cam.isOpened() or not cam.read()[0]:
-        cam.release()
+    camera = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+    if not camera.isOpened() or not camera.read()[0]:
+        camera.release()
         print(f"{_R}{_B}[ERRO]{_RS} Não foi possível abrir a câmera ({idx}).")
         exit()
 
     print(f"{_G}{_B}[CAM]{_RS} Usando somente a câmera de maior índice: {_G}{_B}{idx}{_RS}")
-    return cam, idx, cam, idx
+    return camera, idx
     
     
 def allow_dashboard_firewall_rule(dashboard_port):
