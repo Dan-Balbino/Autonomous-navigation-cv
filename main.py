@@ -78,16 +78,11 @@ cap_2.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 # ── Inicialização da cãmera ────────────────────────────
 if _use_test_images:
     ret_1, frame_1 = True, _test_road_frame.copy()
-    ret_2, frame_2 = True, _test_stop_frame.copy()
-elif cap_1 is cap_2:
-    ret_1, frame_1 = cap_1.read()
-    ret_2, frame_2 = ret_1, frame_1.copy() if ret_1 else None
 else:
     ret_1, frame_1 = cap_1.read()
-    ret_2, frame_2 = cap_2.read()
 
 
-if not ret_1 or not ret_2:
+if not ret_1:
     print("[ERRO] Falha ao ler o primeiro frame.")
     exit()
 
@@ -109,7 +104,7 @@ allow_dashboard_firewall_rule(DASHBOARD_PORT)
 
 # ── Inicialização dos objetos ───────────────
 corrector = FisheyeCorrector("calibration/fisheye_calibration.npz", width, height, balance=0.58, offset_x=-100)
-sign_det = ObjectDetector("model/Modelo_4.pt")
+sign_det = ObjectDetector("model/modelo_5.pt")
 car = Car(COM)
 rc = RemoteControl()
 nav = Navigation()
@@ -172,28 +167,24 @@ def mainLoop():
                 _nc.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                 cap_1.release()   # só libera a antiga depois de confirmar a nova
                 cap_1 = _nc
+                cap_2 = _nc
                 _cam_idx_1 = new_cam_idx
+                _cam_idx_2 = new_cam_idx
                 panel.update_camera_ids(_cam_idx_1, _cam_idx_2)
                 log(f"[CAM] Reconectada: indice {new_cam_idx}", "ok")
             else:
                 _nc.release()
                 log(f"[CAM] Falha no indice {new_cam_idx} — mantendo camera atual", "warn")
 
-
-        if cap_1 is cap_2:
-            ret_1, frame_1 = cap_1.read()
-            ret_2, frame_2 = ret_1, frame_1.copy() if ret_1 else None
-        else:
-            ret_1, frame_1 = cap_1.read()
-            ret_2, frame_2 = cap_2.read()
-        if not ret_1 or not ret_2:
+        ret_1, frame_1 = cap_1.read()
+        if not ret_1:
             break
         
         with frame_lock:
             shared_frame = frame_1.copy()
             shared_frame_id += 1
 
-        copy_2 = frame_1.copy()
+        sign_view = frame_1.copy()
         frame_1 = corrector.correct(frame_1)
         img = frame_1.copy()
 
@@ -427,13 +418,11 @@ def mainLoop():
             },
         })
 
-        sign_view = copy_2.copy()
         sign_det.draw(sign_view)
         panel.update_frames(img, limiar_bgr, sign_view)
         dashboard_update_frames(img, limiar_bgr, sign_view)
 
     cap_1.release()
-    cap_2.release()
     car.serial.close()
     cv2.destroyAllWindows()
 

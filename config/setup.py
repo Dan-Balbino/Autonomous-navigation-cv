@@ -71,78 +71,20 @@ def select_com() -> str:
 
 
 def open_camera(cam_indices: list[int]) -> tuple[cv2.VideoCapture, int, cv2.VideoCapture, int]:
-    """Abre a(s) câmera(s) disponível(is).
-
-    - 1 câmera disponível: usada como primária e secundária (mesma instância).
-    - 2 câmeras disponíveis: maior índice = primária, menor = secundária.
-    - Mais de 2 câmeras: lista os índices e pede pra escolher primária e secundária.
-    """
+    """Abre somente a câmera disponível de maior índice."""
     if not cam_indices:
         print(f"{_R}{_B}[ERRO]{_RS} Nenhuma câmera disponível.")
         exit()
 
-    def _abrir(idx: int) -> cv2.VideoCapture | None:
-        c = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
-        if c.isOpened() and c.read()[0]:
-            return c
-        c.release()
-        return None
-
-    indices_ordenados = sorted(cam_indices, reverse=True)
-
-    # caso 1: só uma câmera existe -> retorna ela duas vezes
-    if len(indices_ordenados) == 1:
-        idx = indices_ordenados[0]
-        cam = _abrir(idx)
-        if cam is None:
-            print(f"{_R}{_B}[ERRO]{_RS} Nenhuma câmera disponível.")
-            exit()
-        print(f"{_G}{_B}[CAM]{_RS} Única câmera disponível, aberta no índice {_G}{_B}{idx}{_RS}")
-        return cam, idx, cam, idx
-
-    # caso 2: exatamente duas câmeras, maior índice = primária
-    if len(indices_ordenados) == 2:
-        idx_primaria, idx_secundaria = indices_ordenados
-        cam_primaria = _abrir(idx_primaria)
-        cam_secundaria = _abrir(idx_secundaria)
-        if cam_primaria is None:
-            print(f"{_R}{_B}[ERRO]{_RS} Não foi possível abrir a câmera primária ({idx_primaria}).")
-            exit()
-        print(f"{_G}{_B}[CAM]{_RS} Primária: índice {_G}{_B}{idx_primaria}{_RS} | Secundária: índice {_G}{_B}{idx_secundaria}{_RS}")
-        return cam_primaria, idx_primaria, cam_secundaria, idx_secundaria
-
-    # caso 3: mais de duas câmeras, pede pra escolher
-    print(f"{_G}{_B}[CAM]{_RS} {len(indices_ordenados)} câmeras detectadas:")
-    for idx in indices_ordenados:
-        print(f"  [{idx}]")
-
-    def _perguntar(rotulo: str, excluir: int | None = None) -> int:
-        while True:
-            entrada = input(f"Escolha o índice da câmera {rotulo}: ").strip()
-            if not entrada.isdigit():
-                print("Digite um número válido.")
-                continue
-            idx = int(entrada)
-            if idx not in indices_ordenados:
-                print("Índice fora da lista de câmeras detectadas.")
-                continue
-            if idx == excluir:
-                print("Essa câmera já foi escolhida como primária.")
-                continue
-            return idx
-
-    idx_primaria = _perguntar("primária")
-    idx_secundaria = _perguntar("secundária", excluir=idx_primaria)
-
-    cam_primaria = _abrir(idx_primaria)
-    cam_secundaria = _abrir(idx_secundaria)
-
-    if cam_primaria is None:
-        print(f"{_R}{_B}[ERRO]{_RS} Não foi possível abrir a câmera primária ({idx_primaria}).")
+    idx = max(cam_indices)
+    cam = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+    if not cam.isOpened() or not cam.read()[0]:
+        cam.release()
+        print(f"{_R}{_B}[ERRO]{_RS} Não foi possível abrir a câmera ({idx}).")
         exit()
 
-    print(f"{_G}{_B}[CAM]{_RS} Primária: índice {_G}{_B}{idx_primaria}{_RS} | Secundária: índice {_G}{_B}{idx_secundaria}{_RS}")
-    return cam_primaria, idx_primaria, cam_secundaria, idx_secundaria
+    print(f"{_G}{_B}[CAM]{_RS} Usando somente a câmera de maior índice: {_G}{_B}{idx}{_RS}")
+    return cam, idx, cam, idx
     
     
 def allow_dashboard_firewall_rule(dashboard_port):
