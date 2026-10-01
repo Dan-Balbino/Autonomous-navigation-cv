@@ -12,30 +12,33 @@ class Navigation:
 
     def add_point(self, point):
         self.route.append(point)
-        
+
         if self.current_route == "":
             self.current_route = point
 
+    def _next_point(self):
+        self.route.pop(0)
+        self.action_counter = 0
+        self.current_route = self.route[0] if self.route else ""
+        if self.current_route:
+            print(f"Current route updated to: {self.current_route}")
+
     def update_lane(self):
-        if len(self.route) == 0:
-            return "neutral"
+        if not self.route:
+            return "left"  # Faixa de preferência padrão quando não há rota definida
 
         lanes = lane_guide_map.get(self.current_route, [])
+        if not lanes:
+            # Ponto desconhecido no mapa — descarta e segue com a padrão
+            self._next_point()
+            return "left"
+
         lane_preference = lanes[self.action_counter]
         self.action_counter += 1
 
         if self.action_counter >= len(lanes):
-            self.route.pop(0)
-            self.action_counter = 0
+            self._next_point()
 
-            if len(self.route) == 0:
-                self.current_route = ""
-            else:
-                self.current_route = self.route[0]
-                print(f"Current route updated to: {self.current_route}")
-
-        lane_preference = lanes[self.action_counter]
-        self.action_counter += 1
         return lane_preference
         
 

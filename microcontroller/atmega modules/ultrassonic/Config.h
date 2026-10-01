@@ -1,6 +1,5 @@
 #pragma once
 
-
 // ============================================================
 // CONFIGURAÇÕES
 // ============================================================
@@ -28,21 +27,24 @@
 // PINOS DOS ULTRASSÔNICOS
 // ------------------------------------------------------------
 
+// echo - branco
+// trig - azul
+
 // LEFT
-#define LEFT_TRIG 6
-#define LEFT_ECHO 5
+#define LEFT_TRIG A2
+#define LEFT_ECHO A3
 
 // FRONT LEFT
-#define F_LEFT_TRIG 8
-#define F_LEFT_ECHO 7
+#define F_LEFT_TRIG 3
+#define F_LEFT_ECHO 4
 
 // FRONT RIGHT
-#define F_RIGHT_TRIG 4
-#define F_RIGHT_ECHO 3
+#define F_RIGHT_TRIG 5
+#define F_RIGHT_ECHO 6
 
 // RIGHT
-#define RIGHT_TRIG 10
-#define RIGHT_ECHO 9
+#define RIGHT_TRIG 7
+#define RIGHT_ECHO 8
 
 
 // ------------------------------------------------------------

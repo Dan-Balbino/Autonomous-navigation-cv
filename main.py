@@ -108,8 +108,8 @@ allow_dashboard_firewall_rule(DASHBOARD_PORT)
 
 
 # ── Inicialização dos objetos ───────────────
-corrector = FisheyeCorrector("calibration/fisheye_calibration.npz", width, height, balance=0.4, offset_x=-86)
-sign_det = ObjectDetector("model/modelo_5.pt")
+corrector = FisheyeCorrector("calibration/fisheye_calibration.npz", width, height, balance=0.58, offset_x=-100)
+sign_det = ObjectDetector("model/Modelo_4.pt")
 car = Car(COM)
 rc = RemoteControl()
 nav = Navigation()
@@ -190,9 +190,10 @@ def mainLoop():
             break
         
         with frame_lock:
-            shared_frame = frame_2.copy()
+            shared_frame = frame_1.copy()
             shared_frame_id += 1
 
+        copy_2 = frame_1.copy()
         frame_1 = corrector.correct(frame_1)
         img = frame_1.copy()
 
@@ -405,8 +406,6 @@ def mainLoop():
                 ) if active
             ) or "Nenhum",
             "running": run,
-            # Estado explícito da placa de PARE, semáforo e sinal de desvio à direita,
-            # para os indicadores do painel web (o painel Python já deriva isso de "signals").
             "stop_active": flag_stop,
             "traffic_light_code": flag_tl,
             "traffic_light_label": TRAFFIC_LIGHT_LABELS.get(flag_tl, "Nenhum"),
@@ -428,7 +427,7 @@ def mainLoop():
             },
         })
 
-        sign_view = frame_2.copy()
+        sign_view = copy_2.copy()
         sign_det.draw(sign_view)
         panel.update_frames(img, limiar_bgr, sign_view)
         dashboard_update_frames(img, limiar_bgr, sign_view)
