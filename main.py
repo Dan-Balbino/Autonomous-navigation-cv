@@ -61,10 +61,9 @@ def _load_test_image(filename):
     return None
 
 
-_test_road_frame = None #_load_test_image("road.png")
-_test_stop_frame = None #_load_test_image("pare.png")
-_use_test_images = _test_road_frame is not None and _test_stop_frame is not None
-
+_test_road_frame = _load_test_image("road.png")
+_test_stop_frame = _load_test_image("pare.png")
+_use_test_images = False
 
 frame_lock = threading.Lock()
 sign_lock = threading.Lock()

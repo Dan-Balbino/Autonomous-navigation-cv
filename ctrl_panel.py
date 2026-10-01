@@ -755,7 +755,7 @@ class ControlPanel:
         self._can_layout = QVBoxLayout(self._can_card)
         self._can_layout.setContentsMargins(14, 10, 14, 10)
         self._can_layout.setSpacing(7)
-        self._can_layout.addWidget(QLabel("Nenhum módulo CAN"))
+        self._can_layout.addWidget(QLabel("Nenhum módulo conectado"))
         wrap.addWidget(self._can_card)
         result = QWidget()
         result.setLayout(wrap)
@@ -774,7 +774,7 @@ class ControlPanel:
                 widget.deleteLater()
 
         if not modules:
-            self._can_layout.addWidget(QLabel("Nenhum módulo CAN"))
+            self._can_layout.addWidget(QLabel("Nenhum módulo conectado"))
             return
 
         for name, enabled in sorted(modules.items(), key=lambda item: str(item[0])):
