@@ -4,10 +4,6 @@
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
 
-// IDs das mensagens — preencher com os valores reais
-#define LIGHTS_COMMAND   0x00
-#define LIGHTS_HEARTBEAT 0x00
-
 // Byte de comando
 #define LIGHTS_BIT_LEFT      0  // seta esquerda
 #define LIGHTS_BIT_RIGHT     1  // seta direita
@@ -33,8 +29,7 @@ class Lights {
     void update();  // chamar a cada loop()
 
     // Comunicação
-    void handleCommand(uint8_t command);  // decodifica o byte de comando
-    void heartbeat();                     // chamar ao receber LIGHTS_HEARTBEAT
+    void handleCommand(uint8_t command, bool stopped, int percentage, uint8_t state);  // decodifica o byte de comando
 
     // Setters individuais
     void setLeftTurnSignal(bool on)  { left_turn_signal_on = on; }
@@ -44,7 +39,6 @@ class Lights {
     void setReverseLights(bool on)   { reverse_lights_on = on; }
     void setHeadlight(bool on)       { headlight_on = on; }
     void setControlEnabled(bool on)  { control_enabled = on; }
-    void setStopped(bool stopped)    { stopped_state = stopped; }
 
     // Logo
     void setLogo(LogoMode mode, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255);
@@ -66,7 +60,10 @@ class Lights {
     bool reverse_lights_on;
     bool headlight_on;
     bool control_enabled;
+    
     bool stopped_state = false;
+    int battery_percentage = 100;
+    uint8_t battery_state = 0;
 
     // Pisca
     const unsigned long blink_interval = 500;
@@ -94,6 +91,8 @@ class Lights {
 
     void updateBlink(bool any_signal);
     void updateLogo();
+    void updateBatteryPulse();
+    uint32_t getBatteryColor();
     void fill(int from, int to, uint32_t color);  // [from, to)
 };
 

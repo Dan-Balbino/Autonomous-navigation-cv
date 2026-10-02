@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 class CarTelemetry:
     speed: float = 0.0
     battery: int = 0
+    battery_state: int = 0
     
     speed1: float = 0.0
     speed2: float = 0.0
@@ -44,6 +45,7 @@ class CarTelemetry:
         return cls(
             speed=sum(wheel_speeds) / len(wheel_speeds),
             battery=int(data.get("bat", data.get("battery", 0))),
+            battery_state=int(data.get("bat_state", data.get("battery_state", 0))),
             speed1=wheel_speeds[0],
             speed2=wheel_speeds[1],
             speed3=wheel_speeds[2],

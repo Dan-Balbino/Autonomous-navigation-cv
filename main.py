@@ -10,6 +10,7 @@ import serial
 from core.pid import PID
 from ctrl_panel import ControlPanel
 from vision.lane_detection import lane_detection_pipeline, get_frame_dimensions, extract_bird_eye_view, set_lane_preference
+import vision.lane_detection as lane_detection
 from vision.object_detector import ObjectDetector
 from messaging.messaging_core import (
     app as dashboard_app, get_local_ip, update_state, load_config_from_file,
@@ -351,13 +352,22 @@ def mainLoop():
                 elif left_trigger_active:
                     effective_pwm = 0
                     reverse = True
+                    car.command.lights = (car.command.lights | 0b100000) if True else (car.command.lights & ~0b100000)
                 elif right_trigger_active:
                     reverse = False
                     effective_pwm = pwm_value if pwm_value >= MIN_MOVING_PWM else 0
             else:
                 reverse = False
 
-            car.command.lights = 1
+
+            if not remote_control_active:
+                car.command.lights = (car.command.lights | 0b1) if lane_detection.preference_lane == "left" else (car.command.lights & ~0b1)
+                car.command.lights = (car.command.lights | 0b10) if lane_detection.preference_lane == "right" else (car.command.lights & ~0b10)
+                car.command.lights = (car.command.lights | 0b100) if flag_person_detected else (car.command.lights & ~0b100)
+                car.command.lights = (car.command.lights | 0b1000) if effective_pwm == 0 else (car.command.lights & ~0b1000)
+                car.command.lights = (car.command.lights | 0b10000) if True else (car.command.lights & ~0b10000)
+                
+                    
             car.command.servo = int(angle + 90)
             car.command.stop = flag_person_detected or (
                 car.command.stop and not remote_control_active

@@ -572,7 +572,12 @@ class ControlPanel:
             ("speed_applied", "PWM APLICADO"),
             ("servo", "SERVO"),
         )):
-            metrics.addWidget(self._build_metric_card(key, label), 0, column)
+            card = (
+                self._build_battery_metric_card()
+                if key == "battery"
+                else self._build_metric_card(key, label)
+            )
+            metrics.addWidget(card, 0, column)
         layout.addLayout(metrics)
         layout.addWidget(self._build_wheel_speeds_card())
 
@@ -677,6 +682,24 @@ class ControlPanel:
         caption.setObjectName("MetricLabel")
         card_layout.addWidget(caption)
         self._vehicle_labels[key] = value
+        return card
+
+    def _build_battery_metric_card(self):
+        card = QFrame()
+        card.setObjectName("MetricCard")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(12, 10, 12, 10)
+        percentage = QLabel("--%")
+        percentage.setObjectName("MetricValue")
+        card_layout.addWidget(percentage)
+        state = QLabel("--")
+        state.setStyleSheet(f"color: {TEAL}; font-size: 11px; font-weight: 700;")
+        card_layout.addWidget(state)
+        caption = QLabel("BATERIA")
+        caption.setObjectName("MetricLabel")
+        card_layout.addWidget(caption)
+        self._vehicle_labels["battery"] = percentage
+        self._vehicle_labels["battery_state"] = state
         return card
 
     def _build_sensor_card(self):
@@ -1322,6 +1345,9 @@ class ControlPanel:
             "battery": self._format_number(
                 car_telemetry.battery if car_telemetry is not None else None, "%"
             ),
+            "battery_state": self._format_battery_state(
+                car_telemetry.battery_state if car_telemetry is not None else None
+            ),
             "speed_applied": self._format_number(values.get("speed"), " PWM"),
             "pid_mode": str(values.get("pid_mode", "--")),
             "signals": str(values.get("signals", "--")),
@@ -1379,6 +1405,21 @@ class ControlPanel:
             return f"{text}{suffix}"
         except (TypeError, ValueError):
             return "--"
+
+    @staticmethod
+    def _format_battery_state(value):
+        labels = (
+            "Sem corrente",
+            "Carregando",
+            "Carregada",
+            "Descarregando",
+            "Bateria baixa",
+        )
+        try:
+            state = int(value)
+        except (TypeError, ValueError):
+            return "--"
+        return labels[state] if 0 <= state < len(labels) else "--"
 
     @staticmethod
     def _format_sensor(value):
@@ -1486,4 +1527,3 @@ class ControlPanel:
 if __name__ == "__main__":
     panel = ControlPanel(1280, 720)
     panel.run()
-

@@ -1,10 +1,7 @@
-// Include necessary headers
-
 #include "SerialProtocol.h"
 #include "Types.h"
 #include "CANProtocol.h"
 #include "Lights.h"
-
 
 #define CAN_CS_PIN 53
 #define CAN_INTERRUPT_PIN 2
@@ -48,6 +45,9 @@ void setup() {
   cmd.reverse = false;
   lastVehicleState = cmd.vehicleState;
 
+  telemetry.percentage = 0;
+  telemetry.state = 0;
+
   telemetry.canModules[MOTOR] = {"Controle", false};
   telemetry.canModules[ULTRASONIC] = {"Sensoriamento", false};
   telemetry.canModules[BATERY] = {"Carregamento e Alimentação", false};
@@ -66,48 +66,27 @@ void loop() {
 
   if (receiveCommand(cmd)) {
     processCommand(cmd);
+
     // Realiza o controle dos LEDs com base no comando recebido
-    lights.handleCommand((uint8_t)cmd.lights);
+    lights.handleCommand((uint8_t)cmd.lights, cmd.stop || !cmd.vehicleState, telemetry.battery_percentage, telemetry.battery_state);
+
   } else if (vehicleStateChanged) {
     processCommand(cmd);
   }
-  lastVehicleState = cmd.vehicleState;
-  lights.setStopped(cmd.stop || !cmd.vehicleState);
 
   // Lê Serial1
-  readSerial1();
+  readSerial1(telemetry.battery, telemetry.battery_current, telemetry.battery_percentage, telemetry.battery_state);
+  
+  // Bloco de teste para piscar o LED embutido a cada 2 segundos
   testBlock();
 
+  // Envio de telemetria a cada 100 ms
   if (millis() - lastTelemetry >= 100) {
     lastTelemetry = millis();
     sendTelemetry(telemetry);
   }
 
   lights.update();
-}
-
-
-// =====================================================
-// SERIAL1
-// =====================================================
-
-void readSerial1() {
-
-  while (Serial1.available()) {
-
-    char c = Serial1.read();
-
-    // Fim da mensagem
-    if (c == '\n') {
-
-      serial1Message = "";
-    }
-
-    else if (c != '\r') {
-
-      serial1Message += c;
-    }
-  }
 }
 
 

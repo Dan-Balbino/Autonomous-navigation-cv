@@ -1,5 +1,4 @@
 #include "Lights.h"
-
 // Mapa dos LEDs (índices)
 //  0–9    lanterna/farol esquerdo
 // 10–13   seta esquerda (frente)
@@ -41,7 +40,7 @@ void Lights::fill(int from, int to, uint32_t color) {
 // COMUNICAÇÃO
 // ==================================================
 
-void Lights::handleCommand(uint8_t command) {
+void Lights::handleCommand(uint8_t command, bool stopped, int percentage, uint8_t state) {
   left_turn_signal_on  = command & (1 << LIGHTS_BIT_LEFT);
   right_turn_signal_on = command & (1 << LIGHTS_BIT_RIGHT);
   hazard_lights_on     = command & (1 << LIGHTS_BIT_HAZARD);
@@ -50,13 +49,12 @@ void Lights::handleCommand(uint8_t command) {
   reverse_lights_on    = command & (1 << LIGHTS_BIT_REVERSE);
   control_enabled      = command & (1 << LIGHTS_BIT_CONTROL);
 
+  stopped_state = stopped;
+  battery_percentage = percentage;
+  batery_state = state;
+
   // um comando válido tira do failsafe
   failsafe_active = false;
-}
-
-void Lights::heartbeat() {
-  last_heartbeat = millis();
-  heartbeat_seen = true;
 }
 
 // ==================================================
@@ -70,7 +68,43 @@ void Lights::setLogo(LogoMode mode, uint8_t r, uint8_t g, uint8_t b) {
   logo_b = b;
 }
 
+uint32_t Lights::getBatteryColor() {
+  int percentage = constrain(battery_percentage, 0, 100);
+  uint8_t r;
+  uint8_t g;
+
+  if (percentage < 50) {
+    r = 255;
+    g = map(percentage, 0, 50, 100, 255);
+  } else {
+    r = map(percentage, 50, 100, 255, 0);
+    g = 255;
+  }
+
+  return pixels.Color(r, g, 0);
+}
+
+void Lights::updateBatteryPulse() {
+  unsigned long now = millis();
+
+  float pulse = (sin(now * 0.004) + 1.0) * 0.5;
+  uint8_t brightness = map(pulse * 100, 0, 100, 40, 255);
+
+  uint32_t color = getBatteryColor();
+
+  uint8_t r = ((color >> 16) & 0xFF) * brightness / 255;
+  uint8_t g = ((color >> 8) & 0xFF) * brightness / 255;
+  uint8_t b = (color & 0xFF) * brightness / 255;
+
+  fill(34, 40, pixels.Color(r, g, b));
+}
+
 void Lights::updateLogo() {
+  if (battery_state == 1) {
+    updadeBatteryPulse();
+    return;
+  }
+
   if (stopped_state) {
     fill(34, 40, pixels.Color(255, 0, 0));
     return;

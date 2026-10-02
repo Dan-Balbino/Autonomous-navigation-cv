@@ -4,7 +4,8 @@
 #include "CANProtocol.h"
 
 String buffer = "";
-
+char serial1_buffer[32];
+uint8_t serial1_index = 0;
 
 bool receiveCommand(CarCommand &cmd) {
   while (Serial.available() > 0) {
@@ -40,15 +41,15 @@ bool receiveCommand(CarCommand &cmd) {
 
 void processCommand(CarCommand &cmd) {
   // Envia o comando para o módulo de controle via CAN
-  sendMotorCommand(MOTOR_COMMAND, (int16_t)(cmd.servo - 90), cmd.speed,
-                   cmd.reverse, cmd.stop, cmd.vehicleState);
+  sendMotorCommand(MOTOR_COMMAND, (int16_t)(cmd.servo - 90), cmd.speed, cmd.reverse, cmd.stop, cmd.vehicleState);
 }
 
 
 void sendTelemetry(const Telemetry& telemetry) {
   StaticJsonDocument<256> doc;
 
-  doc["bat"] = telemetry.battery;
+  doc["bat"] = telemetry.battery_percentage;
+  doc["bat_state"] = telemetry.battery_state;
 
   JsonObject speed = doc.createNestedObject("speed");
   speed["speed1"] = telemetry.speed1;
@@ -69,4 +70,28 @@ void sendTelemetry(const Telemetry& telemetry) {
 
   serializeJson(doc, Serial);
   Serial.println();
+}
+
+
+void readSerial1(int &battery, int &current, int &percentage, uint8_t &battery_state) {
+  while (Serial1.available()) {
+    char c = Serial1.read();
+
+    if (c == '\n') {
+      serial1_buffer[serial1_index] = '\0';
+      serial1_index = 0;
+
+      sscanf(
+        serial1_buffer,
+        "%d;%d;%d;%hhu",
+        &battery,
+        &current,
+        &percentage,
+        &battery_state
+      );
+    }
+    else if (c != '\r' && serial1_index < sizeof(serial1_buffer) - 1) {
+      serial1_buffer[serial1_index++] = c;
+    }
+  }
 }
