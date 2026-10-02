@@ -102,7 +102,7 @@ allow_dashboard_firewall_rule(DASHBOARD_PORT)
 
 
 # ── Inicialização dos objetos ───────────────
-corrector = FisheyeCorrector("calibration/fisheye_calibration.npz", width, height, balance=0.58, offset_x=-100)
+corrector = FisheyeCorrector("calibration/fisheye_calibration.npz", width, height, balance=0.63, offset_x=-90)
 sign_det = ObjectDetector("model/modelo_5.pt")
 car = Car(COM)
 rc = RemoteControl()
@@ -302,7 +302,10 @@ def mainLoop():
         elif flag_tl == 1:
             effective_pwm = yellow_pwm
         else:
-            effective_pwm = pwm_value
+            if -panel.get("IMAGEM", "Erro de transição") * 2 < error < panel.get("IMAGEM", "Erro de transição") * 2:
+                effective_pwm = pwm_value
+            else:
+                effective_pwm = 70
 
         if flag_person_detected:
             car.command.stop = True
@@ -430,10 +433,14 @@ def mainLoop():
             },
         })
 
-        sign_det.draw(frame_1)
-        panel.update_frames(img, limiar_bgr, frame_1)
-        dashboard_update_frames(img, limiar_bgr, frame_1)
+        # sign_det.draw(frame_1)
+        # panel.update_frames(img, limiar_bgr, frame_1)
+        # dashboard_update_frames(img, limiar_bgr, frame_1)
 
+        sign_det.draw(sign_view)
+        panel.update_frames(img, limiar_bgr, sign_view)
+        dashboard_update_frames(img, limiar_bgr, sign_view)
+        
     camera.release()
     car.serial.close()
     cv2.destroyAllWindows()

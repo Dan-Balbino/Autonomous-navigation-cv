@@ -15,9 +15,6 @@ def lane_detection_pipeline(roi_h, roi_w, limiar, limiar_bgr, last_error=0):
     reference_line_y = mid_y + (mid_y // 2)
     minimum_limit = (roi_h // 2) * 0.1
     
-    # Detecta as faixas na imagem limiarizada e retorna a posição da faixa esquerda, da faixa direita e se cada uma é válida ou não
-    # left_lane, right_lane, left_valid, right_valid = detectLanes(limiar, roi_h // 2, roi_w, minimum_limit, True)
-    
     # Realiza uma busca por janelas deslizantes para detectar as faixas na imagem limiarizada
     left_lane, right_lane, left_valid, right_valid = sliding_window_search(limiar, roi_h // 2, roi_w, minimum_limit, num_windows=3)
     
@@ -42,17 +39,18 @@ def lane_detection_pipeline(roi_h, roi_w, limiar, limiar_bgr, last_error=0):
 
 
 def sliding_window_search(limiar, height, width, limit, num_windows=1):
-    # Realiza uma busca por janelas deslizantes para detectar as faixas na imagem limiarizada, retornando a posição média das faixas detectadas e se cada uma é válida ou não
+    # Realiza uma busca por janelas deslizantes para detectar as faixas na imagem limiarizada, retornando a posição das faixas detectadas e se cada uma é válida ou não
     right_lanes_pos = []
     left_lanes_pos = []
     
-    # A altura de cada janela é definida como a altura da ROI dividida pelo número de janelas
+    # "height" é a altura da região analisada (metade de baixo da ROI) e cada janela ocupa height // num_windows
     window_height = height // num_windows
+    roi_h = limiar.shape[0]
     
-    # Para cada janela, conta o número de pixels brancos em cada coluna e detecta a posição da faixa esquerda e da faixa direita, verificando se cada uma é válida ou não
+    # Para cada janela, de baixo (perto do carro) para cima, detecta a faixa esquerda e a direita mais próximas do centro
     for window in range(num_windows):
-        start_y = height - (window + 1) * window_height
-        end_y = height - window * window_height
+        end_y = roi_h - window * window_height
+        start_y = end_y - window_height
         
         left_lane, right_lane, left_valid, right_valid = detect_lanes(limiar[start_y:end_y], window_height, width, limit)
  
@@ -62,28 +60,52 @@ def sliding_window_search(limiar, height, width, limit, num_windows=1):
         if right_valid:
             right_lanes_pos.append(right_lane)
 
-    # Retorna a posição média das faixas detectadas e se elas são válidas ou não
-    return int(np.mean(left_lanes_pos)) if left_lanes_pos else 0, int(np.mean(right_lanes_pos)) if right_lanes_pos else width, bool(left_lanes_pos), bool(right_lanes_pos)
+    # Usa a mediana em vez da média: uma janela que pegou a faixa errada não puxa o resultado das outras
+    return (int(np.median(left_lanes_pos)) if left_lanes_pos else 0,
+            int(np.median(right_lanes_pos)) if right_lanes_pos else width,
+            bool(left_lanes_pos),
+            bool(right_lanes_pos))
 
 
-def detect_lanes(limiar, height, width, limit, slice_image=False):
-    # Conta o número de pixels brancos em cada coluna da imagem limiarizada a partir da metade inferior da ROI
-    if slice_image:
-        white_pixels_per_column = [cv2.countNonZero(limiar[height:, i]) for i in range(width)]
-    else:
-        white_pixels_per_column = [cv2.countNonZero(limiar[:, i]) for i in range(width)]
+def find_lane_candidates(hist, limit, min_width):
+    # Agrupa colunas adjacentes acima do limite em "faixas" e retorna (centro, pico) de cada uma
+    mask = (hist > limit).astype(np.int8)
+    if not mask.any():
+        return []
 
-    # Encontra a posição da faixa esquerda e da faixa direita com base no número de pixels brancos em cada coluna
-    left_lane = white_pixels_per_column.index(max(white_pixels_per_column[:width // 2]))
-    half_right = white_pixels_per_column[width // 2:]
-    right_lane = half_right.index(max(white_pixels_per_column[width // 2:])) + width // 2
+    diff = np.diff(np.concatenate(([0], mask, [0])))
+    starts = np.where(diff == 1)[0]
+    ends = np.where(diff == -1)[0]  # índice exclusivo
 
-    # Verifica se as faixas detectadas são válidas com base no limite mínimo de pixels brancos
-    right_valid, left_valid = False, False
-    if(white_pixels_per_column[left_lane] > limit):
-        left_valid = True
-    if(white_pixels_per_column[right_lane] > limit):
-        right_valid = True
+    candidates = []
+    for s, e in zip(starts, ends):
+        # Descarta ruído: faixa muito estreita
+        if e - s < min_width:
+            continue
+        seg = hist[s:e]
+        # Centro ponderado pela quantidade de pixels brancos
+        center = int(round(np.sum(np.arange(s, e) * seg) / np.sum(seg)))
+        candidates.append((center, int(seg.max())))
+    return candidates
+
+
+def detect_lanes(limiar, height, width, limit, slice_image=False, min_width=2):
+    img = limiar[height:] if slice_image else limiar
+
+    # Conta os pixels brancos em cada coluna (vetorizado, bem mais rápido que list comprehension)
+    hist = np.count_nonzero(img, axis=0)
+
+    candidates = find_lane_candidates(hist, limit, min_width)
+    cx = width // 2
+
+    left_cands  = [c for c in candidates if c[0] < cx]
+    right_cands = [c for c in candidates if c[0] >= cx]
+
+    # Escolhe a faixa válida mais próxima do centro em cada lado
+    left_valid  = bool(left_cands)
+    right_valid = bool(right_cands)
+    left_lane   = max(left_cands,  key=lambda c: c[0])[0] if left_valid  else 0
+    right_lane  = min(right_cands, key=lambda c: c[0])[0] if right_valid else width
 
     return left_lane, right_lane, left_valid, right_valid
 
@@ -104,7 +126,8 @@ def process_lanes(left_lane, right_lane, left_valid, right_valid, roi_w, referen
         error = track_center - (roi_w // 2) 
         
         # Atualiza o tamanho da pista
-        track_size = right_lane - left_lane
+        if right_lane - left_lane > 100:
+            track_size = right_lane - left_lane
         
         # Desenha uma linha entre as faixas detectadas
         cv2.line(limiar_bgr, (left_lane, reference_line_y), (right_lane, reference_line_y), (100, 100, 100), 2)
