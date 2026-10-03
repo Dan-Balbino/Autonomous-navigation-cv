@@ -9,6 +9,7 @@ class ObjectDetector:
     # CONFIGURAÇÕES
     """Detecta sinais de trânsito, semáforos, pontos de parada e pessoas em frames da câmera."""
 
+    LIGHT_MIN_MEAN_SPREAD = 10.0  # diferença mínima entre maior e menor média; abaixo disso o semáforo é inválido
     CONF_THRESHOLD = 0.1
     DISPLAY_CONF_THRESHOLD = 0.1
     PERSON_CONF_THRESHOLD = 0.5
@@ -377,17 +378,20 @@ class ObjectDetector:
             crop = frame[y1:y2, x1:x2]
             if crop.size > 0:
                 color_name = self.classify_traffic_light(crop)
-                self._light_code = self.LIGHT_TO_CODE[color_name]
-                self._light_last_seen = time.time()
+                # None = médias muito próximas, semáforo inválido
+                if color_name is not None:
+                    self._light_code = self.LIGHT_TO_CODE[color_name]
+                    self._light_last_seen = time.time()
 
         # TIMEOUT
         if time.time() - self._light_last_seen > self.LIGHT_TIMEOUT:
             self._light_code = -1
 
-    def classify_traffic_light(self, frame) -> str:
+    def classify_traffic_light(self, frame):
         """
         Analisa o frame recortado no semáforo
-        e retorna a cor ativa.
+        e retorna a cor ativa, ou None se as três
+        regiões tiverem brilho parecido (semáforo inválido).
         """
         filtered_frame = self.apply_filter(frame)
         height = filtered_frame.shape[0]
@@ -396,6 +400,8 @@ class ObjectDetector:
             np.mean(filtered_frame[int(height * i / 3):int(height * (i + 1) / 3), :])
             for i in range(3)
         ]
+        if max(means) - min(means) < self.LIGHT_MIN_MEAN_SPREAD:
+            return None
         return colors[np.argmax(means)]
 
     def apply_filter(self, frame, limiar=140):

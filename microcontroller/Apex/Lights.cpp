@@ -51,7 +51,7 @@ void Lights::handleCommand(uint8_t command, bool stopped, int percentage, uint8_
 
   stopped_state = stopped;
   battery_percentage = percentage;
-  batery_state = state;
+  battery_state = state;
 
   // um comando válido tira do failsafe
   failsafe_active = false;
@@ -101,7 +101,7 @@ void Lights::updateBatteryPulse() {
 
 void Lights::updateLogo() {
   if (battery_state == 1) {
-    updadeBatteryPulse();
+    updateBatteryPulse();
     return;
   }
 

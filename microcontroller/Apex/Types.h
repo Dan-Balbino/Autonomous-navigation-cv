@@ -39,8 +39,8 @@ struct CanModule {
 
 struct Telemetry {
   uint8_t battery;
-  int battery_current;
-  int battery_percentage;
+  uint8_t battery_current;
+  uint8_t battery_percentage;
   uint8_t battery_state;
 
   float speed1, speed2, speed3, speed4;

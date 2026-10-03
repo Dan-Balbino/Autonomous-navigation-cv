@@ -104,7 +104,7 @@ allow_dashboard_firewall_rule(DASHBOARD_PORT)
 
 # ── Inicialização dos objetos ───────────────
 corrector = FisheyeCorrector("calibration/fisheye_calibration.npz", width, height, balance=0.63, offset_x=-90)
-sign_det = ObjectDetector("model/modelo_5.pt")
+sign_det = ObjectDetector("model/modelo_6.pt")
 car = Car(COM)
 rc = RemoteControl()
 nav = Navigation()
@@ -117,6 +117,7 @@ panel = ControlPanel(width, height, test_mode=(COM is None),
 # ── Inicialização dos PIDs ───────────────
 pid_straight  = PID(Kp=0, Ki=0, Kd=0, output_limit=90.0)
 pid_curve = PID(Kp=0, Ki=0, Kd=0, output_limit=90.0)
+pid_close_curve = PID(Kp=0, Ki=0, Kd=0, output_limit=90.0)
 
 
 def log(msg, tag="info"):
@@ -125,7 +126,7 @@ def log(msg, tag="info"):
     dashboard_push_log(msg, tag)
 
 
-def pidHub(erro, pid_straight, pid_curve, dt=0.2):
+def pidHub(erro, pid_straight, pid_curve, pid_close_curve, dt=0.2):
     if -panel.get("IMAGEM", "Erro de transição") < erro < panel.get("IMAGEM", "Erro de transição"):
         return pid_straight.update(erro, dt=dt)
     return pid_curve.update(erro, dt=dt)
@@ -336,7 +337,7 @@ def mainLoop():
             if should_send:
                 last_send = now
                 if run and not remote_control_active:
-                    angle = pidHub(error, pid_straight, pid_curve, dt=0.2)
+                    angle = pidHub(error, pid_straight, pid_curve, pid_close_curve, dt=0.2)
         else:
             should_send = last_run != False
 

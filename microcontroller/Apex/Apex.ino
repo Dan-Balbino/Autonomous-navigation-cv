@@ -5,7 +5,7 @@
 
 #define CAN_CS_PIN 53
 #define CAN_INTERRUPT_PIN 2
-Lights lights(6, 43);
+// Lights lights(6, 43);
 
 CarCommand cmd;
 Telemetry telemetry;
@@ -34,7 +34,7 @@ void setup() {
 
   pinMode(LED_BUILTIN, OUTPUT);
   randomSeed(analogRead(A0));
-  lights.begin();
+  //lights.begin();
 
   beginCAN(CAN_CS_PIN, CAN_INTERRUPT_PIN);
 
@@ -45,8 +45,8 @@ void setup() {
   cmd.reverse = false;
   lastVehicleState = cmd.vehicleState;
 
-  telemetry.percentage = 0;
-  telemetry.state = 0;
+  telemetry.battery_percentage = 0;
+  telemetry.battery_state = 0;
 
   telemetry.canModules[MOTOR] = {"Controle", false};
   telemetry.canModules[ULTRASONIC] = {"Sensoriamento", false};
@@ -68,14 +68,14 @@ void loop() {
     processCommand(cmd);
 
     // Realiza o controle dos LEDs com base no comando recebido
-    lights.handleCommand((uint8_t)cmd.lights, cmd.stop || !cmd.vehicleState, telemetry.battery_percentage, telemetry.battery_state);
+    // lights.handleCommand((uint8_t)cmd.lights, cmd.stop || !cmd.vehicleState, telemetry.battery_percentage, telemetry.battery_state);
 
   } else if (vehicleStateChanged) {
     processCommand(cmd);
   }
 
   // Lê Serial1
-  readSerial1(telemetry.battery, telemetry.battery_current, telemetry.battery_percentage, telemetry.battery_state);
+  //readSerial1(telemetry.battery, telemetry.battery_current, telemetry.battery_percentage, telemetry.battery_state);
   
   // Bloco de teste para piscar o LED embutido a cada 2 segundos
   testBlock();
@@ -86,7 +86,7 @@ void loop() {
     sendTelemetry(telemetry);
   }
 
-  lights.update();
+  //lights.update();
 }
 
 

@@ -89,10 +89,10 @@ class Lights {
     bool heartbeat_seen = false;
     bool failsafe_active = false;
 
-    void updateBlink(bool any_signal);
-    void updateLogo();
     void updateBatteryPulse();
     uint32_t getBatteryColor();
+    void updateBlink(bool any_signal);
+    void updateLogo();
     void fill(int from, int to, uint32_t color);  // [from, to)
 };
 

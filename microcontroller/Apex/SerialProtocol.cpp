@@ -73,7 +73,7 @@ void sendTelemetry(const Telemetry& telemetry) {
 }
 
 
-void readSerial1(int &battery, int &current, int &percentage, uint8_t &battery_state) {
+void readSerial1(uint8_t &battery, uint8_t &current, uint8_t &percentage, uint8_t &battery_state) {
   while (Serial1.available()) {
     char c = Serial1.read();
 

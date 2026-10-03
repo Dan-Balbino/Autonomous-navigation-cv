@@ -12,7 +12,7 @@ class CarCommand:
     def to_dict(self):
         return {
             "run": self.run,
-            "lights": bytes([self.lights]),
+            "lights": self.lights,
             "stop": self.stop,
             "servo": self.servo,
             "speed": self.speed,
