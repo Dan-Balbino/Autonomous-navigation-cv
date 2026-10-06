@@ -1,4 +1,5 @@
 #include "Lights.h"
+
 // Mapa dos LEDs (índices)
 //  0–9    lanterna/farol esquerdo
 // 10–13   seta esquerda (frente)
@@ -22,12 +23,31 @@ Lights::Lights(int pin, int numPixels)
   reverse_lights_on = false;
   headlight_on = false;
   control_enabled = false;
+
+  stopped_state = false;
+  battery_percentage = 0;
+  battery_state = 0;
+
+  failsafe_active = false;
+  heartbeat_seen = false;
+  blink_state = true;
+
+  last_blink_update = 0;
+  last_logo_update = 0;
+  last_logo_random_update = 0;
+  last_heartbeat = 0;
+  logo_hue = 0;
 }
 
 void Lights::begin() {
   pixels.begin();
   pixels.clear();
   pixels.show();
+
+  unsigned long now = millis();
+  last_blink_update = now;
+  last_logo_update = now;
+  last_logo_random_update = now;
 }
 
 void Lights::fill(int from, int to, uint32_t color) {
@@ -41,19 +61,18 @@ void Lights::fill(int from, int to, uint32_t color) {
 // ==================================================
 
 void Lights::handleCommand(uint8_t command, bool stopped, int percentage, uint8_t state) {
-  left_turn_signal_on  = command & (1 << LIGHTS_BIT_LEFT);
+  left_turn_signal_on = command & (1 << LIGHTS_BIT_LEFT);
   right_turn_signal_on = command & (1 << LIGHTS_BIT_RIGHT);
-  hazard_lights_on     = command & (1 << LIGHTS_BIT_HAZARD);
-  brake_lights_on      = command & (1 << LIGHTS_BIT_BRAKE);
-  headlight_on         = command & (1 << LIGHTS_BIT_HEADLIGHT);
-  reverse_lights_on    = command & (1 << LIGHTS_BIT_REVERSE);
-  control_enabled      = command & (1 << LIGHTS_BIT_CONTROL);
+  hazard_lights_on = command & (1 << LIGHTS_BIT_HAZARD);
+  brake_lights_on = command & (1 << LIGHTS_BIT_BRAKE);
+  headlight_on = command & (1 << LIGHTS_BIT_HEADLIGHT);
+  reverse_lights_on = command & (1 << LIGHTS_BIT_REVERSE);
+  control_enabled = command & (1 << LIGHTS_BIT_CONTROL);
 
   stopped_state = stopped;
   battery_percentage = percentage;
   battery_state = state;
 
-  // um comando válido tira do failsafe
   failsafe_active = false;
 }
 
@@ -86,9 +105,15 @@ uint32_t Lights::getBatteryColor() {
 
 void Lights::updateBatteryPulse() {
   unsigned long now = millis();
+  const unsigned long pulse_period = 1200;
+  unsigned long phase = now % pulse_period;
+  uint8_t brightness;
 
-  float pulse = (sin(now * 0.004) + 1.0) * 0.5;
-  uint8_t brightness = map(pulse * 100, 0, 100, 40, 255);
+  if (phase < pulse_period / 2) {
+    brightness = map(phase, 0, pulse_period / 2, 40, 255);
+  } else {
+    brightness = map(phase, pulse_period / 2, pulse_period, 255, 40);
+  }
 
   uint32_t color = getBatteryColor();
 
@@ -112,32 +137,35 @@ void Lights::updateLogo() {
 
   if (logo_mode == LOGO_OFF) return;
 
-  // Controle ativado: logo azul fixo, em qualquer modo
   if (control_enabled) {
     fill(34, 40, pixels.Color(0, 0, 255));
     return;
   }
 
+  unsigned long now = millis();
+
   if (logo_mode == LOGO_RANDOM) {
-    unsigned long now = millis();
     if (now - last_logo_random_update >= logo_random_interval) {
       last_logo_random_update = now;
+
       for (uint8_t i = 0; i < LOGO_LEDS; i++) {
         logo_random_colors[i] = pixels.ColorHSV(random(0, 65536));
       }
     }
+
     for (uint8_t i = 0; i < LOGO_LEDS; i++) {
       pixels.setPixelColor(34 + i, logo_random_colors[i]);
     }
+
     return;
   }
 
   if (logo_mode == LOGO_RAINBOW) {
-    unsigned long now = millis();
     if (now - last_logo_update >= logo_interval) {
       last_logo_update = now;
-      logo_hue = (logo_hue + 256) & 0xFFFF;  // avança 1/256 do ciclo, dá a volta sozinho
+      logo_hue += 256;
     }
+
     fill(34, 40, pixels.ColorHSV(logo_hue));
   } else {
     fill(34, 40, pixels.Color(logo_r, logo_g, logo_b));
@@ -149,14 +177,14 @@ void Lights::updateLogo() {
 // ==================================================
 
 void Lights::updateBlink(bool any_signal) {
+  unsigned long now = millis();
+
   if (!any_signal) {
-    // sem seta ativa: reseta para acender assim que for ligada
     blink_state = true;
-    last_blink_update = millis();
+    last_blink_update = now;
     return;
   }
 
-  unsigned long now = millis();
   if (now - last_blink_update >= blink_interval) {
     last_blink_update = now;
     blink_state = !blink_state;
@@ -168,32 +196,31 @@ void Lights::updateBlink(bool any_signal) {
 // ==================================================
 
 void Lights::update() {
+  unsigned long now = millis();
 
   // Failsafe: heartbeat perdido -> pisca-alerta
-  if (heartbeat_timeout > 0 && heartbeat_seen) {
-    if (millis() - last_heartbeat > heartbeat_timeout) {
-      if (!failsafe_active) {
-        failsafe_active = true;
-        left_turn_signal_on = false;
-        right_turn_signal_on = false;
-        brake_lights_on = true;
-        reverse_lights_on = false;
-        hazard_lights_on = true;
-        control_enabled = false;
-      }
+  if (heartbeat_timeout > 0 && heartbeat_seen && now - last_heartbeat > heartbeat_timeout) {
+    if (!failsafe_active) {
+      failsafe_active = true;
+      left_turn_signal_on = false;
+      right_turn_signal_on = false;
+      brake_lights_on = true;
+      reverse_lights_on = false;
+      hazard_lights_on = true;
+      control_enabled = false;
     }
   }
 
   bool hazard = hazard_lights_on || stopped_state;
-  bool left  = (left_turn_signal_on || hazard);
-  bool right = (right_turn_signal_on || hazard);
+  bool left = left_turn_signal_on || hazard;
+  bool right = right_turn_signal_on || hazard;
 
   updateBlink(left || right);
 
   pixels.clear();
 
-  const uint32_t turnColor  = pixels.Color(68, 0, 255);
-  const uint32_t whiteColor = pixels.Color(0, 0, 255);  // mesma cor usada no sketch original
+  const uint32_t turnColor = pixels.Color(68, 0, 255);
+  const uint32_t whiteColor = pixels.Color(0, 0, 255);
   const uint32_t brakeColor = pixels.Color(255, 0, 0);
 
   // Farol / lanternas
@@ -202,13 +229,13 @@ void Lights::update() {
     fill(16, 26, whiteColor);
   }
 
-  // Ré (os LEDs traseiros são compartilhados com o freio)
+  // Ré
   if (reverse_lights_on) {
     fill(14, 16, whiteColor);
     fill(30, 32, whiteColor);
   }
 
-  // Freio sobrescreve a ré nos mesmos LEDs
+  // Freio sobrescreve a ré
   if (brake_lights_on) {
     fill(14, 16, brakeColor);
     fill(30, 32, brakeColor);
@@ -216,15 +243,16 @@ void Lights::update() {
 
   // Setas
   if (left && blink_state) {
-    fill(10, 14, turnColor);   // frente
-    fill(32, 34, turnColor);   // trás
+    fill(10, 14, turnColor);
+    fill(32, 34, turnColor);
   }
 
   if (right && blink_state) {
-    fill(26, 30, turnColor);   // frente
-    fill(40, 42, turnColor);   // trás
+    fill(26, 30, turnColor);
+    fill(40, 42, turnColor);
   }
 
+  // Parado
   if (stopped_state) {
     const uint32_t stopColor = pixels.Color(255, 0, 0);
     fill(0, 10, stopColor);

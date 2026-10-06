@@ -59,27 +59,26 @@ Autonomous-navigation-cv\
 │   └── images/                      ← Imagens de teste
 │
 └── README.md                        ← Este arquivo
-
 ```
 
 ---
 
 ## 🎯 Funcionalidades Principais
 
-| Funcionalidade | Descrição | Arquivo(s) |
-|---|---|---|
-| **🛣️ Detecção de Faixas** | Bird-eye view + binarização + sliding window (3 janelas) → erro lateral | `vision/lane_detection.py` |
-| **🚦 Reconhecimento de Sinais** | YOLOv11 → semáforos (R/Y/G), STOP, pessoas, velocidade | `vision/object_detector.py` |
-| **🎮 Controle PID Dual** | Dois PIDs: retas (Kp/Ki/Kd) e curvas, transição automática por threshold | `pid.py` + `main.py` |
-| **📊 Painel de Controle** | PySide6: ajuste real-time de ROI, limiares, PIDs, velocidade, confiança | `ctrl_panel.py` |
-| **🌐 Dashboard Web** | Flask em `localhost:5000`: sincronização de estado, digital twin | `messaging/messaging_core.py` |
-| **🔧 Calibração Fisheye** | Corrige distorção (balance=0.4, offset_x=-86) usando arquivo NPZ | `vision/calibration.py` |
-| **🔌 Auto-Detecção Hardware** | Detecta câmeras (índice 0/1) e portas COM (Arduino/CH340) com prompt | `config/setup.py` |
-| **⚙️ Modo Teste** | Executa sem Arduino para desenvolvimento | `main.py:COM selection` |
-| **📡 Protocolo Serial** | JSON @ 115200 baud, 200ms de período, completo com telemetria | `core/serial_protocol.py` |
-| **🚗 Atuadores** | Servo (0-180°, esterçamento), motor PWM, luzes, buzzer | Arduino Mega + H-Bridge |
-| **📍 Sensores** | Ultrassônicos (frente, esquerda, direita), bateria, encoder, câmera | Arduino + ATmega |
-| **🔄 CAN Bus** | Comunicação com módulos periféricos (motor, luzes, ultrassônicos) | `CANProtocol` |
+| Funcionalidade                        | Descrição                                                                 | Arquivo(s)                      |
+| ------------------------------------- | --------------------------------------------------------------------------- | ------------------------------- |
+| **🛣️ Detecção de Faixas**   | Bird-eye view + binarização + sliding window (3 janelas) → erro lateral  | `vision/lane_detection.py`    |
+| **🚦 Reconhecimento de Sinais** | YOLOv11 → semáforos (R/Y/G), STOP, pessoas, velocidade                    | `vision/object_detector.py`   |
+| **🎮 Controle PID Dual**        | Dois PIDs: retas (Kp/Ki/Kd) e curvas, transição automática por threshold | `pid.py` + `main.py`        |
+| **📊 Painel de Controle**       | PySide6: ajuste real-time de ROI, limiares, PIDs, velocidade, confiança    | `ctrl_panel.py`               |
+| **🌐 Dashboard Web**            | Flask em`localhost:5000`: sincronização de estado, digital twin         | `messaging/messaging_core.py` |
+| **🔧 Calibração Fisheye**     | Corrige distorção (balance=0.4, offset_x=-86) usando arquivo NPZ          | `vision/calibration.py`       |
+| **🔌 Auto-Detecção Hardware** | Detecta câmeras (índice 0/1) e portas COM (Arduino/CH340) com prompt      | `config/setup.py`             |
+| **⚙️ Modo Teste**             | Executa sem Arduino para desenvolvimento                                    | `main.py:COM selection`       |
+| **📡 Protocolo Serial**         | JSON @ 115200 baud, 200ms de período, completo com telemetria              | `core/serial_protocol.py`     |
+| **🚗 Atuadores**                | Servo (0-180°, esterçamento), motor PWM, luzes, buzzer                    | Arduino Mega + H-Bridge         |
+| **📍 Sensores**                 | Ultrassônicos (frente, esquerda, direita), bateria, encoder, câmera       | Arduino + ATmega                |
+| **🔄 CAN Bus**                  | Comunicação com módulos periféricos (motor, luzes, ultrassônicos)      | `CANProtocol`                 |
 
 ---
 
@@ -101,9 +100,9 @@ pip install \
 ### 2️⃣ Modelos YOLO
 
 - **Detecção de Sinais**: `model/Modelo_3.pt` (treino customizado)
+
   - Classes: semáforo (vermelho, amarelo, verde), STOP, pessoas, placas de velocidade
   - Confiança mínima configurável em `config.json`
-  
 - **Fallback**: `model/yolov8n.pt` (YOLO padrão para pessoas)
 
 ### 3️⃣ Calibração da Câmera (Opcional)
@@ -141,6 +140,7 @@ python main.py
 Ao iniciar, exibe:
 
 **Câmeras detectadas:**
+
 ```
 [USB] Dispositivos detectados:
   Camera   índice 0  —  câmera de vídeo
@@ -150,6 +150,7 @@ Ao iniciar, exibe:
 ```
 
 **Porta Serial (Arduino):**
+
 ```
 [COM] Portas detectadas:
   [0] COM3  —  Arduino (COM3)
@@ -160,6 +161,10 @@ Ao iniciar, exibe:
 - Digite `0`, `1`, etc. para escolher
 - Digite `t` para **modo teste** (sem Arduino, só visão)
 
+### Testar com imagens
+
+Para testar a visão sem passar argumentos, configure `USE_TEST_IMAGES`, `TEST_IMAGE_PATHS` e `TEST_IMAGE_INTERVAL_SECONDS` no início de `main.py`. As imagens listadas são reproduzidas em sequência, sem abrir a câmera nem conectar ao Arduino. Para voltar à câmera, defina `USE_TEST_IMAGES = False`. Imagens de dimensões diferentes têm os valores do ROI ajustados proporcionalmente.
+
 ---
 
 ## 🎛️ Painel de Controle (Control Panel)
@@ -168,20 +173,21 @@ A interface gráfica (`ctrl_panel.py`) permite ajuste em tempo real de todos os 
 
 ### Abas Principais
 
-| Aba | Função |
-|---|---|
-| **ROI** | Define a região de interesse (Superior, Inferior, Altura sup, Altura inf) |
-| **IMAGEM** | Limiar de binarização, erro de transição PID |
-| **RETA** | Coeficientes PID para retas (Kp, Ki, Kd) |
-| **CURVA** | Coeficientes PID para curvas |
+| Aba                            | Função                                                                          |
+| ------------------------------ | --------------------------------------------------------------------------------- |
+| **ROI**                  | Define a região de interesse (Superior, Inferior, Altura sup, Altura inf)        |
+| **IMAGEM**               | Limiar de binarização, erro de transição PID                                  |
+| **RETA**                 | Coeficientes PID para retas (Kp, Ki, Kd)                                          |
+| **CURVA**                | Coeficientes PID para curvas                                                      |
 | **PARÂMETROS DO CARRO** | Velocidade (m/s), velocidade no amarelo (%), ângulo máximo, período de comando |
-| **PARE** | Confiança STOP, diagonal mínima, tempo de parada, cooldown |
-| **SEMÁFORO** | Confiança semáforo, diagonal mínima, timeout, intervalo de detecção |
-| **PESSOAS** | Confiança detecção de pessoas, diagonal mínima |
+| **PARE**                 | Confiança STOP, diagonal mínima, tempo de parada, cooldown                      |
+| **SEMÁFORO**            | Confiança semáforo, diagonal mínima, timeout, intervalo de detecção          |
+| **PESSOAS**              | Confiança detecção de pessoas, diagonal mínima                                |
 
 ### Logs em Tempo Real
 
 Exibe todas as transações:
+
 - **[TX]** - Comando enviado para Arduino
 - **[RX]** - Telemetria recebida
 - **[SERIAL]** - Status de conexão
@@ -191,6 +197,7 @@ Exibe todas as transações:
 ### Dashboard Web
 
 Acesse `http://localhost:5000` (IP local) para:
+
 - Ver estado do veículo (RPM, velocidade, sensores)
 - Visualizar feeds da câmera
 - Integração com Digital Twin (se disponível)
@@ -237,7 +244,7 @@ Todos os parâmetros são salvos em `config/config.json`:
 - **ROI (Region of Interest)**: Ajuste para destacar a faixa de rodovia
 - **Limiar**: Valor de binarização OpenCV (0-255). Ajuste para máximo contraste preto/branco
 - **Erro de Transição**: Threshold para alternar entre PID reta e curva
-- **PID Coeficientes**: 
+- **PID Coeficientes**:
   - **Kp** (Proporcional): Resposta ao erro imediato
   - **Ki** (Integral): Corrige acúmulo de erro
   - **Kd** (Derivativo): Amortecimento de oscilações
@@ -307,6 +314,7 @@ Todos os parâmetros são salvos em `config/config.json`:
 ### Comando (PC → Arduino)
 
 **Formato JSON:**
+
 ```json
 {
   "run": true,
@@ -330,6 +338,7 @@ Todos os parâmetros são salvos em `config/config.json`:
 ### Telemetria (Arduino → PC)
 
 **Formato JSON:**
+
 ```json
 {
   "spd": 2.5,
@@ -356,28 +365,28 @@ Todos os parâmetros são salvos em `config/config.json`:
 
 ## 🔧 Troubleshooting
 
-| Problema | Solução |
-|---|---|
-| **Câmera não detecta** | 1. Verificar índice (0 ou 1) em `config/setup.py` |
-| | 2. Testar com: `python -c "import cv2; cap = cv2.VideoCapture(0); print(cap.read())"` |
-| | 3. Instalar DirectShow se no Windows: `pip install opencv-python-headless` |
-| **Arduino não conecta** | 1. Verificar porta COM (ex: COM3) |
-| | 2. Testar com PuTTY @ 115200 baud |
-| | 3. Reinstalar driver CH340 ou Arduino |
-| **Faixa não detecta** | 1. Ajustar ROI (Superior/Inferior/Altura) |
-| | 2. Aumentar/diminuir limiar (0-255) |
-| | 3. Adicionar iluminação na pista |
-| **Semáforo não detecta** | 1. Aumentar confiança mínima em SEMÁFORO |
-| | 2. Verificar tamanho da caixa (diagonal mínima) |
-| | 3. Reajustar modelo: treinar novo em [Roboflow](https://roboflow.com) |
-| **Veículo desvia muito** | 1. Aumentar Kd (amortecimento) |
-| | 2. Diminuir Kp (sensibilidade) |
-| | 3. Aumentar "Erro de transição" |
-| **Painel não abre** | 1. Instalar PySide6: `pip install pyside6` |
-| | 2. Se erro Qt, executar: `pip install --upgrade pyside6` |
-| **Dashboard não abre (localhost:5000)** | 1. Verificar firewall (porta 5000 deve estar aberta) |
-| | 2. Script tenta adicionar regra automaticamente |
-| | 3. Verificar IP local com: `ipconfig` (Windows) ou `ifconfig` (Linux) |
+| Problema                                       | Solução                                                                              |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------- |
+| **Câmera não detecta**                 | 1. Verificar índice (0 ou 1) em`config/setup.py`                                    |
+|                                                | 2. Testar com:`python -c "import cv2; cap = cv2.VideoCapture(0); print(cap.read())"` |
+|                                                | 3. Instalar DirectShow se no Windows:`pip install opencv-python-headless`            |
+| **Arduino não conecta**                 | 1. Verificar porta COM (ex: COM3)                                                      |
+|                                                | 2. Testar com PuTTY @ 115200 baud                                                      |
+|                                                | 3. Reinstalar driver CH340 ou Arduino                                                  |
+| **Faixa não detecta**                   | 1. Ajustar ROI (Superior/Inferior/Altura)                                              |
+|                                                | 2. Aumentar/diminuir limiar (0-255)                                                    |
+|                                                | 3. Adicionar iluminação na pista                                                     |
+| **Semáforo não detecta**               | 1. Aumentar confiança mínima em SEMÁFORO                                            |
+|                                                | 2. Verificar tamanho da caixa (diagonal mínima)                                       |
+|                                                | 3. Reajustar modelo: treinar novo em[Roboflow](https://roboflow.com)                    |
+| **Veículo desvia muito**                | 1. Aumentar Kd (amortecimento)                                                         |
+|                                                | 2. Diminuir Kp (sensibilidade)                                                         |
+|                                                | 3. Aumentar "Erro de transição"                                                      |
+| **Painel não abre**                     | 1. Instalar PySide6:`pip install pyside6`                                            |
+|                                                | 2. Se erro Qt, executar:`pip install --upgrade pyside6`                              |
+| **Dashboard não abre (localhost:5000)** | 1. Verificar firewall (porta 5000 deve estar aberta)                                   |
+|                                                | 2. Script tenta adicionar regra automaticamente                                        |
+|                                                | 3. Verificar IP local com:`ipconfig` (Windows) ou `ifconfig` (Linux)               |
 
 ---
 
@@ -423,12 +432,12 @@ track_size: int                   # Largura da faixa
 
 ## 🏗️ Arquitetura de Threads
 
-| Thread | Função | Período |
-|---|---|---|
-| **Main Loop** | Frame capture, lane detection, PID, serial TX | ~30 FPS (câmera) |
-| **Sign Thread** | YOLO inference, detecção de sinais | Configurável (cada N frames) |
-| **Flask Server** | Dashboard web, sincronização estado | On-demand (HTTP) |
-| **Serial RX** | Lê telemetria do Arduino | Non-blocking buffer |
+| Thread                 | Função                                      | Período                      |
+| ---------------------- | --------------------------------------------- | ----------------------------- |
+| **Main Loop**    | Frame capture, lane detection, PID, serial TX | ~30 FPS (câmera)             |
+| **Sign Thread**  | YOLO inference, detecção de sinais          | Configurável (cada N frames) |
+| **Flask Server** | Dashboard web, sincronização estado         | On-demand (HTTP)              |
+| **Serial RX**    | Lê telemetria do Arduino                     | Non-blocking buffer           |
 
 ### Sincronização de Dados
 
@@ -445,7 +454,7 @@ track_size: int                   # Largura da faixa
 1. **Bird-Eye View**: Transforma frame para vista de cima
 2. **Binarização**: Threshold OpenCV (valor configurável)
 3. **Sliding Window**: Busca por 3 janelas horizontais
-4. **Detecção de Faixas**: 
+4. **Detecção de Faixas**:
    - Conta pixels brancos por coluna
    - Identifica picos (faixas esquerda/direita)
 5. **Cálculo de Erro**:
@@ -576,14 +585,14 @@ python CtrlManual.py
 
 ## 📚 Referências & Documentação
 
-| Tópico | Link |
-|---|---|
-| **OpenCV** | https://docs.opencv.org/ |
-| **YOLO** | https://docs.ultralytics.com/ |
-| **Arduino** | https://www.arduino.cc/reference/en/ |
+| Tópico               | Link                                                                                      |
+| --------------------- | ----------------------------------------------------------------------------------------- |
+| **OpenCV**      | https://docs.opencv.org/                                                                  |
+| **YOLO**        | https://docs.ultralytics.com/                                                             |
+| **Arduino**     | https://www.arduino.cc/reference/en/                                                      |
 | **PID Control** | https://en.wikipedia.org/wiki/Proportional%E2%80%93integral%E2%80%93derivative_controller |
-| **Serial Comm** | https://pyserial.readthedocs.io/ |
-| **Flask** | https://flask.palletsprojects.com/ |
+| **Serial Comm** | https://pyserial.readthedocs.io/                                                          |
+| **Flask**       | https://flask.palletsprojects.com/                                                        |
 
 ---
 

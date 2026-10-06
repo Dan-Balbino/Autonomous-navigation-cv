@@ -4,96 +4,118 @@
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
 
-// Byte de comando
-#define LIGHTS_BIT_LEFT      0  // seta esquerda
-#define LIGHTS_BIT_RIGHT     1  // seta direita
-#define LIGHTS_BIT_HAZARD    2  // alerta
-#define LIGHTS_BIT_BRAKE     3  // luz de freio
-#define LIGHTS_BIT_HEADLIGHT 4  // farol
-#define LIGHTS_BIT_REVERSE   5  // luz de ré
-#define LIGHTS_BIT_CONTROL   6  // controle ativado
-// bit 7 reservado
-
-enum LogoMode : uint8_t {
-  LOGO_OFF,
-  LOGO_SOLID,
-  LOGO_RAINBOW,
-  LOGO_RANDOM   // padrão: cores aleatórias; azul fixo se o controle estiver ativado
-};
-
 class Lights {
-  public:
-    Lights(int pin, int numPixels);
+public:
+  enum LogoMode {
+    LOGO_OFF,
+    LOGO_FIXED,
+    LOGO_RANDOM,
+    LOGO_RAINBOW
+  };
 
-    void begin();
-    void update();  // chamar a cada loop()
+  Lights(int pin, int numPixels);
 
-    // Comunicação
-    void handleCommand(uint8_t command, bool stopped, int percentage, uint8_t state);  // decodifica o byte de comando
+  void begin();
+  void update();
 
-    // Setters individuais
-    void setLeftTurnSignal(bool on)  { left_turn_signal_on = on; }
-    void setRightTurnSignal(bool on) { right_turn_signal_on = on; }
-    void setHazardLights(bool on)    { hazard_lights_on = on; }
-    void setBrakeLights(bool on)     { brake_lights_on = on; }
-    void setReverseLights(bool on)   { reverse_lights_on = on; }
-    void setHeadlight(bool on)       { headlight_on = on; }
-    void setControlEnabled(bool on)  { control_enabled = on; }
+  void handleCommand(uint8_t command, bool stopped, int percentage, uint8_t state);
+  void setLogo(LogoMode mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0);
 
-    // Logo
-    void setLogo(LogoMode mode, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255);
+  void setHeartbeat(unsigned long timestamp) {
+    last_heartbeat = timestamp;
+    heartbeat_seen = true;
+  }
 
-    // Timeout do heartbeat em ms (0 desativa o failsafe)
-    void setHeartbeatTimeout(unsigned long ms) { heartbeat_timeout = ms; }
+  void setHeartbeatTimeout(unsigned long timeout) {
+    heartbeat_timeout = timeout;
+  }
 
-    bool isControlEnabled() const { return control_enabled; }
+  void setBlinkInterval(unsigned long interval) {
+    blink_interval = interval;
+  }
 
-  private:
-    int PIN;
-    int NUMPIXELS;
-    Adafruit_NeoPixel pixels;
+  void setLogoInterval(unsigned long interval) {
+    logo_interval = interval;
+  }
 
-    bool hazard_lights_on;
-    bool left_turn_signal_on;
-    bool right_turn_signal_on;
-    bool brake_lights_on;
-    bool reverse_lights_on;
-    bool headlight_on;
-    bool control_enabled;
-    
-    bool stopped_state = false;
-    int battery_percentage = 100;
-    uint8_t battery_state = 0;
+  void setLogoRandomInterval(unsigned long interval) {
+    logo_random_interval = interval;
+  }
 
-    // Pisca
-    const unsigned long blink_interval = 500;
-    unsigned long last_blink_update = 0;
-    bool blink_state = true;
+private:
+  const int PIN;
+  const int NUMPIXELS;
+  Adafruit_NeoPixel pixels;
 
-    // Logo
-    LogoMode logo_mode = LOGO_RANDOM;
-    uint8_t logo_r = 255, logo_g = 255, logo_b = 255;
-    unsigned long last_logo_update = 0;
-    const unsigned long logo_interval = 10;
-    uint16_t logo_hue = 0;
+  bool hazard_lights_on;
+  bool left_turn_signal_on;
+  bool right_turn_signal_on;
+  bool brake_lights_on;
+  bool reverse_lights_on;
+  bool headlight_on;
+  bool control_enabled;
 
-    // Logo aleatório (6 LEDs: 34 a 39)
-    static const uint8_t LOGO_LEDS = 6;
-    const unsigned long logo_random_interval = 150;
-    unsigned long last_logo_random_update = 0;
-    uint32_t logo_random_colors[LOGO_LEDS] = {0};
+  bool stopped_state;
+  int battery_percentage;
+  uint8_t battery_state;
 
-    // Heartbeat / failsafe
-    unsigned long heartbeat_timeout = 0;
-    unsigned long last_heartbeat = 0;
-    bool heartbeat_seen = false;
-    bool failsafe_active = false;
+  bool failsafe_active;
+  bool heartbeat_seen;
+  unsigned long last_heartbeat;
+  unsigned long heartbeat_timeout = 3000;
 
-    void updateBatteryPulse();
-    uint32_t getBatteryColor();
-    void updateBlink(bool any_signal);
-    void updateLogo();
-    void fill(int from, int to, uint32_t color);  // [from, to)
+  bool blink_state;
+  unsigned long last_blink_update;
+  unsigned long blink_interval = 500;
+
+  LogoMode logo_mode = LOGO_OFF;
+  uint8_t logo_r = 0;
+  uint8_t logo_g = 0;
+  uint8_t logo_b = 0;
+
+  static const uint8_t LOGO_LEDS = 6;
+  uint32_t logo_random_colors[LOGO_LEDS];
+
+  uint16_t logo_hue = 0;
+  unsigned long last_logo_update;
+  unsigned long last_logo_random_update;
+
+  unsigned long logo_interval = 20;
+  unsigned long logo_random_interval = 250;
+
+  void fill(int from, int to, uint32_t color);
+  void updateBlink(bool any_signal);
+  void updateLogo();
+  void updateBatteryPulse();
+  uint32_t getBatteryColor();
 };
+
+#ifndef LIGHTS_BIT_LEFT
+#define LIGHTS_BIT_LEFT 0
+#endif
+
+#ifndef LIGHTS_BIT_RIGHT
+#define LIGHTS_BIT_RIGHT 1
+#endif
+
+#ifndef LIGHTS_BIT_HAZARD
+#define LIGHTS_BIT_HAZARD 2
+#endif
+
+#ifndef LIGHTS_BIT_BRAKE
+#define LIGHTS_BIT_BRAKE 3
+#endif
+
+#ifndef LIGHTS_BIT_HEADLIGHT
+#define LIGHTS_BIT_HEADLIGHT 4
+#endif
+
+#ifndef LIGHTS_BIT_REVERSE
+#define LIGHTS_BIT_REVERSE 5
+#endif
+
+#ifndef LIGHTS_BIT_CONTROL
+#define LIGHTS_BIT_CONTROL 6
+#endif
 
 #endif

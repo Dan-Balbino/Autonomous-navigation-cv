@@ -53,7 +53,13 @@ _config: dict = {
     "CURVA_Kp":                     650,
     "CURVA_Ki":                       0,
     "CURVA_Kd":                       0,
+    "PID DE CURVA FECHADA_Kp":      650,
+    "PID DE CURVA FECHADA_Ki":        0,
+    "PID DE CURVA FECHADA_Kd":        0,
+    "IMAGEM_Erro para ativar o PID de curva fechada (px)": 80,
     "PARÂMETROS DO CARRO_PWM":                         40,
+    "PARÂMETROS DO CARRO_Velocidade na curva (PWM)": 70,
+    "PARÂMETROS DO CARRO_Erro para iniciar velocidade na curva (px)": 24,
     "PARÂMETROS DO CARRO_Velocidade no amarelo (%)": 50,
     "PARÂMETROS DO CARRO_Ângulo máximo":             90,
     "PARÂMETROS DO CARRO_Intervalo comando (ms)":   200,
@@ -77,6 +83,18 @@ def load_config_from_file() -> None:
     try:
         with open(_CONFIG_PATH, encoding="utf-8") as f:
             data = json.load(f)
+        close_curve_error_key = (
+            "IMAGEM_Erro para ativar o PID de curva fechada (px)"
+        )
+        legacy_close_curve_error_keys = (
+            "PID DE CURVA FECHADA_Erro para ativar o PID de curva fechada (px)",
+            "PID DE CURVA FECHADA_Erro para iniciar (px)",
+        )
+        if close_curve_error_key not in data:
+            for legacy_key in legacy_close_curve_error_keys:
+                if legacy_key in data:
+                    data[close_curve_error_key] = data[legacy_key]
+                    break
         with _lock:
             _config.update(data)
     except Exception:
@@ -477,7 +495,7 @@ input[type=range]:disabled::-moz-range-thumb{background:var(--muted);cursor:not-
 
 /* ── PID card ── */
 .pid-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:12px}
-.pid-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.pid-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:18px}
 .pid-col-title{color:var(--teal);font-weight:bold;margin-bottom:6px}
 .pid-term{color:var(--teal);font-weight:bold;font-size:12px;padding:2px 0}
 
@@ -596,6 +614,12 @@ input[type=range]:disabled::-moz-range-thumb{background:var(--muted);cursor:not-
         <div class="pid-term" id="pidCURVA_Ki">Ki: --</div>
         <div class="pid-term" id="pidCURVA_Kd">Kd: --</div>
       </div>
+      <div>
+        <div class="pid-col-title">CURVA FECHADA</div>
+        <div class="pid-term" id="pidCURVA_FECHADA_Kp">Kp: --</div>
+        <div class="pid-term" id="pidCURVA_FECHADA_Ki">Ki: --</div>
+        <div class="pid-term" id="pidCURVA_FECHADA_Kd">Kd: --</div>
+      </div>
     </div>
   </div>
   <div class="grid" id="gridPista"></div>
@@ -664,6 +688,7 @@ const CONTROL_SECTIONS=[
   {title:"IMAGEM",controls:[
     {key:"IMAGEM_Limiar",            label:"Limiar",            min:0,max:255,default:195},
     {key:"IMAGEM_Erro de transição", label:"Erro de transição", min:0,max:100,default:12},
+    {key:"IMAGEM_Erro para ativar o PID de curva fechada (px)",label:"Erro para ativar o PID de curva fechada (px)",min:0,max:160,default:80},
   ]},
   {title:"RETA",controls:[
     {key:"RETA_Kp",label:"Kp",min:0,max:1000,default:200},
@@ -675,11 +700,18 @@ const CONTROL_SECTIONS=[
     {key:"CURVA_Ki",label:"Ki",min:0,max:1000,default:0},
     {key:"CURVA_Kd",label:"Kd",min:0,max:1000,default:0},
   ]},
+  {title:"PID DE CURVA FECHADA",controls:[
+    {key:"PID DE CURVA FECHADA_Kp",label:"Kp",min:0,max:1000,default:650},
+    {key:"PID DE CURVA FECHADA_Ki",label:"Ki",min:0,max:1000,default:0},
+    {key:"PID DE CURVA FECHADA_Kd",label:"Kd",min:0,max:1000,default:0},
+  ]},
 ];
 
 const SIGNAL_SECTIONS=[
   {title:"PARÂMETROS DO CARRO",controls:[
     {key:"PARÂMETROS DO CARRO_PWM",label:"PWM",min:0,max:255,default:40,speed:true},
+    {key:"PARÂMETROS DO CARRO_Velocidade na curva (PWM)",label:"Velocidade na curva (PWM)",min:0,max:255,default:70,speed:true},
+    {key:"PARÂMETROS DO CARRO_Erro para iniciar velocidade na curva (px)",label:"Erro para iniciar velocidade na curva (px)",min:0,max:160,default:24},
     {key:"PARÂMETROS DO CARRO_Velocidade no amarelo (%)",label:"Velocidade no amarelo (%)",min:0,max:100,default:50},
     {key:"PARÂMETROS DO CARRO_Ângulo máximo",label:"Ângulo máximo",min:20,max:90,default:90},
     {key:"PARÂMETROS DO CARRO_Intervalo comando (ms)",label:"Intervalo comando (ms)",min:50,max:1000,default:200},
@@ -737,7 +769,7 @@ function toggleEdit(){
   document.querySelectorAll('input[type=range]').forEach(el=>{el.disabled=!editMode});
 }
 
-function isSpeedKey(key){ return key==="PARÂMETROS DO CARRO_PWM"; }
+function isSpeedKey(key){ return key==="PARÂMETROS DO CARRO_PWM" || key==="PARÂMETROS DO CARRO_Velocidade na curva (PWM)"; }
 function sliderValue(key,val){ return isSpeedKey(key) ? Math.max(0,Math.min(255,Math.round(parseFloat(val)))) : parseInt(val); }
 function controlValue(key,sliderVal){ return isSpeedKey(key) ? Math.round(parseInt(sliderVal)) : parseInt(sliderVal); }
 function formatValue(key,val){ return isSpeedKey(key) ? Math.round(parseFloat(val))+' PWM' : String(val); }
@@ -910,10 +942,10 @@ async function syncVehicleInfo(){
           return `<div class="info-row"><span>${name}</span><span class="val" style="color:${color}">${on?'ATIVADO':'DESATIVADO'}</span></div>`;
         }).join('');
 
-    ['reta','curva'].forEach(prefix=>{
+    [['reta','RETA'],['curva','CURVA'],['curva_fechada','CURVA_FECHADA']].forEach(([prefix,label])=>{
       const values=hud[prefix]||{};
       ['kp','ki','kd'].forEach(term=>{
-        const el=document.getElementById(`pid${prefix.toUpperCase()}_${term[0].toUpperCase()+term.slice(1)}`);
+        const el=document.getElementById(`pid${label}_${term[0].toUpperCase()+term.slice(1)}`);
         if(el) el.textContent=`${term[0].toUpperCase()+term.slice(1)}: ${values[term]!==undefined?values[term]:'--'}`;
       });
     });

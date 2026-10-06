@@ -437,6 +437,13 @@ class ControlPanel:
         cooldown_seconds = config.get("PARE_Cooldown (s)")
         if cooldown_seconds is None:
             cooldown_seconds = round(float(config.get("PARE_Cooldown (ms)", 3000)) / 1000)
+        close_curve_pid_error = config.get(
+            "IMAGEM_Erro para ativar o PID de curva fechada (px)",
+            config.get(
+                "PID DE CURVA FECHADA_Erro para ativar o PID de curva fechada (px)",
+                config.get("PID DE CURVA FECHADA_Erro para iniciar (px)", 80),
+            ),
+        )
 
         control_sections = [
             ("ROI", [
@@ -448,6 +455,7 @@ class ControlPanel:
             ("IMAGEM", [
                 ("Limiar",            config.get("IMAGEM_Limiar", 195),           0, 255),
                 ("Erro de transição", config.get("IMAGEM_Erro de transição", 12), 0, 100),
+                ("Erro para ativar o PID de curva fechada (px)", close_curve_pid_error, 0, 160),
             ]),
             ("RETA", [
                 ("Kp", config.get("RETA_Kp", 200), 0, 1000),
@@ -459,10 +467,17 @@ class ControlPanel:
                 ("Ki", config.get("CURVA_Ki", 0),   0, 1000),
                 ("Kd", config.get("CURVA_Kd", 0),   0, 1000),
             ]),
+            ("PID DE CURVA FECHADA", [
+                ("Kp", config.get("PID DE CURVA FECHADA_Kp", 650), 0, 1000),
+                ("Ki", config.get("PID DE CURVA FECHADA_Ki", 0), 0, 1000),
+                ("Kd", config.get("PID DE CURVA FECHADA_Kd", 0), 0, 1000),
+            ]),
         ]
         signal_sections = [
             ("PARÂMETROS DO CARRO", [
                 ("PWM", saved_pwm, 0, 255),
+                ("Velocidade na curva (PWM)", config.get("PARÂMETROS DO CARRO_Velocidade na curva (PWM)", 70), 0, 255),
+                ("Erro para iniciar velocidade na curva (px)", config.get("PARÂMETROS DO CARRO_Erro para iniciar velocidade na curva (px)", 24), 0, 160),
                 ("Velocidade no amarelo (%)", config.get("PARÂMETROS DO CARRO_Velocidade no amarelo (%)", config.get("PARÂMETROS DO CARRO_PWM amarelo (%)", 50)), 0, 100),
                 ("Ângulo máximo", config.get("PARÂMETROS DO CARRO_Ângulo máximo", 90), 20, 90),
                 ("Intervalo comando (ms)", config.get("PARÂMETROS DO CARRO_Intervalo comando (ms)", 200), 50, 1000),
@@ -922,7 +937,7 @@ class ControlPanel:
 
         values = QGridLayout()
         values.setHorizontalSpacing(18)
-        for column, prefix in enumerate(("RETA", "CURVA")):
+        for column, prefix in enumerate(("RETA", "CURVA", "CURVA FECHADA")):
             title = QLabel(prefix)
             title.setStyleSheet(f"color: {TEAL}; font-weight: 700;")
             values.addWidget(title, 0, column)
@@ -1053,7 +1068,10 @@ class ControlPanel:
 
     @staticmethod
     def _is_speed_key(key):
-        return key == "PARÂMETROS DO CARRO_PWM"
+        return key in (
+            "PARÂMETROS DO CARRO_PWM",
+            "PARÂMETROS DO CARRO_Velocidade na curva (PWM)",
+        )
 
     def adjust_speed(self, delta):
         """Solicita um ajuste de velocidade no loop principal do Qt."""
@@ -1381,8 +1399,12 @@ class ControlPanel:
         if hasattr(self, "_route_display") and self._route_display is not None:
             route_text = str(values.get("route") or "Nenhum ponto")
             self._route_display.setText(route_text)
-        for prefix in ("RETA", "CURVA"):
-            pid_values = values.get(prefix.lower(), {})
+        for prefix, value_key in (
+            ("RETA", "reta"),
+            ("CURVA", "curva"),
+            ("CURVA FECHADA", "curva_fechada"),
+        ):
+            pid_values = values.get(value_key, {})
             for term in ("Kp", "Ki", "Kd"):
                 label = self._pid_labels.get(f"{prefix}_{term}")
                 if label is not None:

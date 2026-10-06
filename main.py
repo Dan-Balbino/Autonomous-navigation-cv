@@ -35,7 +35,6 @@ MAX_PWM = 255
 MIN_MOVING_PWM = 30
 SERIAL_BAUDRATE = 115200
 TRAFFIC_LIGHT_LABELS = {-1: "Nenhum", 0: "Vermelho", 1: "Amarelo", 2: "Verde"}
-COM = select_com()
 
 shared_frame = None
 shared_frame_id = 0
@@ -46,38 +45,80 @@ flag_right_detour = False
 flag_person_detected = False
 right_detour = False
 
-# ── Fonte opcional de imagens para teste ───────────────────────────────
 _project_dir = os.path.dirname(os.path.abspath(__file__))
-_test_image_dirs = (
-    os.path.join(_project_dir, "teste"),
-    os.path.join(_project_dir, "tests", "images"),
-)
+# Configure image testing here; leave disabled to use the camera.
+USE_TEST_IMAGES = False
+TEST_IMAGE_PATHS = [
+    #"tests/images/road.png",
+    #"tests/images/pare.png",
+    "tests/images/pista02.png",
+    #"tests/images/curva_2.png",
+    #"tests/images/curva_2_no_right_lane.png",
+]
+TEST_IMAGE_INTERVAL_SECONDS = 60.0
 
 
-def _load_test_image(filename):
-    for directory in _test_image_dirs:
-        path = os.path.join(directory, filename)
+def _load_test_images(paths):
+    if not paths:
+        raise ValueError("USE_TEST_IMAGES está ativo, mas TEST_IMAGE_PATHS está vazio")
+
+    images = []
+    for image_path in paths:
+        path = image_path
+        if not os.path.isabs(path):
+            path = os.path.join(_project_dir, path)
         image = cv2.imread(path)
-        if image is not None:
-            return image
-    return None
+        if image is None:
+            raise FileNotFoundError(f"Não foi possível abrir a imagem de teste: {path}")
+        images.append((path, image))
+    return images
 
 
-_test_road_frame = _load_test_image("road.png")
-_test_stop_frame = _load_test_image("pare.png")
-_use_test_images = False
+_test_image_frames = _load_test_images(TEST_IMAGE_PATHS) if USE_TEST_IMAGES else []
+_image_test_mode = USE_TEST_IMAGES
+_test_image_index = 0
+_test_image_last_change = None
+_test_image_interval = TEST_IMAGE_INTERVAL_SECONDS
+if _image_test_mode and _test_image_interval <= 0:
+    raise ValueError("TEST_IMAGE_INTERVAL_SECONDS deve ser maior que zero")
+
+
+def _read_source_frame():
+    global _test_image_index, _test_image_last_change
+
+    if not _image_test_mode:
+        return camera.read()
+
+    now = time.monotonic()
+    if _test_image_last_change is None:
+        _test_image_last_change = now
+    elif (
+        len(_test_image_frames) > 1
+        and now - _test_image_last_change >= _test_image_interval
+    ):
+        _test_image_index = (_test_image_index + 1) % len(_test_image_frames)
+        _test_image_last_change = now
+        log(f"[IMAGEM] {_test_image_frames[_test_image_index][0]}", "info")
+
+    return True, _test_image_frames[_test_image_index][1].copy()
 
 frame_lock = threading.Lock()
 sign_lock = threading.Lock()
 
-_usb_cams = scan_usb_devices()
-camera, camera_idx = open_camera(_usb_cams)
-camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+if _image_test_mode:
+    COM = None
+    camera, camera_idx = None, -1
+    print(f"[TESTE] {len(_test_image_frames)} imagem(ns); Arduino e câmera desativados.")
+else:
+    COM = select_com()
+    _usb_cams = scan_usb_devices()
+    camera, camera_idx = open_camera(_usb_cams)
+    camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
 
 # ── Inicialização da cãmera ────────────────────────────
-if _use_test_images:
-    ret_1, frame_1 = True, _test_road_frame.copy()
+if _image_test_mode:
+    ret_1, frame_1 = True, _test_image_frames[0][1].copy()
 else:
     ret_1, frame_1 = camera.read()
 
@@ -99,7 +140,8 @@ print(f"Dashboard http://{_dashboard_ip}:{DASHBOARD_PORT}/")
 _twin_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),"DigitalTwin", "index.html")
 
 # Libera a porta no Firewall do Windows (silencioso — requer admin na primeira vez)
-allow_dashboard_firewall_rule(DASHBOARD_PORT)
+if not _image_test_mode:
+    allow_dashboard_firewall_rule(DASHBOARD_PORT)
 
 
 # ── Inicialização dos objetos ───────────────
@@ -127,6 +169,12 @@ def log(msg, tag="info"):
 
 
 def pidHub(erro, pid_straight, pid_curve, pid_close_curve, dt=0.2):
+    close_curve_error = panel.get(
+        "IMAGEM",
+        "Erro para ativar o PID de curva fechada (px)",
+    )
+    if abs(erro) >= close_curve_error:
+        return pid_close_curve.update(erro, dt=dt)
     if -panel.get("IMAGEM", "Erro de transição") < erro < panel.get("IMAGEM", "Erro de transição"):
         return pid_straight.update(erro, dt=dt)
     return pid_curve.update(erro, dt=dt)
@@ -154,28 +202,31 @@ def mainLoop():
         # ── Reconexão dinâmica (solicitada pelo painel) ───────────────
         req = panel.get_connection()
         if req:
-            new_com, new_camera_idx = req
-            try:
-                car.reconnect(new_com)
-                if new_com is not None:
-                    log(f"[SERIAL] Reconectado: {new_com} @ {SERIAL_BAUDRATE}", "ok")
-                else:
-                    log("[SERIAL] Modo teste — sem Arduino", "info")
-            except (serial.SerialException, OSError) as e:
-                log(f"[SERIAL] Falha ao reconectar: {e}", "error")
-            _nc = cv2.VideoCapture(new_camera_idx, cv2.CAP_DSHOW)
-            if _nc.isOpened() and _nc.read()[0]:
-                _nc.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                camera.release()   # só libera a antiga depois de confirmar a nova
-                camera = _nc
-                camera_idx = new_camera_idx
-                panel.update_camera_id(camera_idx)
-                log(f"[CAM] Reconectada: indice {new_camera_idx}", "ok")
+            if _image_test_mode:
+                log("[TESTE] Reconexão de câmera/Arduino indisponível com imagens.", "warn")
             else:
-                _nc.release()
-                log(f"[CAM] Falha no indice {new_camera_idx} — mantendo camera atual", "warn")
+                new_com, new_camera_idx = req
+                try:
+                    car.reconnect(new_com)
+                    if new_com is not None:
+                        log(f"[SERIAL] Reconectado: {new_com} @ {SERIAL_BAUDRATE}", "ok")
+                    else:
+                        log("[SERIAL] Modo teste — sem Arduino", "info")
+                except (serial.SerialException, OSError) as e:
+                    log(f"[SERIAL] Falha ao reconectar: {e}", "error")
+                _nc = cv2.VideoCapture(new_camera_idx, cv2.CAP_DSHOW)
+                if _nc.isOpened() and _nc.read()[0]:
+                    _nc.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    camera.release()   # só libera a antiga depois de confirmar a nova
+                    camera = _nc
+                    camera_idx = new_camera_idx
+                    panel.update_camera_id(camera_idx)
+                    log(f"[CAM] Reconectada: indice {new_camera_idx}", "ok")
+                else:
+                    _nc.release()
+                    log(f"[CAM] Falha no indice {new_camera_idx} — mantendo camera atual", "warn")
 
-        ret_1, frame_1 = camera.read()
+        ret_1, frame_1 = _read_source_frame()
         if not ret_1:
             break
         
@@ -184,14 +235,17 @@ def mainLoop():
             shared_frame_id += 1
 
         sign_view = frame_1.copy()
-        frame_1 = corrector.correct(frame_1)
+        if not _image_test_mode:
+            frame_1 = corrector.correct(frame_1)
         img = frame_1.copy()
+        frame_scale_x = frame_1.shape[1] / width
+        frame_scale_y = frame_1.shape[0] / height
 
         # ── Leitura dos controles ─────────────────────────────
-        upper        = panel.get("ROI", "Linha superior")
-        lower        = panel.get("ROI", "Linha inferior")
-        y_top        = panel.get("ROI", "Altura sup")
-        y_bot        = panel.get("ROI", "Altura inf")
+        upper        = round(panel.get("ROI", "Linha superior") * frame_scale_x)
+        lower        = round(panel.get("ROI", "Linha inferior") * frame_scale_x)
+        y_top        = round(panel.get("ROI", "Altura sup") * frame_scale_y)
+        y_bot        = round(panel.get("ROI", "Altura inf") * frame_scale_y)
         limiar_value = panel.get("IMAGEM", "Limiar")
         pwm_value    = panel.get("PARÂMETROS DO CARRO", "PWM")
         yellow_pwm   = pwm_value * panel.get("PARÂMETROS DO CARRO", "Velocidade no amarelo (%)") / 100.0
@@ -231,6 +285,12 @@ def mainLoop():
         kd_curve = panel.get("CURVA", "Kd") / 100.0
         pid_curve.setValues(kp_curve, ki_curve, kd_curve)
         pid_curve.output_limit = steering_limit
+
+        kp_close_curve = panel.get("PID DE CURVA FECHADA", "Kp") / 100.0
+        ki_close_curve = panel.get("PID DE CURVA FECHADA", "Ki") / 1000.0
+        kd_close_curve = panel.get("PID DE CURVA FECHADA", "Kd") / 100.0
+        pid_close_curve.setValues(kp_close_curve, ki_close_curve, kd_close_curve)
+        pid_close_curve.output_limit = steering_limit
         
         run = panel._IsRunning()
 
@@ -284,8 +344,29 @@ def mainLoop():
 
         # ── Processamento da ROI ─────────────────────────────
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-        _, limiar = cv2.threshold(gray, limiar_value, 255, cv2.THRESH_BINARY)
+        
+        k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25))  # maior que a largura da linha
+        tophat = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, k)
+        blur = cv2.GaussianBlur(tophat, (5, 5), 1.1)
+       
+        _, limiar = cv2.threshold(blur, limiar_value, 255, cv2.THRESH_BINARY)
         limiar_bgr = cv2.cvtColor(limiar, cv2.COLOR_GRAY2BGR)
+        
+        
+        
+        # teste na segunda
+        # gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        # blur = cv2.GaussianBlur(gray, (5, 5), 1.1)
+        # _, limiar = cv2.threshold(blur, limiar_value, 255, cv2.THRESH_BINARY)
+
+        # # remove blobs grandes demais (mancha de luz)
+        # n, labels, stats, _ = cv2.connectedComponentsWithStats(limiar)
+        # for i in range(1, n):
+        #     if stats[i, cv2.CC_STAT_AREA] > 2500:
+        #         limiar[labels == i] = 0
+
+        # limiar_bgr = cv2.cvtColor(limiar, cv2.COLOR_GRAY2BGR)
+
 
         # ── Detecção de Desvio ──────────────────────────────────────────────
         if flag_right_detour and not right_detour:    
@@ -304,10 +385,12 @@ def mainLoop():
         elif flag_tl == 1:
             effective_pwm = yellow_pwm
         else:
-            if -panel.get("IMAGEM", "Erro de transição") * 2 < error < panel.get("IMAGEM", "Erro de transição") * 2:
-                effective_pwm = pwm_value
-            else:
-                effective_pwm = 70
+            curve_speed_error = panel.get(
+                "PARÂMETROS DO CARRO",
+                "Erro para iniciar velocidade na curva (px)",
+            )
+            curve_pwm = panel.get("PARÂMETROS DO CARRO", "Velocidade na curva (PWM)")
+            effective_pwm = curve_pwm if abs(error) >= curve_speed_error else pwm_value
 
         if flag_person_detected:
             car.command.stop = True
@@ -410,9 +493,19 @@ def mainLoop():
             "servo": int(angle + 90),
             "speed": effective_pwm,
             "control_mode": "MANUAL" if remote_control_active and rc.connected else "AUTOMÁTICO",
-            "pid_mode": "RETA" if abs(error) < panel.get("IMAGEM", "Erro de transição") else "CURVA",
+            "pid_mode": (
+                "CURVA FECHADA"
+                if abs(error) >= panel.get(
+                    "IMAGEM",
+                    "Erro para ativar o PID de curva fechada (px)",
+                )
+                else "RETA"
+                if abs(error) < panel.get("IMAGEM", "Erro de transição")
+                else "CURVA"
+            ),
             "reta": {"kp": kp_straight, "ki": ki_straight, "kd": kd_straight},
             "curva": {"kp": kp_curve, "ki": ki_curve, "kd": kd_curve},
+            "curva_fechada": {"kp": kp_close_curve, "ki": ki_close_curve, "kd": kd_close_curve},
             "signals": ", ".join(
                 name for name, active in (
                     ("Pare", flag_stop),
@@ -451,8 +544,12 @@ def mainLoop():
         sign_det.draw(sign_view)
         panel.update_frames(img, limiar_bgr, sign_view)
         dashboard_update_frames(img, limiar_bgr, sign_view)
+
+        if _image_test_mode:
+            time.sleep(1 / 30)
         
-    camera.release()
+    if camera is not None:
+        camera.release()
     car.serial.close()
     cv2.destroyAllWindows()
 
