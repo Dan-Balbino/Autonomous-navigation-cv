@@ -39,8 +39,8 @@ void receiveUltrasonic(Telemetry* telemetry, CarCommand* command, int packetSize
   uint8_t data[2];
   CAN.readBytes(data, 2);
 
-  telemetry->left    = (data[0] >> 0) & 0x03;
-  telemetry->f_left  = (data[0] >> 2) & 0x03;
+  telemetry->left    = (data[0] >> 2) & 0x03;
+  telemetry->f_left  = (data[0] >> 0) & 0x03;
   telemetry->f_right = (data[0] >> 4) & 0x03;
   telemetry->right   = (data[0] >> 6) & 0x03;
 

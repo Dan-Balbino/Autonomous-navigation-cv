@@ -5,7 +5,9 @@
 
 #define CAN_CS_PIN 53
 #define CAN_INTERRUPT_PIN 2
-// Lights lights(6, 43);
+#define LED_PIN 12
+
+Lights lights(LED_PIN, 42);
 
 CarCommand cmd;
 Telemetry telemetry;
@@ -34,7 +36,7 @@ void setup() {
 
   pinMode(LED_BUILTIN, OUTPUT);
   randomSeed(analogRead(A0));
-  //lights.begin();
+  lights.begin();
 
   beginCAN(CAN_CS_PIN, CAN_INTERRUPT_PIN);
 
@@ -44,6 +46,8 @@ void setup() {
   cmd.vehicleState = true;
   cmd.reverse = false;
   lastVehicleState = cmd.vehicleState;
+
+  cmd.lights = 0b00001000;
 
   telemetry.battery_percentage = 0;
   telemetry.battery_state = 0;
@@ -62,49 +66,41 @@ void loop() {
 
   pollCAN();
   updateCANStatus();
-  bool vehicleStateChanged = cmd.vehicleState != lastVehicleState;
 
-  if (receiveCommand(cmd)) {
+  bool vs = cmd.vehicleState;               // captura uma vez (a CAN pode mudar no meio)
+  bool vehicleStateChanged = vs != lastVehicleState;
+
+  if (receiveCommand(cmd) || vehicleStateChanged) {
     processCommand(cmd);
-
-    // Realiza o controle dos LEDs com base no comando recebido
-    // lights.handleCommand((uint8_t)cmd.lights, cmd.stop || !cmd.vehicleState, telemetry.battery_percentage, telemetry.battery_state);
-
-  } else if (vehicleStateChanged) {
-    processCommand(cmd);
+    lastVehicleState = vs;
   }
 
   // Lê Serial1
   //readSerial1(telemetry.battery, telemetry.battery_current, telemetry.battery_percentage, telemetry.battery_state);
-  
-  // Bloco de teste para piscar o LED embutido a cada 2 segundos
+
   testBlock();
 
-  // Envio de telemetria a cada 100 ms
   if (millis() - lastTelemetry >= 100) {
     lastTelemetry = millis();
     sendTelemetry(telemetry);
   }
 
-  //lights.update();
-}
+  // LEDs sempre com o estado atual, não só quando chega comando
+  lights.handleCommand((uint8_t)cmd.lights, cmd.run && (cmd.stop || !cmd.vehicleState),
+                       telemetry.battery_percentage, telemetry.battery_state);
 
+  lights.update();
+}
 
 // =====================================================
 // TEST BLOCK
 // =====================================================
-
 void testBlock() {
 
   if (millis() - last >= 2000) {
 
     last = millis();
 
-    digitalWrite(
-      LED_BUILTIN,
-      !digitalRead(LED_BUILTIN)
-    );
+    digitalWrite( LED_BUILTIN, !digitalRead(LED_BUILTIN));
   }
 }
-
-

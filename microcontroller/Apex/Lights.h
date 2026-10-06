@@ -42,7 +42,11 @@ public:
     logo_random_interval = interval;
   }
 
-private:
+private: // G B R
+  const uint32_t turnColor = pixels.Color(68, 0, 255);
+  const uint32_t whiteColor = pixels.Color(255, 255, 255);
+  const uint32_t brakeColor = pixels.Color(0, 0, 255); 
+
   const int PIN;
   const int NUMPIXELS;
   Adafruit_NeoPixel pixels;
@@ -68,7 +72,7 @@ private:
   unsigned long last_blink_update;
   unsigned long blink_interval = 500;
 
-  LogoMode logo_mode = LOGO_OFF;
+  LogoMode logo_mode = LOGO_RAINBOW;
   uint8_t logo_r = 0;
   uint8_t logo_g = 0;
   uint8_t logo_b = 0;

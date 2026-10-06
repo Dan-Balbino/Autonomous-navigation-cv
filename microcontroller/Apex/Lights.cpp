@@ -131,7 +131,7 @@ void Lights::updateLogo() {
   }
 
   if (stopped_state) {
-    fill(34, 40, pixels.Color(255, 0, 0));
+    fill(34, 40, brakeColor);
     return;
   }
 
@@ -196,6 +196,10 @@ void Lights::updateBlink(bool any_signal) {
 // ==================================================
 
 void Lights::update() {
+  static uint32_t lastFrame[42];
+  static unsigned long lastShow = 0;
+  bool changed = false;
+
   unsigned long now = millis();
 
   // Failsafe: heartbeat perdido -> pisca-alerta
@@ -219,26 +223,22 @@ void Lights::update() {
 
   pixels.clear();
 
-  const uint32_t turnColor = pixels.Color(68, 0, 255);
-  const uint32_t whiteColor = pixels.Color(0, 0, 255);
-  const uint32_t brakeColor = pixels.Color(255, 0, 0);
-
   // Farol / lanternas
   if (headlight_on) {
-    fill(0, 10, whiteColor);
-    fill(16, 26, whiteColor);
   }
 
   // Ré
   if (reverse_lights_on) {
-    fill(14, 16, whiteColor);
-    fill(30, 32, whiteColor);
+    fill(14, 16, brakeColor);
+    fill(30, 32, brakeColor);
   }
 
-  // Freio sobrescreve a ré
   if (brake_lights_on) {
     fill(14, 16, brakeColor);
     fill(30, 32, brakeColor);
+
+    fill(0, 10, brakeColor);
+    fill(16, 26, brakeColor);
   }
 
   // Setas
@@ -254,13 +254,24 @@ void Lights::update() {
 
   // Parado
   if (stopped_state) {
-    const uint32_t stopColor = pixels.Color(255, 0, 0);
-    fill(0, 10, stopColor);
-    fill(16, 26, stopColor);
+    fill(0, 10, brakeColor);
+    fill(16, 26, brakeColor);
   }
 
   // Logo
   updateLogo();
 
-  pixels.show();
+  // Só envia pra fita se mudou, com intervalo mínimo
+  for (int i = 0; i < 42; i++) {
+    if (pixels.getPixelColor(i) != lastFrame[i]) { changed = true; break; }
+  }
+
+  unsigned long since = now - lastShow;
+  bool serialBusy = Serial.available() > 0 && since < 100;  // não segura pra sempre
+
+  if ((changed || since > 200) && since >= 30 && !serialBusy) {
+    for (int i = 0; i < 42; i++) lastFrame[i] = pixels.getPixelColor(i);
+    pixels.show();
+    lastShow = now;
+  }
 }

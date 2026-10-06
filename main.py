@@ -146,7 +146,7 @@ if not _image_test_mode:
 
 # ── Inicialização dos objetos ───────────────
 corrector = FisheyeCorrector("calibration/fisheye_calibration.npz", width, height, balance=0.63, offset_x=-90)
-sign_det = ObjectDetector("model/modelo_6.pt")
+sign_det = ObjectDetector("model/modelo_5.pt")
 car = Car(COM)
 rc = RemoteControl()
 nav = Navigation()
@@ -344,10 +344,11 @@ def mainLoop():
 
         # ── Processamento da ROI ─────────────────────────────
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        blur = cv2.GaussianBlur(gray, (5, 5), 1.1)
         
-        k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25))  # maior que a largura da linha
-        tophat = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, k)
-        blur = cv2.GaussianBlur(tophat, (5, 5), 1.1)
+        # k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25))  # maior que a largura da linha
+        # tophat = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, k)
+        
        
         _, limiar = cv2.threshold(blur, limiar_value, 255, cv2.THRESH_BINARY)
         limiar_bgr = cv2.cvtColor(limiar, cv2.COLOR_GRAY2BGR)
@@ -433,6 +434,7 @@ def mainLoop():
                 if left_trigger_active and right_trigger_active or not left_trigger_active and not right_trigger_active:
                     effective_pwm = 0  # Ambos os gatilhos pressionados: velocidade zero
                     reverse = False
+                    car.command.lights &= ~0b100000
                 elif left_trigger_active:
                     effective_pwm = 0
                     reverse = True
@@ -440,8 +442,10 @@ def mainLoop():
                 elif right_trigger_active:
                     reverse = False
                     effective_pwm = pwm_value if pwm_value >= MIN_MOVING_PWM else 0
+                    car.command.lights &= ~0b100000
             else:
                 reverse = False
+                car.command.lights &= ~0b100000
 
 
             if not remote_control_active:

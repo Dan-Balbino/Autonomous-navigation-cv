@@ -31,20 +31,20 @@
 // trig - azul
 
 // LEFT
-#define LEFT_TRIG A2
-#define LEFT_ECHO A3
+#define LEFT_TRIG A0
+#define LEFT_ECHO A1
 
 // FRONT LEFT
 #define F_LEFT_TRIG 3
 #define F_LEFT_ECHO 4
 
 // FRONT RIGHT
-#define F_RIGHT_TRIG 5
-#define F_RIGHT_ECHO 6
+#define F_RIGHT_TRIG 7
+#define F_RIGHT_ECHO 8
 
 // RIGHT
-#define RIGHT_TRIG 7
-#define RIGHT_ECHO 8
+#define RIGHT_TRIG 5
+#define RIGHT_ECHO 6
 
 
 // ------------------------------------------------------------
