@@ -10,8 +10,9 @@ from flask import Flask, jsonify, request, send_from_directory, redirect, url_fo
 
 app = Flask(__name__)
 
-_TWIN_DIR   = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "DigitalTwin"))
-_EYES_DIR   = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "EyesFront"))
+_TWIN_DIR   = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "DigitalTwin"))
+_EYES_DIR   = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "EyesFront"))
+_ROAD_DIR   = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "RoadPanel"))
 _CONFIG_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "config/config.json"))
 
 _lock = threading.Lock()
@@ -494,6 +495,18 @@ def eyes_static(filename="index.html"):
     return send_from_directory(_EYES_DIR, filename)
 
 
+# ── Mapa 3D da pista (RoadPanel, arquivos estáticos) ──────────────────────────
+@app.route("/road")
+def road_redirect():
+    return redirect("/road/")
+
+
+@app.route("/road/")
+@app.route("/road/<path:filename>")
+def road_static(filename="index.html"):
+    return send_from_directory(_ROAD_DIR, filename)
+
+
 # ── Digital Twin (arquivos estáticos) ─────────────────────────────────────────
 @app.route("/")
 def index():
@@ -945,6 +958,7 @@ select{
         <button class="btn btn-green" onclick="window.location.href='/'">Abrir Digital Twin</button>
         <button class="btn btn-blue" onclick="window.open('/eyes/','_blank')" title="Abre os olhos do carro em uma nova aba">Abrir EyesFront</button>
       </div>
+      <button class="btn btn-teal btn-block" onclick="window.open('/road/','_blank')" title="Abre o mapa 3D da pista em uma nova aba">Abrir mapa da pista</button>
       <button class="btn btn-dark btn-block" id="copyBtn" onclick="copyLink()">Copiar link</button>
       <button class="btn btn-purple btn-block" onclick="showQr(true)">QR Code</button>
       <div class="info-row"><span>Conexão com a API</span><span class="val" id="connStatus" style="color:var(--muted)">Verificando...</span></div>

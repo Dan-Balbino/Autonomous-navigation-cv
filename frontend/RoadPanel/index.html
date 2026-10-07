@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f3f5f9">
+  <title>APEX · Mapa da pista</title>
+  <link rel="preload" href="fonts/Saira-Variable-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="src/styles.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/three.module.min.js",
+        "three/addons/": "./vendor/three/addons/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- Tela de carregamento: aparece antes de qualquer JS pesado (Three.js ~670 KB) -->
+  <div class="loader" id="loader" role="status" aria-live="polite">
+    <div class="loader-dots" aria-hidden="true"></div>
+    <div class="loader-card">
+      <div class="loader-brand">APEX</div>
+      <div class="loader-title">Mapa da pista</div>
+      <div class="loader-track" aria-hidden="true"><div class="loader-bar" id="loaderBar"></div></div>
+      <div class="loader-text" id="loaderText">Carregando o motor 3D</div>
+    </div>
+  </div>
+
+  <canvas id="scene" aria-label="Pista em 3D com o carro e a trajetória esperada"></canvas>
+  <div class="vignette" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="clock" id="clock">--:--</div>
+
+    <div class="speed" aria-live="off">
+      <span class="speed-value" id="speedValue">0.00</span>
+      <span class="speed-unit">m/s</span>
+    </div>
+
+    <div class="status">
+      <div class="traffic" id="trafficLight" title="Semáforo detectado" data-state="none" aria-label="Semáforo: nenhum">
+        <span class="lamp red"></span><span class="lamp yellow"></span><span class="lamp green"></span>
+      </div>
+      <div class="source" id="source" data-state="connecting">
+        <span class="source-dot"></span>
+        <span class="source-text" id="sourceText">Conectando…</span>
+      </div>
+    </div>
+  </header>
+
+  <aside class="guide" aria-label="Próxima manobra e rota">
+    <section class="maneuver" id="maneuver" data-kind="straight">
+      <svg class="maneuver-icon" id="maneuverIcon" viewBox="0 0 48 48" aria-hidden="true"></svg>
+      <div class="maneuver-text">
+        <div class="maneuver-distance" id="maneuverDistance">--</div>
+        <div class="maneuver-label" id="maneuverLabel">Calculando trajetória</div>
+      </div>
+    </section>
+
+    <section class="route">
+      <div class="route-head">
+        <span>Missão</span>
+        <span class="route-source" id="missionSource">--</span>
+      </div>
+      <p class="mission-raw" id="missionRaw">Nenhuma missão recebida</p>
+      <ol class="route-points" id="missionPoints"></ol>
+      <p class="route-empty" id="missionEmpty" hidden>Sem pontos: o carro faz a volta externa.</p>
+    </section>
+  </aside>
+
+  <footer class="bottombar">
+    <div class="metric"><span class="metric-label">PWM</span><span class="metric-value" id="pwmValue">0</span></div>
+    <div class="metric"><span class="metric-label">Servo</span><span class="metric-value" id="servoValue">90°</span></div>
+    <div class="metric"><span class="metric-label">Bateria</span><span class="metric-value" id="batteryValue">--</span></div>
+    <div class="metric"><span class="metric-label">Modo</span><span class="metric-value" id="modeValue">--</span></div>
+    <p class="estimate-note" id="estimateNote" hidden>Posição estimada pela velocidade ao longo da rota</p>
+  </footer>
+
+  <!-- Controles do mapa: vista e tela cheia -->
+  <div class="map-controls" role="group" aria-label="Controles do mapa">
+    <button class="map-button" id="viewToggle" type="button" aria-pressed="false" title="Vista de topo (V)">
+      <svg class="when-off" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16M12 4v16"/></svg>
+      <svg class="when-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 20l8-4 8 4z"/></svg>
+      <span class="map-button-label" id="viewToggleLabel">Topo</span>
+    </button>
+    <button class="map-button" id="fullscreenToggle" type="button" aria-pressed="false" title="Tela cheia (F)">
+      <svg class="when-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      <svg class="when-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+      <span class="map-button-label" id="fullscreenLabel">Tela cheia</span>
+    </button>
+  </div>
+
+  <div class="corner-actions">
+  <div class="mode-switch" role="radiogroup" aria-label="Modo do mapa" id="modeSwitch">
+    <button type="button" role="radio" data-mode="sim" aria-checked="true">Simulação</button>
+    <button type="button" role="radio" data-mode="live" aria-checked="false">
+      <span class="mode-dot" aria-hidden="true"></span>Modo real
+    </button>
+  </div>
+  <button class="debug-toggle" id="editSigns" type="button" title="Editar posição das placas (E)">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg>
+    <span>Placas</span>
+  </button>
+  <button class="debug-toggle" id="debugToggle" type="button" aria-expanded="false" aria-controls="debugPanel" title="Ferramentas de debug (D)">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>
+    <span>Debug</span>
+  </button>
+  </div>
+
+  <dialog class="editor" id="signEditor" aria-labelledby="signEditorTitle">
+    <header class="editor-head">
+      <div>
+        <h2 id="signEditorTitle">Posição das placas</h2>
+        <p class="editor-status" id="signEditorStatus" aria-live="polite"></p>
+      </div>
+      <button class="icon-button" id="signEditorClose" type="button" aria-label="Fechar editor">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </header>
+    <div class="editor-map">
+      <svg id="signEditorMap" role="application" aria-label="Pista vista de cima com as placas"></svg>
+    </div>
+    <footer class="editor-actions">
+      <button type="button" class="text-button" id="signEditorReset">Restaurar padrão</button>
+      <button type="button" class="text-button" id="signEditorExport">Exportar JSON</button>
+      <span class="editor-spacer"></span>
+      <button type="button" class="text-button" id="signEditorCancel">Cancelar</button>
+      <button type="button" class="primary-button" id="signEditorSave">Salvar e recarregar cena</button>
+    </footer>
+  </dialog>
+
+  <aside class="debug" id="debugPanel" aria-label="Ferramentas de debug" hidden>
+    <header class="debug-head">
+      <h2>Debug</h2>
+      <button class="icon-button" id="debugClose" type="button" aria-label="Fechar debug">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </header>
+
+    <section class="debug-section">
+      <h3>Fonte dos dados</h3>
+      <div class="segmented" role="radiogroup" aria-label="Fonte dos dados" data-control="source">
+        <button type="button" role="radio" data-value="live">Servidor</button>
+        <button type="button" role="radio" data-value="sim">Simulação</button>
+      </div>
+      <p class="debug-hint" id="apiHint"></p>
+    </section>
+
+    <section class="debug-section">
+      <h3>Trajetória</h3>
+      <div class="segmented" role="radiogroup" aria-label="Como a trajetória é calculada" data-control="planMode">
+        <button type="button" role="radio" data-value="car">Lógica do carro</button>
+        <button type="button" role="radio" data-value="shortest">Menor caminho</button>
+      </div>
+      <p class="debug-hint" id="planModeHint"></p>
+    </section>
+
+    <section class="debug-section" data-only="live">
+      <h3>Localização do carro real</h3>
+      <label class="slider">
+        <span>Sem velocidade na telemetria: m/s por PWM <output id="pwmToMsOut">0,0040</output></span>
+        <input type="range" id="pwmToMs" min="0" max="0.02" step="0.0005" value="0.004">
+      </label>
+      <p class="debug-hint">A posição anda pela velocidade das rodas e é corrigida quando o carro detecta placa de desvio, semáforo, PARE ou confirma um ponto. Ela espera em cada desvio e ponto até a detecção.</p>
+    </section>
+
+    <section class="debug-section" data-only="sim">
+      <h3>Missão simulada</h3>
+      <div class="route-builder">
+        <button type="button" class="chip-button" data-add-point="A">+ A</button>
+        <button type="button" class="chip-button" data-add-point="B">+ B</button>
+        <button type="button" class="chip-button" data-add-point="C">+ C</button>
+        <button type="button" class="text-button" id="routeUndo">Desfazer</button>
+        <button type="button" class="text-button" id="routeClear">Limpar</button>
+      </div>
+      <p class="debug-hint" id="simRouteText">Sem pontos</p>
+    </section>
+
+    <section class="debug-section" data-only="sim">
+      <h3>Movimento</h3>
+      <div class="row">
+        <button type="button" class="primary-button" id="playToggle">Pausar</button>
+        <button type="button" class="text-button" id="resetPosition">Voltar à largada</button>
+        <button type="button" class="text-button" id="skipEvent">Próximo evento</button>
+      </div>
+      <label class="slider">
+        <span>Velocidade <output id="simSpeedOut">0.40 m/s</output></span>
+        <input type="range" id="simSpeed" min="0" max="1.5" step="0.05" value="0.4">
+      </label>
+      <label class="check">
+        <input type="checkbox" id="respectSignals" checked>
+        <span>Parar no vermelho e na placa PARE</span>
+      </label>
+      <label class="check">
+        <input type="checkbox" id="freeDrive">
+        <span>Dirigir livre com o teclado (W A S D / setas)</span>
+      </label>
+    </section>
+
+    <section class="debug-section" data-only="sim">
+      <h3>Semáforo simulado</h3>
+      <div class="segmented" role="radiogroup" aria-label="Semáforo simulado" data-control="light">
+        <button type="button" role="radio" data-value="none">Nenhum</button>
+        <button type="button" role="radio" data-value="red">Vermelho</button>
+        <button type="button" role="radio" data-value="yellow">Amarelo</button>
+        <button type="button" role="radio" data-value="green">Verde</button>
+      </div>
+    </section>
+
+    <section class="debug-section">
+      <h3>Câmera</h3>
+      <div class="segmented" role="radiogroup" aria-label="Câmera" data-control="camera">
+        <button type="button" role="radio" data-value="chase">Perseguição</button>
+        <button type="button" role="radio" data-value="top">De cima</button>
+        <button type="button" role="radio" data-value="free">Livre</button>
+      </div>
+    </section>
+
+    <section class="debug-section">
+      <h3>Modelo do carro</h3>
+      <label class="file-button">
+        <input type="file" id="modelFile" accept=".glb,.gltf">
+        <span>Carregar .glb para testar</span>
+      </label>
+      <p class="debug-hint" id="modelHint">Usando o carro real (models/car.glb)</p>
+    </section>
+
+    <section class="debug-section">
+      <h3>Escala da pista</h3>
+      <label class="slider">
+        <span>Metros por px da imagem <output id="scaleOut">0.0050</output></span>
+        <input type="range" id="scale" min="0.002" max="0.012" step="0.0005" value="0.005">
+      </label>
+      <p class="debug-hint">Estimativa: com 0,005 a pista tem cerca de 5,6 m × 2,9 m. Ajuste ao tamanho real.</p>
+    </section>
+
+    <section class="debug-section debug-readout" aria-live="off">
+      <div><span>Trecho</span><output id="readEdge">--</output></div>
+      <div><span>Posição</span><output id="readS">--</output></div>
+      <div><span>Quadros/s</span><output id="readFps">--</output></div>
+      <div><span>Velocidade de</span><output id="readSpeedSource">--</output></div>
+      <div><span>Desvios desde o ponto</span><output id="readDetours">--</output></div>
+    </section>
+  </aside>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

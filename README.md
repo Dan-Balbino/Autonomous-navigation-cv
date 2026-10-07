@@ -33,6 +33,11 @@ Autonomous-navigation-cv\
 ├── messaging/
 │   └── messaging_core.py            ← Dashboard web Flask (localhost:5000)
 │
+├── frontend/                        ← Páginas web servidas pelo Flask
+│   ├── DigitalTwin/                 ← Digital Twin (/)
+│   ├── EyesFront/                   ← Olhos do carro (/eyes/)
+│   └── RoadPanel/                   ← Mapa 3D da pista (/road/)
+│
 ├── calibration/
 │   └── fisheye_calibration.npz      ← Parâmetros da câmera (gerado por calibration.py)
 │
@@ -200,7 +205,9 @@ Acesse `http://localhost:5000` (IP local) para:
 
 - Ver estado do veículo (RPM, velocidade, sensores)
 - Visualizar feeds da câmera
-- Integração com Digital Twin (se disponível)
+- Digital Twin em `/` (`frontend/DigitalTwin/`) e painel de controle em `/panel`
+- Olhos do carro em `/eyes/` (`frontend/EyesFront/`)
+- Mapa 3D da pista em `/road/` (`frontend/RoadPanel/`)
 
 ---
 
