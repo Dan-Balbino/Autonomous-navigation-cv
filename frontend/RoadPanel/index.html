@@ -75,6 +75,10 @@
     <div class="metric"><span class="metric-label">Servo</span><span class="metric-value" id="servoValue">90°</span></div>
     <div class="metric"><span class="metric-label">Bateria</span><span class="metric-value" id="batteryValue">--</span></div>
     <div class="metric"><span class="metric-label">Modo</span><span class="metric-value" id="modeValue">--</span></div>
+    <div class="hazard" id="hazardBanner" role="alert" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"/><path d="M12 8v6m0 0-3 6m3-6 3 6M8 11l4-2 4 2"/></svg>
+      <span id="hazardText">Pedestre detectado</span>
+    </div>
     <section class="gps-card" id="gpsCard" hidden aria-live="polite">
       <div class="gps-kicker">
         <span class="gps-stop">PARE</span>
@@ -101,6 +105,11 @@
       <svg class="when-off" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16M12 4v16"/></svg>
       <svg class="when-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 20l8-4 8 4z"/></svg>
       <span class="map-button-label" id="viewToggleLabel">Topo</span>
+    </button>
+    <button class="map-button" id="soundToggle" type="button" aria-pressed="true" title="Desligar voz e avisos (M)">
+      <svg class="when-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6L8 10z"/><path d="m17 9 4 6M21 9l-4 6"/></svg>
+      <svg class="when-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6L8 10z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+      <span class="map-button-label" id="soundLabel">Som</span>
     </button>
     <button class="map-button" id="fullscreenToggle" type="button" aria-pressed="false" title="Tela cheia (F)">
       <svg class="when-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
@@ -201,10 +210,11 @@
         <button type="button" class="primary-button" id="playToggle">Pausar</button>
         <button type="button" class="text-button" id="resetPosition">Voltar à largada</button>
         <button type="button" class="text-button" id="skipEvent">Próximo evento</button>
+        <button type="button" class="text-button" id="simPedestrian">Simular pedestre</button>
       </div>
       <label class="slider">
         <span>Velocidade <output id="simSpeedOut">0.40 m/s</output></span>
-        <input type="range" id="simSpeed" min="0" max="1.5" step="0.05" value="0.4">
+        <input type="range" id="simSpeed" min="0" max="3" step="0.05" value="0.4">
       </label>
       <label class="check">
         <input type="checkbox" id="respectSignals" checked>
@@ -247,10 +257,10 @@
     <section class="debug-section">
       <h3>Escala da pista</h3>
       <label class="slider">
-        <span>Metros por px da imagem <output id="scaleOut">0.0050</output></span>
-        <input type="range" id="scale" min="0.002" max="0.012" step="0.0005" value="0.005">
+        <span>Metros por px da imagem <output id="scaleOut">0,0200</output></span>
+        <input type="range" id="scale" min="0.01" max="0.03" step="0.0005" value="0.02">
       </label>
-      <p class="debug-hint">Estimativa: com 0,005 a pista tem cerca de 5,6 m × 2,9 m. Ajuste ao tamanho real.</p>
+      <p class="debug-hint">Padrão 0,02: pista de 21 m × 10 m com faixa de 1,5 m (medidas reais). Mude só se a pista mudar.</p>
     </section>
 
     <section class="debug-section debug-readout" aria-live="off">

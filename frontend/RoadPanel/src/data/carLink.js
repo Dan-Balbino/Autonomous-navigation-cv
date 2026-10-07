@@ -71,6 +71,8 @@ export function normalize(raw) {
     trafficLight: num(hud.traffic_light_code, -1),
     stopActive: Boolean(hud.stop_active),
     rightDetour: Boolean(hud.right_detour_active),
+    // main.py liga command.stop quando a IA vê uma pessoa
+    pedestrian: Boolean(command.stop),
     controlMode: typeof hud.control_mode === 'string' ? hud.control_mode : '',
   };
 }

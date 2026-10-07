@@ -3,6 +3,7 @@
  * controla o movimento, o semáforo, a câmera, a escala e permite testar o .glb do carro.
  * Abre e fecha no botão "Debug" ou na tecla D.
  */
+import { roleName } from '../track/mission.js';
 
 export class DebugPanel {
   constructor(api) {
@@ -84,6 +85,7 @@ export class DebugPanel {
       this.sync();
     });
     document.getElementById('skipEvent').addEventListener('click', () => api.skipEvent());
+    document.getElementById('simPedestrian').addEventListener('click', () => api.simulatePedestrian());
 
     el.speed.addEventListener('input', () => {
       state.simSpeed = Number(el.speed.value);
@@ -136,8 +138,9 @@ export class DebugPanel {
       ? state.simRoute.map((p, i) => (i < state.simDone ? `${p} (feito)` : p)).join('  ›  ')
       : 'Sem pontos: o carro faz a volta externa';
     if (state.simRoute.length) {
-      el.simRouteText.textContent = `Coleta ${state.simRoute[0]}` + (state.simRoute[1] ? ` · Entrega ${state.simRoute[1]}` : '') +
-        (state.simRoute.length > 2 ? ` · +${state.simRoute.length - 2}` : '') + ` (feitos: ${state.simDone})`;
+      const total = state.simRoute.length;
+      el.simRouteText.textContent = state.simRoute.map((p, i) => `${roleName(i, total)} ${p}`).join(' · ') +
+        ` (feitos: ${state.simDone})`;
     }
     el.planModeHint.textContent = state.planMode === 'car'
       ? 'Igual ao código: lane_guide_map do navigation.py decide a faixa em cada placa de desvio.'
