@@ -600,17 +600,3 @@ python CtrlManual.py
 | **PID Control** | https://en.wikipedia.org/wiki/Proportional%E2%80%93integral%E2%80%93derivative_controller |
 | **Serial Comm** | https://pyserial.readthedocs.io/                                                          |
 | **Flask**       | https://flask.palletsprojects.com/                                                        |
-
----
-
-## 👥 Contribuições
-
-Este projeto é de código aberto. Contribuições são bem-vindas!
-
-### Como Contribuir
-
-1. Fork o repositório
-2. Crie branch: `git checkout -b feature/sua-feature`
-3. Commit: `git commit -m "Descrição da mudança"`
-4. Push: `git push origin feature/sua-feature`
-5. Abra Pull Request
