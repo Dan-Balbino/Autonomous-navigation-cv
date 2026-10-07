@@ -139,7 +139,7 @@ load_config_from_file()
 _dashboard_ip = get_local_ip()
 
 print(f"Dashboard http://{_dashboard_ip}:{DASHBOARD_PORT}/")
-_twin_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),"DigitalTwin", "index.html")
+_twin_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend", "DigitalTwin", "index.html")
 
 # Libera a porta no Firewall do Windows (silencioso — requer admin na primeira vez)
 if not _image_test_mode:

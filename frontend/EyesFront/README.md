@@ -12,7 +12,7 @@ publicado pelo `main.py` e ajusta as expressões em tempo real.
 Alternativa sem o Flask servindo os arquivos:
 
    ```bash
-   cd EyesFront
+   cd frontend/EyesFront
    python -m http.server 8010
    ```
 

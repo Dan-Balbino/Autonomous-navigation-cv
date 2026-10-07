@@ -194,6 +194,19 @@ def test_eyes_are_served(client):
     assert client.get("/eyes/src/main.js").status_code == 200
 
 
+def test_road_map_is_served(client):
+    r = client.get("/road")
+    assert r.status_code in (301, 302, 308) and r.headers["Location"].endswith("/road/")
+    assert client.get("/road/").status_code == 200
+    assert client.get("/road/src/main.js").status_code == 200
+    assert client.get("/road/vendor/three/three.module.min.js").status_code == 200
+    assert client.get("/road/models/car.glb").status_code == 200
+
+
+def test_panel_has_map_button(client):
+    assert "/road/" in client.get("/panel").get_data(as_text=True)
+
+
 def test_digital_twin_is_served(client):
     assert client.get("/").status_code == 200
     assert client.get("/src/js/main.js").status_code == 200

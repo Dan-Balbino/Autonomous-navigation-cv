@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-07T03:10:00-03:00",
+  "title": "Design System: APEX RoadPanel",
+  "extensions": {
+    "colorMeta": {
+      "route": { "role": "primary", "displayName": "Fita da rota", "canonical": "#2f7bff", "tonalRamp": ["#081a3d", "#0d2a63", "#123b8a", "#1f5fd8", "#2f7bff", "#5f98ff", "#9cc4ff", "#d6e6ff"] },
+      "route-strong": { "role": "primary", "displayName": "Azul de controle", "canonical": "#1f5fd8", "tonalRamp": ["#071634", "#0c2559", "#13377f", "#1a4cab", "#1f5fd8", "#4a7fe6", "#86aaf0", "#c7d8fa"] },
+      "void": { "role": "neutral", "displayName": "Vazio azul-noite", "canonical": "#05080e", "tonalRamp": ["#05080e", "#080c14", "#0c1220", "#111a2c", "#1a2539", "#2b3a55", "#4d5f80", "#7486a1"] },
+      "ink": { "role": "neutral", "displayName": "Tinta fria", "canonical": "#eef3fa", "tonalRamp": ["#3c4658", "#55617a", "#7486a1", "#8fa0ba", "#a9b8cf", "#c6d1e2", "#dde5f1", "#eef3fa"] },
+      "live": { "role": "tertiary", "displayName": "Ao vivo", "canonical": "#2fd38a" },
+      "sim": { "role": "tertiary", "displayName": "Simulação", "canonical": "#ffb21a" },
+      "stop": { "role": "tertiary", "displayName": "Sem sinal / parada", "canonical": "#e0334f" }
+    },
+    "typographyMeta": {
+      "speed": { "displayName": "Velocidade", "purpose": "Número principal do HUD, topo central." },
+      "distance": { "displayName": "Distância", "purpose": "Distância até a próxima manobra no guia." },
+      "body": { "displayName": "Texto", "purpose": "Rótulo da manobra e textos do debug." },
+      "label": { "displayName": "Rótulo", "purpose": "Métricas, títulos do debug e origem do dado; largura 85%, caixa alta." }
+    },
+    "shadows": [
+      { "name": "drawer", "value": "0 18px 50px rgba(0, 0, 0, 0.55)", "purpose": "Única sombra do HUD: a gaveta de debug sobre a cena." }
+    ],
+    "motion": [
+      { "name": "ease-out", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Entradas do HUD (gaveta, troca de manobra)." },
+      { "name": "route-reveal", "value": "1100ms ease-out cúbico (shader)", "purpose": "Fita da rota acende a partir do carro quando a rota muda." },
+      { "name": "chase-camera", "value": "aproximação exponencial, taxa 5.5/s", "purpose": "Câmera segue o carro sem tremer." }
+    ],
+    "breakpoints": [
+      { "name": "compact", "value": "760px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Botão primário",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Ação principal no debug (Pausar/Andar).",
+      "html": "<button class=\"ds-btn-primary\">Pausar</button>",
+      "css": ".ds-btn-primary { background: #1f5fd8; color: #fff; border: 1px solid #1f5fd8; border-radius: 8px; padding: 7px 12px; font: 600 13px Saira, system-ui, sans-serif; cursor: pointer; transition: background-color 0.2s; } .ds-btn-primary:hover { background: #2a6be6; } .ds-btn-primary:focus-visible { outline: 2px solid #9cc4ff; outline-offset: 2px; }"
+    },
+    {
+      "name": "Controle segmentado",
+      "kind": "nav",
+      "refersTo": "segmented",
+      "description": "Escolha exclusiva no debug: fonte do dado, semáforo, câmera.",
+      "html": "<div class=\"ds-seg\"><button aria-checked=\"false\">Servidor</button><button aria-checked=\"true\">Simulação</button></div>",
+      "css": ".ds-seg { display: flex; gap: 3px; padding: 3px; border-radius: 10px; background: rgba(156,196,255,0.08); } .ds-seg button { flex: 1; padding: 7px 6px; border: 0; border-radius: 7px; background: transparent; color: #a9b8cf; font: 500 13px Saira, system-ui, sans-serif; cursor: pointer; } .ds-seg button:hover { color: #eef3fa; } .ds-seg button[aria-checked='true'] { background: #1f5fd8; color: #fff; }"
+    },
+    {
+      "name": "Pontos da rota",
+      "kind": "chip",
+      "refersTo": "route-point-current",
+      "description": "Progresso da rota A/B/C: concluído, atual, pendente.",
+      "html": "<ol class=\"ds-route\"><li class=\"done\"><span>✓</span></li><li class=\"current\"><span>B</span></li><li><span>C</span></li></ol>",
+      "css": ".ds-route { display: flex; gap: 6px; list-style: none; padding: 0; margin: 0; } .ds-route span { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; font: 700 17px Saira, sans-serif; color: #a9b8cf; background: rgba(156,196,255,0.08); border: 1px solid rgba(156,196,255,0.12); } .ds-route .current span { background: #1f5fd8; border-color: #1f5fd8; color: #fff; } .ds-route .done span { background: transparent; color: #2fd38a; }"
+    },
+    {
+      "name": "Guia de manobra",
+      "kind": "card",
+      "refersTo": "guide-panel",
+      "description": "Próxima manobra com ícone desenhado, distância e rótulo.",
+      "html": "<section class=\"ds-maneuver\"><svg viewBox=\"0 0 48 48\"><path d=\"M17 41V27a9 9 0 0 1 9-9h13\"/><path d=\"M32 11l7 7-7 7\"/></svg><div><div class=\"d\">1,2 m</div><div class=\"l\">Desvio à direita · rumo ao ponto B</div></div></section>",
+      "css": ".ds-maneuver { display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: center; padding: 18px 20px; background: rgba(9,14,25,0.78); border: 1px solid rgba(156,196,255,0.12); border-radius: 14px; color: #eef3fa; font-family: Saira, system-ui, sans-serif; } .ds-maneuver svg { width: 46px; height: 46px; fill: none; stroke: #eef3fa; stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; } .ds-maneuver .d { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; } .ds-maneuver .l { font-size: 15px; color: #a9b8cf; }"
+    },
+    {
+      "name": "Origem do dado",
+      "kind": "custom",
+      "refersTo": "source",
+      "description": "Indicador fixo no topo: ao vivo (verde), simulação (âmbar), sem sinal (vermelho).",
+      "html": "<div class=\"ds-source\"><span class=\"dot\"></span>Simulação</div>",
+      "css": ".ds-source { display: flex; align-items: center; gap: 8px; font: 600 13px Saira, sans-serif; font-stretch: 85%; letter-spacing: 0.1em; text-transform: uppercase; color: #ffb21a; } .ds-source .dot { width: 8px; height: 8px; border-radius: 50%; background: #ffb21a; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "O mapa de condução de um BYD, na pista do APEX",
+    "overview": "Câmera de perseguição atrás do carro, a pista sumindo na névoa do horizonte e uma única fita azul que é a rota A/B/C esperada. O HUD fica sobre a cena em texto branco frio; o único painel sólido é o guia de manobra e rota. A origem do dado está sempre visível e a simulação nunca se passa por dado real.",
+    "keyCharacteristics": ["Cena 3D em tela cheia", "Fita da rota com reveal ao mudar a rota", "HUD sem caixas, Saira com números tabulares", "Origem do dado sempre visível"],
+    "rules": [
+      { "name": "Fonte do dado tem cor própria", "body": "Verde só para dado real do servidor; âmbar para simulação; vermelho para sem sinal.", "section": "colors" },
+      { "name": "Texto branco só sobre route-strong", "body": "O azul da fita (#2f7bff) não serve de fundo de texto; controles usam #1f5fd8.", "section": "colors" },
+      { "name": "Brilho só na cena", "body": "Halos e glow pertencem à cena 3D; o HUD não usa sombras coloridas.", "section": "elevation" }
+    ],
+    "dos": ["Mostrar sempre a origem do dado", "Tratar rota vazia como volta externa", "Desenhar ícones em SVG no mesmo traço"],
+    "donts": ["Usar verde na simulação", "Halos coloridos no HUD", "Glifos Unicode como ícone", "Cobrir o carro com o HUD"]
+  }
+}
