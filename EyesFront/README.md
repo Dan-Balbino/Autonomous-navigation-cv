@@ -6,7 +6,10 @@ publicado pelo `main.py` e ajusta as expressões em tempo real.
 ## Como rodar
 
 1. Rode o `main.py` normalmente (ele sobe o servidor Flask do `messaging/messaging_core.py` na porta 5000).
-2. Sirva esta pasta:
+2. Abra `http://<ip-do-carro>:5000/eyes/`, ou clique em **Abrir EyesFront** no painel web
+   (aba "Conexão e registros"). O próprio Flask serve esta pasta, e os olhos usam a API da mesma origem.
+
+Alternativa sem o Flask servindo os arquivos:
 
    ```bash
    cd EyesFront
@@ -42,12 +45,12 @@ até o sinal voltar; ao reconectar eles "procuram" ao redor.
 
 | Situação do carro | Expressão |
 | --- | --- |
-| Servo virando | Olhar acompanha a curva |
+| Servo virando (> 90 direita, < 90 esquerda) | Olhar vai para o lado da curva com a mesma amplitude do procurar |
 | Obstáculo perto de um lado | Olhos espiam aquele lado e ficam preocupados |
 | Sensor frontal entra em "perto", pessoa detectada ou PWM zera sem PARE/vermelho | `surprise` |
 | Sensor sai de livre/longe direto para crítico | `fright` (depois `search`) |
 | Placa de PARE ou semáforo vermelho | `squint` com óculos enquanto durar |
-| PWM >= 150 (sai abaixo de 120) | `accelerate` |
+| PWM >= 100 (sai abaixo de 85) | `accelerate`, já no máximo |
 | Velocidade de cruzeiro | Olhar focado (pálpebras determinadas), passeia menos |
 | Partida / sinal verde depois de esperar | Olhar feliz |
 | Desvio à direita | `search` |

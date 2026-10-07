@@ -140,12 +140,13 @@
     "mirror": true,              // true = tela na frente do carro olhando para fora (esquerda do carro aparece à direita)
     "steeringInvert": false,     // Inverte o sentido do servo se os olhos olharem para o lado errado nas curvas
     "steeringRange": 45,         // Desvio do servo (graus a partir de 90) que leva o olhar ao máximo
-    "steeringGazePx": 26,        // Quanto os olhos acompanham a curva (pixels)
+                                 // A amplitude do olhar na curva é a mesma do procurar (search.distance x search.speed);
+                                 // para usar outro valor, adicione "steeringGazePx" (pixels)
     "obstacleGlancePx": 14,      // Quanto os olhos espiam o lado de um obstáculo próximo (pixels)
-    "acceleratePwmOn": 150,      // PWM a partir do qual entra a animação de acelerar
-    "acceleratePwmOff": 120,     // PWM abaixo do qual sai de acelerar (histerese)
+    "acceleratePwmOn": 100,      // PWM a partir do qual entra a animação de alta velocidade (máx. testado: 170)
+    "acceleratePwmOff": 85,      // PWM abaixo do qual sai de acelerar (histerese)
     "focusPwmMin": 30,           // PWM em que o olhar começa a ficar focado
-    "focusPwmMax": 200,          // PWM de foco máximo (pálpebras determinadas)
+    "focusPwmMax": 100,          // PWM em que a expressão de velocidade chega ao máximo
     "sleepAfterIdleMs": 45000,   // Parado por esse tempo começa a ficar com sono
     "sleepRampMs": 8000,         // Tempo para o sono chegar ao máximo
     "lowBatteryPercent": 20,     // Bateria igual ou abaixo disso = olhos cansados

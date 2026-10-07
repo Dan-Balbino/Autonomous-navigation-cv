@@ -40,7 +40,10 @@ export class FaceEngine {
     this.config = config;
     this.animator = new Animator();
     this.elements = createFaceElements();
-    this.carMood = new CarMood(config.car);
+    // Nas curvas o olhar vai tão longe quanto na animação de procurar (idle)
+    const search = config.animations?.search || {};
+    const searchReach = (search.distance ?? 80) * (search.speed ?? 1.5);
+    this.carMood = new CarMood({ steeringGazePx: searchReach, ...config.car });
     this.keyPresses = {};
     this.debugText = "";
     this.state = {
@@ -586,7 +589,8 @@ export class FaceEngine {
     s.moodWorry = approach(s.moodWorry, mood.worry, rates.mood, delta);
     s.moodSleepy = approach(s.moodSleepy, mood.sleepy, rates.mood, delta);
     s.moodHappy = approach(s.moodHappy, mood.happy, rates.mood * 2, delta);
-    s.gazeX = approach(s.gazeX, mood.gazeX, rates.gaze, delta);
+    // Enquanto procura, o próprio procurar comanda o olhar (evita somar os dois e sair da tela)
+    s.gazeX = approach(s.gazeX, s.searchStartTime ? 0 : mood.gazeX, rates.gaze, delta);
     s.gazeY = approach(s.gazeY, mood.gazeY, rates.gaze, delta);
 
     // Surpresa/susto escancaram os olhos: as pálpebras se abrem

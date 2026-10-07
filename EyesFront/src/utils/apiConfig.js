@@ -7,7 +7,9 @@
  * Prioridade para montar a URL:
  * 1) querystring (?apiBase=http://host:porta/api)
  * 2) querystring (?apiHost=127.0.0.1&apiPort=5000)
- * 3) host atual + porta 5000 (DASHBOARD_PORT do main.py)
+ * 3) mesma origem, quando a página é servida pelo próprio Flask em /eyes/
+ *    (botão "Abrir EyesFront" do painel web)
+ * 4) host atual + porta 5000 (DASHBOARD_PORT do main.py)
  *
  * Flags extras:
  * - ?demo=1  -> usa um carro simulado (nao precisa do main.py rodando)
@@ -38,6 +40,11 @@ function buildApiBaseUrl() {
   const explicitBase = getParam("apiBase");
   if (explicitBase) {
     return normalizeBase(explicitBase);
+  }
+
+  const servedByCarServer = window.location.pathname.startsWith("/eyes/");
+  if (servedByCarServer && !getParam("apiHost") && !getParam("apiPort")) {
+    return `${window.location.origin}/api`;
   }
 
   const apiHost = getParam("apiHost") || window.location.hostname || "127.0.0.1";
