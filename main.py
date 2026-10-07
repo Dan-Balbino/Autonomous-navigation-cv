@@ -148,7 +148,7 @@ if not _image_test_mode:
 
 # ── Inicialização dos objetos ───────────────
 corrector = FisheyeCorrector("calibration/fisheye_calibration.npz", width, height, balance=0.63, offset_x=-90)
-sign_det = ObjectDetector("model/modelo_5.pt")
+sign_det = ObjectDetector("model/modelo_7.pt")
 car = Car(COM)
 rc = RemoteControl()
 nav = Navigation()

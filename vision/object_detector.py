@@ -35,7 +35,7 @@ class ObjectDetector:
     STOP_VALID_COLOR = (0, 165, 255)            # Laranja forte
     PERSON_VALID_COLOR = (255, 0, 0)            # Azul
     PERSON_INVALID_COLOR = INVALID_COLOR
-    RIGHT_DETOUR_VALID_COLOR = (153, 255, 180)  # Verde claro para placa de desvio válida
+    RIGHT_DETOUR_VALID_COLOR = (255, 0, 180)  # Magenta
     STOP_POINT_COLORS = {
         "ponto_a": (255, 128, 0),
         "ponto_b": (0, 200, 255),
