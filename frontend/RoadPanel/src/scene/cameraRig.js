@@ -3,6 +3,7 @@
  * - chase: atrás e acima do carro, olhando à frente (padrão, estilo BYD);
  * - top:   pista inteira vista de cima, levemente inclinada;
  * - free:  órbita livre com o mouse (debug).
+ * Em perseguição, `setFocus()` sobe a câmera para enquadrar um trecho (prévia GPS na PARE).
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -23,6 +24,12 @@ export class CameraRig {
     this.lookAt = new THREE.Vector3();
     this.trackCenter = new THREE.Vector3(IMAGE_SIZE.w / 2 * PX_TO_WORLD, 0, IMAGE_SIZE.h / 2 * PX_TO_WORLD);
     this.initialized = false;
+    this.focus = null;
+  }
+
+  /** Enquadra { center, radius, dir } (ou null para voltar a seguir o carro). */
+  setFocus(focus) {
+    this.focus = focus;
   }
 
   setMode(mode) {
@@ -48,6 +55,16 @@ export class CameraRig {
       const height = Math.max(span / aspect, IMAGE_SIZE.h * PX_TO_WORLD) * 0.95;
       target = new THREE.Vector3(this.trackCenter.x, height, this.trackCenter.z + height * 0.42);
       look = this.trackCenter.clone();
+    } else if (this.focus) {
+      // Quase de cima, um pouco atrás do carro; o carro fica acima do cartão da prévia
+      const { center, radius, dir } = this.focus;
+      const portrait = (this.camera.aspect || 1.6) < 0.9;
+      // O topo da tela tem o HUD: o alvo mira um pouco além do meio para a placa descer
+      const height = radius * (portrait ? 5.2 : 2.7) + 4;
+      const back = radius * 0.55 + 1.5;
+      const aim = center.clone().addScaledVector(dir, radius * (portrait ? 0.32 : 0.12));
+      target = new THREE.Vector3(aim.x - dir.x * back, height, aim.z - dir.z * back);
+      look = aim;
     } else {
       const c = (this.camera.aspect || 1.6) < 0.9 ? CHASE_PORTRAIT : CHASE;
       target = new THREE.Vector3(car.x - car.dirX * c.back, c.up, car.z - car.dirZ * c.back);
@@ -59,7 +76,7 @@ export class CameraRig {
       this.initialized = true;
     }
     // Aproximação exponencial: segue o carro sem tremer e sem atraso perceptível
-    const k = 1 - Math.exp(-dt * (this.mode === 'top' ? 3 : 5.5));
+    const k = 1 - Math.exp(-dt * (this.mode === 'top' || this.focus ? 2.6 : 5.5));
     this.camera.position.lerp(target, k);
     this.lookAt.lerp(look, Math.min(1, k * 1.6));
     this.camera.lookAt(this.lookAt);

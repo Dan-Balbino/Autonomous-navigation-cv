@@ -21,6 +21,7 @@ import { buildSigns } from './scene/signs.js';
 import { Car } from './scene/car.js';
 import { RouteRibbon } from './scene/routeRibbon.js';
 import { Proximity } from './scene/proximity.js';
+import { GpsPreview } from './scene/gpsPreview.js';
 import { CameraRig } from './scene/cameraRig.js';
 import { CarLink, apiBase } from './data/carLink.js';
 import { Hud } from './ui/hud.js';
@@ -29,7 +30,7 @@ import { SignEditor, loadSavedSigns } from './ui/signEditor.js';
 import { loader } from './ui/loader.js';
 
 const LIGHT_BY_CODE = { 0: 'red', 1: 'yellow', 2: 'green' };
-const STOP_HOLD_MS = 2000;
+const STOP_HOLD_MS = 3000;   // igual a STOP_WAIT_SECONDS do detector de placas
 const START = { edgeId: 'topo-1', s: 0 };
 // Modelo do carro real (versão web de 3DModel/base_basic_pbr.glb, ver tools/optimize_car.py)
 const CAR_MODEL_URL = 'models/car.glb';
@@ -44,7 +45,8 @@ const state = {
   metersPerPx: 0.005,
   planMode: 'car',             // 'car' (lógica do carro) | 'shortest' (menor caminho)
   pwmToMs: 0.004,              // m/s por unidade de PWM quando a telemetria não traz velocidade
-  pointConfirmed: false,       // o servidor confirmou um ponto desde o último quadro
+  pointConfirmed: false,
+  cruiseMs: 0.4,               // velocidade típica do carro real (para o tempo estimado)       // o servidor confirmou um ponto desde o último quadro
   // Trajetória atual
   plan: null,
   s: 0,                        // posição do carro na trajetória (px)
@@ -130,6 +132,8 @@ await car.loadModel(CAR_MODEL_URL, { yaw: CAR_MODEL_YAW })
     console.warn('Modelo do carro indisponível:', error);
     document.getElementById('modelHint').textContent = 'Modelo do carro indisponível; usando o bloco provisório';
   });
+const gps = new GpsPreview();
+scene.add(gps.group);
 const proximity = new Proximity();
 car.root.add(proximity.group);
 const ribbon = new RouteRibbon();
@@ -384,6 +388,72 @@ function adaptQuality(now) {
   }
 }
 
+// ── Prévia GPS na PARE ───────────────────────────────────────────────────
+// Parado na placa PARE: mostra o caminho até a próxima placa, com distância e tempo.
+const SIGN_EVENTS = new Set(['point', 'detour', 'traffic-light', 'stop']);
+const gpsEl = {
+  card: document.getElementById('gpsCard'),
+  status: document.getElementById('gpsStatus'),
+  target: document.getElementById('gpsTarget'),
+  distance: document.getElementById('gpsDistance'),
+  eta: document.getElementById('gpsEta'),
+};
+const gpsState = { stopped: false, since: 0, target: null };
+
+function stoppedAtStop(now) {
+  if (state.freeDrive) return false;
+  if (state.source === 'sim') return now < state.stopHoldUntil;
+  const data = state.linkStatus === 'live' ? state.liveData : null;
+  return Boolean(data && data.stopActive);
+}
+
+function nextSign() {
+  const next = state.plan.events.find((e) => SIGN_EVENTS.has(e.type) && e.s > state.s + 12);
+  if (next) return next;
+  return { type: 'start', s: state.plan.length };
+}
+
+function signName(event) {
+  if (event.type === 'start') return 'Largada';
+  if (event.type === 'point') {
+    const mission = missionView();
+    const index = mission.all.indexOf(event.point, mission.doneCount);
+    if (event.target && index >= 0) return `${['Coleta', 'Entrega'][index] || 'Parada'} · ponto ${event.point}`;
+    return `Ponto ${event.point}`;
+  }
+  return event.sign?.label || 'Placa';
+}
+
+const formatMeters = (m) => (m < 1 ? `${Math.round(m * 100)} cm` : `${m.toFixed(1).replace('.', ',')} m`);
+
+function updateGps(now) {
+  const stopped = stoppedAtStop(now);
+  if (stopped && !gpsState.stopped) {
+    gpsState.since = now;
+    gpsState.target = nextSign();
+    gps.show(state.plan, state.s, gpsState.target, now);
+    gpsEl.target.textContent = signName(gpsState.target);
+    gpsEl.card.hidden = false;
+  } else if (!stopped && gpsState.stopped) {
+    gps.hide(now);
+    gpsEl.card.hidden = true;
+  }
+  gpsState.stopped = stopped;
+  if (gps.active && gps.plan !== state.plan) {
+    gps.hide(now);
+    gpsEl.card.hidden = true;
+  }
+  rig.setFocus(gps.active ? gps.focus() : null);
+  if (!gps.active) return;
+
+  const meters = Math.max(0, gpsState.target.s - state.s) * state.metersPerPx;
+  const speed = state.source === 'sim' ? state.simSpeed : state.cruiseMs;
+  const left = Math.max(0, Math.ceil((gpsState.since + STOP_HOLD_MS - now) / 1000));
+  gpsEl.distance.textContent = formatMeters(meters);
+  gpsEl.eta.textContent = speed > 0.02 ? `~${Math.max(1, Math.round(meters / speed))} s` : '--';
+  gpsEl.status.textContent = left > 0 ? `Parado na placa · segue em ${left} s` : 'Parado na placa';
+}
+
 // ── Loop ─────────────────────────────────────────────────────────────────
 let last = performance.now();
 let firstFrame = true;
@@ -450,6 +520,9 @@ function frame(now) {
   const wz = shown.y * PX_TO_WORLD;
   car.place(wx, wz, dirX, dirZ);
   ribbon.tick(now, state.freeDrive ? 0 : state.s);
+  if (state.source === 'live' && speedMs > 0.05) state.cruiseMs += (speedMs - state.cruiseMs) * Math.min(1, dt * 0.5);
+  updateGps(now);
+  gps.tick(now);
   proximity.update(state.source === 'live' && state.linkStatus === 'live' ? state.liveData?.proximity : null, dt);
   track.tick(now / 1000);
 
@@ -459,8 +532,9 @@ function frame(now) {
   signs.setLight(light);
 
   const chase = rig.mode === 'chase';
-  scene.fog.near = chase ? 12 : 300;
-  scene.fog.far = chase ? 40 : 400;
+  const framing = chase && gps.active;
+  scene.fog.near = chase && !framing ? 12 : 300;
+  scene.fog.far = chase && !framing ? 40 : 400;
   rig.update({ x: wx, z: wz, dirX, dirZ }, dt);
   renderer.render(scene, camera);
   adaptQuality(now);

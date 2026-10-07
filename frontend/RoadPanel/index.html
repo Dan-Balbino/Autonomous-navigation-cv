@@ -75,6 +75,23 @@
     <div class="metric"><span class="metric-label">Servo</span><span class="metric-value" id="servoValue">90°</span></div>
     <div class="metric"><span class="metric-label">Bateria</span><span class="metric-value" id="batteryValue">--</span></div>
     <div class="metric"><span class="metric-label">Modo</span><span class="metric-value" id="modeValue">--</span></div>
+    <section class="gps-card" id="gpsCard" hidden aria-live="polite">
+      <div class="gps-kicker">
+        <span class="gps-stop">PARE</span>
+        <span id="gpsStatus">Parado na placa</span>
+      </div>
+      <div class="gps-main">
+        <svg class="gps-pin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></svg>
+        <div class="gps-text">
+          <span class="gps-label">Próxima placa</span>
+          <span class="gps-target" id="gpsTarget">--</span>
+        </div>
+        <div class="gps-figures">
+          <span class="gps-distance" id="gpsDistance">--</span>
+          <span class="gps-eta" id="gpsEta">--</span>
+        </div>
+      </div>
+    </section>
     <p class="estimate-note" id="estimateNote" hidden>Posição estimada pela velocidade ao longo da rota</p>
   </footer>
 
