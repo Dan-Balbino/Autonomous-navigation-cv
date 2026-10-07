@@ -1,49 +1,32 @@
 import { setStyles } from "../utils/dom.js";
 
 /**
- * Animação de flutuação (sobe e desce) com rotação opcional dos olhos
+ * Animacao de flutuacao (sobe e desce) com rotacao opcional dos olhos.
+ * `state.bobWeight` (0..1) atenua a flutuacao suavemente em vez de congela-la
+ * no meio do movimento quando outra animacao assume.
  * @param {Object} stage - Elemento stage
- * @param {Object} config - Configuração da animação bob
+ * @param {Object} config - Configuracao da animacao bob
  * @param {number} scale - Escala geral do rosto
- * @param {Object} state - Estado da animação (leftEyeRotation, rightEyeRotation serão atualizados)
+ * @param {Object} state - Estado da animacao (leftEyeRotation, rightEyeRotation serao atualizados)
  * @param {number} now - Timestamp atual
  */
 export function animateBob(stage, config, scale, state, now) {
   const { durationMs, y, rotate, directionLeft, directionRight } = config;
-  const phase = (now / durationMs) % (Math.PI * 2);
-  const offset = Math.sin(phase) * y;
-  
-  // Arredonda para evitar sub-pixels que podem causar travamentos
-  const roundedOffset = Math.round(offset * 100) / 100;
-  const roundedScale = Math.round(scale * 1000) / 1000;
+  const weight = state.bobWeight ?? 1;
+  const phase = now / durationMs;
+  const offset = Math.sin(phase) * y * weight;
 
   setStyles(stage, {
-    transform: `translateY(${roundedOffset}px) scale(${roundedScale})`,
+    transform: `translate3d(0, ${offset.toFixed(2)}px, 0) scale(${scale})`,
   });
-  
-  // Se rotate > 0, aplica rotação nos olhos durante o ciclo
+
   if (rotate > 0) {
-    // Calcula a rotação baseada no ciclo (0 a 1, depois volta)
-    // Usa seno para criar ciclo suave de rotação
-    const rotationPhase = (Math.sin(phase) + 1) / 2; // Normaliza de 0 a 1
-    
-    // Calcula o ângulo de rotação baseado no phase e na direção
-    // directionLeft: 0 = horário, 180 = anti-horário
-    // directionRight: 0 = horário, 180 = anti-horário
-    const leftRotation = directionLeft === 180 
-      ? -rotate * rotationPhase  // Anti-horário (negativo)
-      : rotate * rotationPhase;  // Horário (positivo)
-    
-    const rightRotation = directionRight === 180
-      ? -rotate * rotationPhase  // Anti-horário (negativo)
-      : rotate * rotationPhase;  // Horário (positivo)
-    
-    state.leftEyeRotation = leftRotation;
-    state.rightEyeRotation = rightRotation;
+    const rotationPhase = ((Math.sin(phase) + 1) / 2) * weight;
+    // direction: 0 = horario, 180 = anti-horario
+    state.leftEyeRotation = (directionLeft === 180 ? -rotate : rotate) * rotationPhase;
+    state.rightEyeRotation = (directionRight === 180 ? -rotate : rotate) * rotationPhase;
   } else {
-    // Se rotate = 0, não rotaciona
     state.leftEyeRotation = 0;
     state.rightEyeRotation = 0;
   }
 }
-

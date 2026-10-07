@@ -32,7 +32,10 @@ function init() {
     const signalStopValueEl = document.getElementById('signalStopValue');
     const signalLightValueEl = document.getElementById('signalLightValue');
     const signalReasonValueEl = document.getElementById('signalReasonValue');
-            const signalRightDetourValueEl = document.getElementById('signalRightDetourValue');
+    const signalRightDetourValueEl = document.getElementById('signalRightDetourValue');
+
+    if (!imageElement) {
+        console.error('Elemento da imagem não encontrado');
         return;
     }
 

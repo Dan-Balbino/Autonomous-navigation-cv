@@ -17,6 +17,8 @@ from messaging.messaging_core import (
     update_frames as dashboard_update_frames,
     update_vehicle_info as dashboard_update_vehicle_info,
     push_log as dashboard_push_log,
+    register_action as dashboard_register_action,
+    pop_reconnect_request as dashboard_pop_reconnect_request,
 )
 from vision.calibration import FisheyeCorrector
 from config.setup import (
@@ -168,6 +170,40 @@ def log(msg, tag="info"):
     dashboard_push_log(msg, tag)
 
 
+# ── Ações do painel web (mesmas funções dos botões do painel Python) ────────
+def _web_add_route_point(point):
+    nav.add_point(point)
+    log(f"[ROTA] Ponto {point} adicionado (painel web)", "info")
+    return [str(item) for item in nav.route]
+
+
+def _web_remote(op):
+    def _action():
+        getattr(rc, op)()
+        connected_ok = rc.connected if op == "connect" else True
+        log(f"[REMOTE] {rc.feedback}", "info" if connected_ok else "warn")
+        return rc.feedback
+    return _action
+
+
+def _web_close():
+    # Mesmo efeito do "Fechar" do painel Python: para o carro e encerra o painel
+    # (e o programa). O close é enfileirado no thread do Qt para ser seguro.
+    from PySide6.QtCore import QMetaObject, Qt as _Qt
+    panel.running = False
+    log("[PAINEL WEB] Encerrando o sistema pelo botão Fechar", "warn")
+    threading.Timer(
+        0.5,
+        lambda: QMetaObject.invokeMethod(panel.window, "close", _Qt.QueuedConnection),
+    ).start()
+
+
+dashboard_register_action("add_route_point", _web_add_route_point)
+dashboard_register_action("remote_connect", _web_remote("connect"))
+dashboard_register_action("remote_disconnect", _web_remote("disconnect"))
+dashboard_register_action("close", _web_close)
+
+
 def pidHub(erro, pid_straight, pid_curve, pid_close_curve, dt=0.2):
     close_curve_error = panel.get(
         "IMAGEM",
@@ -201,6 +237,10 @@ def mainLoop():
     while True:
         # ── Reconexão dinâmica (solicitada pelo painel) ───────────────
         req = panel.get_connection()
+        if not req:
+            web_req = dashboard_pop_reconnect_request()
+            if web_req:
+                req = (web_req["com"], camera_idx)
         if req:
             if _image_test_mode:
                 log("[TESTE] Reconexão de câmera/Arduino indisponível com imagens.", "warn")
@@ -530,9 +570,19 @@ def mainLoop():
         dashboard_update_vehicle_info({
             "hud": hud,
             "raw_rx": last_rx,
+            # Último comando enviado ao Arduino (usado pelos olhos do EyesFront)
+            "command": car.command.to_dict(),
+            "camera_idx": camera_idx,
+            "com": car.COM,
+            "remote": {"connected": rc.connected, "feedback": rc.feedback},
             "telemetry": {
                 "speed": car.telemetry.speed,
                 "battery": car.telemetry.battery,
+                "battery_state": car.telemetry.battery_state,
+                "speed1": car.telemetry.speed1,
+                "speed2": car.telemetry.speed2,
+                "speed3": car.telemetry.speed3,
+                "speed4": car.telemetry.speed4,
                 "left": car.telemetry.left,
                 "f_left": car.telemetry.f_left,
                 "f_right": car.telemetry.f_right,

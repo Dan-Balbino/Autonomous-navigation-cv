@@ -25,9 +25,12 @@ export class Animator {
     this.isRunning = false;
   }
 
-  tick(now) {
+  tick() {
     if (!this.isRunning) return;
-    const delta = Math.min(64, now - this.lastTime);
+    // Usa o mesmo relógio dos gatilhos (performance.now): o timestamp do rAF pode
+    // ficar atrás deles e gerar tempos decorridos negativos nas animações
+    const now = performance.now();
+    const delta = Math.max(0, Math.min(64, now - this.lastTime));
     this.lastTime = now;
     this.animations.forEach((fn) => fn(now, delta));
     requestAnimationFrame(this.tick);

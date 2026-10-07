@@ -11,6 +11,7 @@ from flask import Flask, jsonify, request, send_from_directory, redirect, url_fo
 app = Flask(__name__)
 
 _TWIN_DIR   = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "DigitalTwin"))
+_EYES_DIR   = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "EyesFront"))
 _CONFIG_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "config/config.json"))
 
 _lock = threading.Lock()
@@ -71,8 +72,17 @@ _config: dict = {
     "SEMÁFORO_Diagonal mínima da caixa (px)":         0,
     "SEMÁFORO_Timeout (ms)":                       2000,
     "SEMÁFORO_Intervalo IA (frames)":                 5,
+    "DESVIO DIREITA_Confiança (%)":                  80,
+    "DESVIO DIREITA_Diagonal mínima da caixa (px)":   0,
+    "DESVIO DIREITA_Frames seguidos":                 3,
     "PESSOAS_Confiança (%)":                         50,
     "PESSOAS_Diagonal mínima da caixa (px)":          0,
+    "PONTO A_Confiança (%)":                         40,
+    "PONTO A_Diagonal mínima da caixa (px)":          0,
+    "PONTO B_Confiança (%)":                         40,
+    "PONTO B_Diagonal mínima da caixa (px)":          0,
+    "PONTO C_Confiança (%)":                         40,
+    "PONTO C_Diagonal mínima da caixa (px)":          0,
     "running":                                    False,
 }
 _config_updated = False
@@ -192,6 +202,43 @@ def update_state(pwm, running, *, real_speed=None, battery=None,
             _state["tabDashboard_right_detour_active"] = bool(right_detour_active)
 
 
+# ── Ações do painel web que dependem de objetos do main.py ───────────────────
+# O main.py registra aqui as mesmas funções que o painel Python executa
+# (rota, controle remoto, fechar), já que o servidor não conhece nav/rc/panel.
+_actions_lock = threading.Lock()
+_actions: dict = {}
+
+
+def register_action(name: str, fn) -> None:
+    with _actions_lock:
+        _actions[name] = fn
+
+
+def _run_action(name: str, *args):
+    with _actions_lock:
+        fn = _actions.get(name)
+    if fn is None:
+        return False, "Ação indisponível (main.py não registrou)"
+    try:
+        result = fn(*args)
+    except Exception as exc:
+        return False, str(exc)
+    return True, result
+
+
+# ── Reconexão pedida pelo painel web (consumida pelo loop do main.py) ────────
+_reconnect_lock = threading.Lock()
+_reconnect_request: dict | None = None
+
+
+def pop_reconnect_request() -> dict | None:
+    """Retorna {"com": str|None} se o painel web pediu reconexão (com=None = modo teste)."""
+    global _reconnect_request
+    with _reconnect_lock:
+        req, _reconnect_request = _reconnect_request, None
+    return req
+
+
 def pop_config_update() -> dict | None:
     """Retorna config se o painel web a atualizou, senão None. Limpa o flag."""
     global _config_updated
@@ -258,11 +305,103 @@ def api_reset():
                     _config[k] = v
             _config_updated = True
             snapshot = dict(_config)
+        push_log("[PAINEL WEB] Valores restaurados do config.json", "info")
         return jsonify({"ok": True, "config": snapshot})
     except FileNotFoundError:
+        push_log("[PAINEL WEB] Nenhum config.json encontrado", "error")
         return jsonify({"ok": False, "error": "config.json não encontrado"}), 404
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/save", methods=["POST"])
+def api_save():
+    """Grava a configuração atual no config.json (mesmo efeito do Salvar do painel Python)."""
+    data = request.get_json(force=True, silent=True) or {}
+    with _lock:
+        _config.update({k: v for k, v in data.items() if k != "running"})
+        snapshot = {k: v for k, v in _config.items() if k != "running"}
+    try:
+        os.makedirs(os.path.dirname(_CONFIG_PATH), exist_ok=True)
+        with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(snapshot, f, indent=4)
+    except Exception as e:
+        push_log(f"[PAINEL WEB] Falha ao salvar: {e}", "error")
+        return jsonify({"ok": False, "error": str(e)}), 500
+    push_log("[PAINEL WEB] Configurações salvas", "info")
+    return jsonify({"ok": True})
+
+
+# ── API: conexão (porta COM / modo teste) ─────────────────────────────────────
+@app.route("/api/ports")
+def api_ports():
+    try:
+        from serial.tools import list_ports
+        ports = [p.device for p in list_ports.comports()]
+    except Exception:
+        ports = []
+    return jsonify({"ports": ports})
+
+
+@app.route("/api/reconnect", methods=["POST"])
+def api_reconnect():
+    global _reconnect_request
+    data = request.get_json(force=True, silent=True) or {}
+    test_mode = bool(data.get("test_mode"))
+    com = None if test_mode else (str(data.get("com") or "").strip() or None)
+    if not test_mode and com is None:
+        push_log("[CONEXÃO] Selecione uma porta COM ou ative o modo teste", "warn")
+        return jsonify({"ok": False, "error": "Selecione uma porta COM ou ative o modo teste"}), 400
+    with _reconnect_lock:
+        _reconnect_request = {"com": com}
+    if test_mode:
+        push_log("[CONEXÃO] Modo teste ativado (painel web)", "info")
+    else:
+        push_log(f"[CONEXÃO] Reconectando → COM={com} (painel web)", "info")
+    return jsonify({"ok": True})
+
+
+# ── API: ações que dependem do main.py (rota, controle remoto, fechar) ────────
+@app.route("/api/route", methods=["POST"])
+def api_route_add():
+    data = request.get_json(force=True, silent=True) or {}
+    point = str(data.get("point") or "").strip().upper()
+    if point not in ("A", "B", "C"):
+        return jsonify({"ok": False, "error": "Ponto inválido"}), 400
+    ok, result = _run_action("add_route_point", point)
+    status = 200 if ok else 503
+    return jsonify({"ok": ok, "route": result if ok else None, "error": None if ok else result}), status
+
+
+@app.route("/api/remote/<op>", methods=["POST"])
+def api_remote(op):
+    if op not in ("connect", "disconnect"):
+        return jsonify({"ok": False, "error": "Operação inválida"}), 404
+    ok, result = _run_action(f"remote_{op}")
+    status = 200 if ok else 503
+    return jsonify({"ok": ok, "feedback": result if ok else None, "error": None if ok else result}), status
+
+
+@app.route("/api/close", methods=["POST"])
+def api_close():
+    ok, result = _run_action("close")
+    status = 200 if ok else 503
+    return jsonify({"ok": ok, "error": None if ok else result}), status
+
+
+@app.route("/api/qrcode")
+def api_qrcode():
+    """QR Code do link do Digital Twin (mesmo do botão QR Code do painel Python)."""
+    import io
+    import qrcode
+    url = request.host_url.rstrip("/")
+    qr = qrcode.QRCode(box_size=6, border=3)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="#cdd6f4", back_color="#1e1e2e")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return Response(buf.getvalue(), mimetype="image/png")
 
 
 # ── API: informações do veículo (telemetria, PID, placa de pare, semáforo) ───
@@ -308,6 +447,19 @@ def panel_page():
     return _PANEL_HTML
 
 
+# ── Olhos do carro (EyesFront, arquivos estáticos) ────────────────────────────
+# A barra final importa: o index.html dos olhos usa caminhos relativos (./src/...).
+@app.route("/eyes")
+def eyes_redirect():
+    return redirect("/eyes/")
+
+
+@app.route("/eyes/")
+@app.route("/eyes/<path:filename>")
+def eyes_static(filename="index.html"):
+    return send_from_directory(_EYES_DIR, filename)
+
+
 # ── Digital Twin (arquivos estáticos) ─────────────────────────────────────────
 @app.route("/")
 def index():
@@ -329,7 +481,7 @@ _PANEL_HTML = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#181825">
-<title>AutoCar — Painel</title>
+<title>Interface de Controle ─ APEX</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -372,7 +524,7 @@ header h1{font-size:14px;color:var(--fg);flex:1;letter-spacing:1px;white-space:n
 #statusText{flex:1}
 
 /* ── Action buttons ── */
-.actions{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:10px 16px;border-bottom:1px solid var(--border)}
+.actions{display:grid;grid-template-columns:repeat(4,1fr) auto;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border)}
 .btn{
   padding:10px 8px;border:none;border-radius:var(--radius);
   font-family:var(--font);font-size:12px;font-weight:bold;
@@ -384,7 +536,7 @@ header h1{font-size:14px;color:var(--fg);flex:1;letter-spacing:1px;white-space:n
 .btn-stop {background:var(--red);color:#1e1e2e}
 .btn-reset{background:var(--orange);color:#1e1e2e}
 .btn-save {background:var(--purple);color:#1e1e2e}
-@media(max-width:520px){.actions{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.actions{grid-template-columns:1fr 1fr}.actions .btn-close{grid-column:1/-1}}
 
 /* ── Indicadores de sinais (placa de pare / semáforo / motivo da parada) ── */
 .signal-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px 16px}
@@ -525,13 +677,69 @@ input[type=range]:disabled::-moz-range-thumb{background:var(--muted);cursor:not-
 .log-line{padding:2px 0}
 .log-ts{color:var(--muted)}
 .conn-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.log-header{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.log-header .section-title{margin:0;padding:0;border:none;flex:1}
+.link-btn{background:transparent;border:none;color:var(--muted);font-family:var(--font);font-size:11px;cursor:pointer;padding:4px 6px}
+.link-btn:hover{color:var(--fg)}
+
+/* ── Botões secundários (mesmas cores do painel Python) ── */
+.btn-close{background:var(--border);color:var(--fg)}
+.btn-teal{background:var(--teal);color:#1e1e2e}
+.btn-green{background:var(--green);color:#1e1e2e}
+.btn-red{background:var(--red);color:#1e1e2e}
+.btn-purple{background:var(--purple);color:#1e1e2e}
+.btn-blue{background:var(--blue);color:#1e1e2e}
+.btn-dark{background:var(--border);color:var(--fg)}
+.btn-block{width:100%}
+.btn-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stack{display:flex;flex-direction:column;gap:8px}
+
+/* ── Cabeçalho das câmeras ── */
+.cam-title{color:var(--blue);font-size:10px;font-weight:bold;letter-spacing:1.4px}
+
+/* ── Slider de velocidade: faixa vermelha abaixo do mínimo de 30 PWM (igual ao painel Python) ── */
+input[type=range].speed{background:linear-gradient(to right,var(--red) 0,var(--red) 15%,var(--border) 15.1%,var(--border) 100%)}
+
+/* ── Velocidade das rodas ── */
+.wheel-grid{display:grid;grid-template-columns:1fr;gap:10px 16px}
+@media(min-width:560px){.wheel-grid{grid-template-columns:1fr 1fr}}
+.wheel-head{display:flex;justify-content:space-between;margin-bottom:5px;font-size:12px}
+.wheel-head .val{color:var(--teal);font-weight:bold}
+.bar{height:12px;background:var(--console);border:1px solid var(--border);border-radius:5px;overflow:hidden}
+.bar-fill{height:100%;width:0;background:var(--blue);border-radius:4px;transition:width .3s}
+
+/* ── Métrica da bateria (percentual + estado) ── */
+.metric-sub{color:var(--teal);font-size:11px;font-weight:bold;margin-top:2px}
+
+/* ── Formulários (rota / conexão) ── */
+.form-row{display:flex;align-items:center;gap:10px;padding:4px 0;flex-wrap:wrap}
+.form-row .grow{flex:1}
+select{
+  background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;
+  padding:8px 10px;font-family:var(--font);font-size:12px;min-height:38px;min-width:80px;
+}
+.icon-btn{background:transparent;border:none;color:var(--blue);font-weight:bold;font-size:18px;cursor:pointer;min-width:34px;min-height:38px}
+.check{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;padding:6px 0;user-select:none}
+.check input{width:16px;height:16px;accent-color:var(--blue)}
+.muted-small{color:var(--muted);font-size:10px;word-break:break-all}
+.teal-text{color:var(--teal);font-weight:bold;font-size:12px;word-break:break-word}
+.ops-grid{display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:12px}
+@media(min-width:720px){.ops-grid{grid-template-columns:1fr 1fr}}
+.ops-grid .info-card{display:flex;flex-direction:column;gap:8px}
+
+/* ── Modal do QR Code ── */
+.modal{position:fixed;inset:0;background:rgba(17,17,27,.8);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
+.modal[hidden]{display:none}
+.modal-box{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;align-items:center;gap:10px;max-width:100%}
+.modal-box img{max-width:100%;image-rendering:pixelated}
+.modal-box .url{color:var(--blue);font-size:10px;word-break:break-all;text-align:center}
 </style>
 </head>
 <body>
 
 <div class="top-bar">
   <header>
-    <h1>Painel de Controle — APEX</h1>
+    <h1>Interface de Controle ─ APEX</h1>
     <button class="edit-btn" id="editBtn" title="Editar configurações" onclick="toggleEdit()">
       <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
     </button>
@@ -546,8 +754,9 @@ input[type=range]:disabled::-moz-range-thumb{background:var(--muted);cursor:not-
   <div class="actions">
     <button class="btn btn-start" onclick="setRunning(true)">▶ Iniciar</button>
     <button class="btn btn-stop"  onclick="setRunning(false)">■ Parar</button>
-    <button class="btn btn-reset" onclick="resetConfig()">↺ Resetar</button>
+    <button class="btn btn-reset" onclick="resetConfig()">↻ Resetar</button>
     <button class="btn btn-save"  onclick="saveConfig()">Salvar</button>
+    <button class="btn btn-close" onclick="closeSystem()" title="Fechar painel">✕ Fechar</button>
   </div>
 
   <div class="signal-row">
@@ -567,7 +776,7 @@ input[type=range]:disabled::-moz-range-thumb{background:var(--muted);cursor:not-
 
   <div class="cam-section">
     <div class="cam-toolbar">
-      <div class="cam-hint">Câmeras ao vivo — mesmo feed do painel Python.</div>
+      <div class="cam-hint">Câmeras ao vivo — atualização de até 30 FPS, sem fila de frames.</div>
       <label class="switch">
         <input type="checkbox" id="camToggle" checked onchange="toggleCameras(this.checked)">
         <span class="switch-track"><span class="switch-thumb"></span></span>
@@ -576,16 +785,19 @@ input[type=range]:disabled::-moz-range-thumb{background:var(--muted);cursor:not-
     </div>
     <div class="cam-grid" id="camGrid">
       <div class="cam-card">
-        <div class="cam-img-wrap"><img data-src="/api/stream/road" alt="Câmera da pista" loading="lazy"></div>
-        <div class="cam-caption">CÂMERA DA PISTA — imagem original com ROI</div>
+        <div class="cam-title">CÂMERA DA PISTA</div>
+        <div class="cam-img-wrap"><img data-src="/api/stream/road" alt="Aguardando câmera" loading="lazy"></div>
+        <div class="cam-caption">Imagem original com região de interesse</div>
       </div>
       <div class="cam-card">
-        <div class="cam-img-wrap"><img data-src="/api/stream/bird" alt="Vista superior" loading="lazy"></div>
-        <div class="cam-caption">VISTA SUPERIOR — bird-eye view e faixas</div>
+        <div class="cam-title">BIRD-EYE VIEW</div>
+        <div class="cam-img-wrap"><img data-src="/api/stream/bird" alt="Aguardando câmera" loading="lazy"></div>
+        <div class="cam-caption">Bird-eye view e detecção de faixas</div>
       </div>
       <div class="cam-card">
-        <div class="cam-img-wrap"><img data-src="/api/stream/sign" alt="Sinais" loading="lazy"></div>
-        <div class="cam-caption">SINAIS — detecções do modelo de IA</div>
+        <div class="cam-title">SINAIS</div>
+        <div class="cam-img-wrap"><img data-src="/api/stream/sign" alt="Aguardando câmera" loading="lazy"></div>
+        <div class="cam-caption">Elementos detectados pelo modelo de IA</div>
       </div>
     </div>
   </div>
@@ -600,7 +812,7 @@ input[type=range]:disabled::-moz-range-thumb{background:var(--muted);cursor:not-
 
 <div class="tab-content active" id="tabPista">
   <div class="pid-card">
-    <div class="section-title" style="margin-bottom:10px">PID utilizado pelo veículo</div>
+    <div class="section-title" style="margin-bottom:10px">PID da direção</div>
     <div class="pid-grid">
       <div>
         <div class="pid-col-title">RETA</div>
@@ -635,10 +847,14 @@ input[type=range]:disabled::-moz-range-thumb{background:var(--muted);cursor:not-
     <span class="small" id="vehicleLastUpdate">Sem atualização</span>
   </div>
   <div class="metrics-grid">
-    <div class="metric-card"><div class="metric-value" id="mSpeedReceived">--</div><div class="metric-label">VELOCIDADE RECEBIDA</div></div>
-    <div class="metric-card"><div class="metric-value" id="mBattery">--</div><div class="metric-label">BATERIA</div></div>
-    <div class="metric-card"><div class="metric-value" id="mSpeedApplied">--</div><div class="metric-label">VELOCIDADE APLICADA</div></div>
+    <div class="metric-card"><div class="metric-value" id="mSpeedReceived">--</div><div class="metric-label">VELOCIDADE ESTIMADA</div></div>
+    <div class="metric-card"><div class="metric-value" id="mBattery">--%</div><div class="metric-sub" id="mBatteryState">--</div><div class="metric-label">BATERIA</div></div>
+    <div class="metric-card"><div class="metric-value" id="mSpeedApplied">--</div><div class="metric-label">PWM APLICADO</div></div>
     <div class="metric-card"><div class="metric-value" id="mServo">--</div><div class="metric-label">SERVO</div></div>
+  </div>
+  <div class="info-card" style="margin-bottom:12px">
+    <div class="section-title">Velocidade das rodas</div>
+    <div class="wheel-grid" id="wheelGrid"></div>
   </div>
   <div class="info-grid">
     <div class="info-card">
@@ -650,13 +866,23 @@ input[type=range]:disabled::-moz-range-thumb{background:var(--muted);cursor:not-
     </div>
     <div class="info-card">
       <div class="section-title">Ultrassônicos</div>
-      <div class="info-row"><span>Frontal</span><span class="val" id="iFront">--</span></div>
       <div class="info-row"><span>Esquerdo</span><span class="val" id="iLeft">--</span></div>
+      <div class="info-row"><span>Frontal esquerdo</span><span class="val" id="iFLeft">--</span></div>
+      <div class="info-row"><span>Frontal direito</span><span class="val" id="iFRight">--</span></div>
       <div class="info-row"><span>Direito</span><span class="val" id="iRight">--</span></div>
     </div>
     <div class="info-card" style="grid-column:1/-1">
       <div class="section-title">Módulos</div>
-      <div id="canModules"><div class="info-row"><span>Nenhum módulo CAN</span></div></div>
+      <div id="canModules"><div class="info-row"><span>Nenhum módulo conectado</span></div></div>
+    </div>
+    <div class="info-card" style="grid-column:1/-1">
+      <div class="section-title">Pontos de parada</div>
+      <div class="form-row">
+        <span class="grow">Adicionar ponto</span>
+        <select id="routePoint"><option>A</option><option>B</option><option>C</option></select>
+        <button class="btn btn-green" onclick="addRoutePoint()">Adicionar</button>
+      </div>
+      <div class="info-row"><span>Rota atual</span><span class="val" id="iRoute">Nenhum ponto</span></div>
     </div>
   </div>
   <div class="raw-card">
@@ -666,12 +892,51 @@ input[type=range]:disabled::-moz-range-thumb{background:var(--muted);cursor:not-
 </div>
 
 <div class="tab-content" id="tabLog">
-  <div class="conn-card">
-    <span>API</span>
-    <span id="connStatus" style="color:var(--muted)">Verificando...</span>
+  <div class="ops-grid">
+    <div class="info-card">
+      <div class="section-title">Conexão</div>
+      <div class="form-row">
+        <span>COM</span>
+        <select id="comSelect" class="grow"></select>
+        <button class="icon-btn" title="Atualizar portas" onclick="refreshPorts(true)">↻</button>
+      </div>
+      <div class="info-row"><span>ID da câmera</span><span class="val" id="iCameraId">--</span></div>
+      <label class="check"><input type="checkbox" id="testMode"> Sem Arduino (modo teste)</label>
+      <button class="btn btn-teal btn-block" onclick="reconnect()">Reconectar</button>
+    </div>
+    <div class="info-card">
+      <div class="section-title">Mensageria</div>
+      <div class="muted-small" id="apiUrl">API: --</div>
+      <div class="btn-row">
+        <button class="btn btn-green" onclick="window.location.href='/'">Abrir Digital Twin</button>
+        <button class="btn btn-blue" onclick="window.open('/eyes/','_blank')" title="Abre os olhos do carro em uma nova aba">Abrir EyesFront</button>
+      </div>
+      <button class="btn btn-dark btn-block" id="copyBtn" onclick="copyLink()">Copiar link</button>
+      <button class="btn btn-purple btn-block" onclick="showQr(true)">QR Code</button>
+      <div class="info-row"><span>Conexão com a API</span><span class="val" id="connStatus" style="color:var(--muted)">Verificando...</span></div>
+    </div>
+    <div class="info-card">
+      <div class="section-title">Controle remoto</div>
+      <div class="teal-text" id="remoteStatus">--</div>
+      <div class="btn-row">
+        <button class="btn btn-green" onclick="remoteAction('connect')">Conectar</button>
+        <button class="btn btn-red" onclick="remoteAction('disconnect')">Desconectar</button>
+      </div>
+    </div>
   </div>
-  <div class="section-title">Log</div>
+  <div class="log-header">
+    <div class="section-title">Log</div>
+    <button class="link-btn" onclick="clearLog()">limpar</button>
+  </div>
   <div class="log-box" id="logBox"></div>
+</div>
+
+<div class="modal" id="qrModal" hidden onclick="showQr(false)">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <img id="qrImg" alt="QR Code do Dashboard">
+    <div class="url" id="qrUrl"></div>
+    <button class="btn btn-dark" onclick="showQr(false)">Fechar</button>
+  </div>
 </div>
 
 <script>
@@ -728,11 +993,37 @@ const SIGNAL_SECTIONS=[
     {key:"SEMÁFORO_Timeout (ms)",label:"Timeout (ms)",min:250,max:10000,default:2000},
     {key:"SEMÁFORO_Intervalo IA (frames)",label:"Intervalo IA (frames)",min:1,max:30,default:5},
   ]},
+  {title:"DESVIO DIREITA",controls:[
+    {key:"DESVIO DIREITA_Confiança (%)",label:"Confiança (%)",min:0,max:100,default:80},
+    {key:"DESVIO DIREITA_Diagonal mínima da caixa (px)",label:"Diagonal mínima da caixa (px)",min:0,max:1000,default:0},
+    {key:"DESVIO DIREITA_Frames seguidos",label:"Frames seguidos",min:1,max:30,default:3},
+  ]},
   {title:"PESSOAS",controls:[
     {key:"PESSOAS_Confiança (%)",label:"Confiança (%)",min:0,max:100,default:50},
     {key:"PESSOAS_Diagonal mínima da caixa (px)",label:"Diagonal mínima da caixa (px)",min:0,max:1000,default:0},
   ]},
+  {title:"PONTO A",controls:[
+    {key:"PONTO A_Confiança (%)",label:"Confiança (%)",min:0,max:100,default:40},
+    {key:"PONTO A_Diagonal mínima da caixa (px)",label:"Diagonal mínima da caixa (px)",min:0,max:1000,default:0},
+  ]},
+  {title:"PONTO B",controls:[
+    {key:"PONTO B_Confiança (%)",label:"Confiança (%)",min:0,max:100,default:40},
+    {key:"PONTO B_Diagonal mínima da caixa (px)",label:"Diagonal mínima da caixa (px)",min:0,max:1000,default:0},
+  ]},
+  {title:"PONTO C",controls:[
+    {key:"PONTO C_Confiança (%)",label:"Confiança (%)",min:0,max:100,default:40},
+    {key:"PONTO C_Diagonal mínima da caixa (px)",label:"Diagonal mínima da caixa (px)",min:0,max:1000,default:0},
+  ]},
 ];
+
+// Mesmos rótulos do painel Python
+const WHEELS=[
+  ['speed1','Roda frontal esquerda'],
+  ['speed2','Roda traseira esquerda'],
+  ['speed3','Roda frontal direita'],
+  ['speed4','Roda traseira direita'],
+];
+const BATTERY_STATES=['Sem corrente','Carregando','Carregada','Descarregando','Bateria baixa'];
 
 let debounceTimer=null,pendingUpdate={},currentConfig={},editMode=false,logCursor=0;
 
@@ -797,7 +1088,7 @@ function buildSections(containerId, sections){
           <span class="ctrl-val" id="${id}L">${formatValue(ctrl.key,val)}</span>
         </div>
         <div class="range-wrap">
-          <input type="range" id="${id}I" min="${ctrl.min}" max="${ctrl.max}" value="${sliderValue(ctrl.key,val)}" disabled>
+          <input type="range" id="${id}I" class="${ctrl.speed?'speed':''}" min="${ctrl.min}" max="${ctrl.max}" value="${sliderValue(ctrl.key,val)}" ${editMode?'':'disabled'}>
         </div>
         ${ctrl.speed?'<span class="ctrl-warning">Valores abaixo de 30 PWM são tratados como 0 — mínimo para movimentar o carro.</span>':''}`;
       card.appendChild(row);
@@ -840,10 +1131,143 @@ function flushUpdate(){
     .catch(()=>setStatus('Erro ao salvar'));
 }
 
+// Salvar: grava no config.json (igual ao painel Python), incluindo ajustes ainda não enviados
 function saveConfig(){
-  fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(currentConfig)})
-    .then(()=>setStatus('Configuração salva '+new Date().toLocaleTimeString()))
+  clearTimeout(debounceTimer);
+  const payload={...currentConfig,...pendingUpdate};
+  delete payload.running;
+  fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.ok){ pendingUpdate={}; setStatus('Configurações salvas '+new Date().toLocaleTimeString()); }
+      else setStatus('Erro ao salvar: '+(data.error||''));
+    })
     .catch(()=>setStatus('Sem conexão'));
+}
+
+// Fechar: mesmo efeito do painel Python (para o carro e encerra o sistema)
+function closeSystem(){
+  if(!confirm('Fechar o painel encerra o sistema do carro (igual ao botão Fechar do painel Python). Continuar?')) return;
+  fetch('/api/close',{method:'POST'})
+    .then(r=>r.json())
+    .then(data=>setStatus(data.ok?'Sistema encerrado':'Erro: '+(data.error||'falha ao fechar')))
+    .catch(()=>setStatus('Sem conexão'));
+}
+
+// ── Pontos de parada ──
+function addRoutePoint(){
+  const point=document.getElementById('routePoint').value;
+  fetch('/api/route',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({point})})
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.ok){ setRoute(data.route); setStatus('Ponto '+point+' adicionado'); }
+      else setStatus('Erro: '+(data.error||'falha ao adicionar ponto'));
+    })
+    .catch(()=>setStatus('Sem conexão'));
+}
+
+function setRoute(route){
+  const text=Array.isArray(route)?(route.length?route.join(' → '):'Nenhum ponto'):(route||'Nenhum ponto');
+  document.getElementById('iRoute').textContent=text;
+}
+
+// ── Conexão ──
+let comInitialized=false;
+function refreshPorts(logIt){
+  const select=document.getElementById('comSelect');
+  const previous=select.value;
+  return fetch('/api/ports').then(r=>r.json()).then(data=>{
+    const ports=data.ports||[];
+    select.innerHTML=ports.map(p=>`<option>${p}</option>`).join('');
+    if(ports.includes(previous)) select.value=previous;
+    if(logIt) appendLocalLog(`[CONEXÃO] Portas atualizadas: [${ports.map(p=>"'"+p+"'").join(', ')}]`,'info');
+  }).catch(()=>{ if(logIt) appendLocalLog('[CONEXÃO] Falha ao listar portas','error'); });
+}
+
+function reconnect(){
+  const testMode=document.getElementById('testMode').checked;
+  const com=document.getElementById('comSelect').value;
+  if(!testMode && !com){
+    appendLocalLog('[CONEXÃO] Selecione uma porta COM ou ative o modo teste','warn');
+    return;
+  }
+  fetch('/api/reconnect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({com,test_mode:testMode})})
+    .then(r=>r.json())
+    .then(data=>setStatus(data.ok?'Reconexão solicitada':'Erro: '+(data.error||'')))
+    .catch(()=>setStatus('Sem conexão'));
+}
+
+// ── Mensageria ──
+function dashboardUrl(){ return window.location.origin; }
+
+function copyLink(){
+  const url=dashboardUrl();
+  const done=()=>{
+    const btn=document.getElementById('copyBtn');
+    btn.textContent='Copiado!';
+    setTimeout(()=>btn.textContent='Copiar link',1500);
+  };
+  // navigator.clipboard só existe em HTTPS/localhost; na rede local usa o fallback
+  if(navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(url).then(done).catch(()=>fallbackCopy(url,done));
+  } else fallbackCopy(url,done);
+}
+
+function fallbackCopy(text,done){
+  const area=document.createElement('textarea');
+  area.value=text;
+  area.style.position='fixed';area.style.opacity='0';
+  document.body.appendChild(area);
+  area.select();
+  try{ document.execCommand('copy'); done(); }catch{ prompt('Copie o link:',text); }
+  document.body.removeChild(area);
+}
+
+function showQr(show){
+  const modal=document.getElementById('qrModal');
+  if(show){
+    document.getElementById('qrImg').src='/api/qrcode?t='+Date.now();
+    document.getElementById('qrUrl').textContent=dashboardUrl();
+  }
+  modal.hidden=!show;
+}
+
+// ── Controle remoto ──
+function remoteAction(op){
+  fetch('/api/remote/'+op,{method:'POST'})
+    .then(r=>r.json())
+    .then(data=>{
+      document.getElementById('remoteStatus').textContent=data.ok?data.feedback:('Erro: '+(data.error||''));
+    })
+    .catch(()=>setStatus('Sem conexão'));
+}
+
+// ── Log ──
+function appendLogLine(ts,msg,tag){
+  const box=document.getElementById('logBox');
+  const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 8;
+  const color=LOG_COLORS[tag]||'var(--fg)';
+  const line=document.createElement('div');
+  line.className='log-line';
+  line.innerHTML=`<span class="log-ts">[${ts}]</span> <span style="color:${color}">${msg}</span>`;
+  box.appendChild(line);
+  while(box.children.length>300) box.removeChild(box.firstChild);
+  if(atBottom) box.scrollTop=box.scrollHeight;
+}
+
+function appendLocalLog(msg,tag){
+  appendLogLine(new Date().toLocaleTimeString('pt-BR',{hour12:false}),msg,tag);
+}
+
+function clearLog(){ document.getElementById('logBox').innerHTML=''; }
+
+// ── Velocidade das rodas ──
+function buildWheels(){
+  document.getElementById('wheelGrid').innerHTML=WHEELS.map(([key,name])=>`
+    <div>
+      <div class="wheel-head"><span>${name}</span><span class="val" id="w_${key}">0.0 m/s</span></div>
+      <div class="bar"><div class="bar-fill" id="b_${key}"></div></div>
+    </div>`).join('');
 }
 
 function resetConfig(){
@@ -919,23 +1343,46 @@ async function syncVehicleInfo(){
 
     document.getElementById('mSpeedReceived').innerHTML=fmtNumber(telemetry.speed,' m/s');
     document.getElementById('mBattery').innerHTML=fmtNumber(telemetry.battery,'%');
+    document.getElementById('mBatteryState').textContent=BATTERY_STATES[telemetry.battery_state]||'--';
     document.getElementById('mSpeedApplied').innerHTML=fmtNumber(hud.speed,' PWM');
     document.getElementById('mServo').innerHTML=(hud.servo!==undefined?hud.servo+'°':'--');
+
+    WHEELS.forEach(([key])=>{
+      let v=parseFloat(telemetry[key]);
+      if(Number.isNaN(v)||v<0) v=0;
+      document.getElementById('w_'+key).textContent=v.toFixed(1)+' m/s';
+      document.getElementById('b_'+key).style.width=Math.min(100,Math.round(v*10))+'%';
+    });
 
     document.getElementById('iControlMode').textContent=hud.control_mode||'--';
     document.getElementById('iError').textContent=(hud.error!==undefined?hud.error:'--');
     document.getElementById('iPidMode').textContent=hud.pid_mode||'--';
     document.getElementById('iSignals').textContent=hud.signals||'--';
-    document.getElementById('iFront').innerHTML=sensorLabel(telemetry.front);
     document.getElementById('iLeft').innerHTML=sensorLabel(telemetry.left);
+    document.getElementById('iFLeft').innerHTML=sensorLabel(telemetry.f_left);
+    document.getElementById('iFRight').innerHTML=sensorLabel(telemetry.f_right);
     document.getElementById('iRight').innerHTML=sensorLabel(telemetry.right);
     document.getElementById('rawRx').textContent=info.raw_rx||'Nenhum retorno recebido';
+    setRoute(hud.route);
+
+    if(info.camera_idx!==undefined) document.getElementById('iCameraId').textContent=info.camera_idx;
+    if(info.remote) document.getElementById('remoteStatus').textContent=info.remote.feedback||'--';
+    // Estado inicial da conexão igual ao do painel Python (porta atual / modo teste)
+    if(!comInitialized && 'com' in info){
+      comInitialized=true;
+      document.getElementById('testMode').checked = info.com===null;
+      if(info.com){
+        const select=document.getElementById('comSelect');
+        if(![...select.options].some(o=>o.value===info.com)) select.add(new Option(info.com,info.com));
+        select.value=info.com;
+      }
+    }
 
     const can=telemetry.can||{};
     const canBox=document.getElementById('canModules');
     const names=Object.keys(can).sort();
     canBox.innerHTML = names.length===0
-      ? '<div class="info-row"><span>Nenhum módulo CAN</span></div>'
+      ? '<div class="info-row"><span>Nenhum módulo conectado</span></div>'
       : names.map(name=>{
           const on=can[name]===true;
           const color=on?'var(--green)':'var(--red)';
@@ -972,18 +1419,8 @@ async function syncLog(){
   try{
     const data=await fetch('/api/log?since='+logCursor).then(r=>r.json());
     if(!data.entries || data.entries.length===0){ logCursor=data.latest||logCursor; return; }
-    const box=document.getElementById('logBox');
-    const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 8;
-    data.entries.forEach(e=>{
-      const color=LOG_COLORS[e.tag]||'var(--fg)';
-      const line=document.createElement('div');
-      line.className='log-line';
-      line.innerHTML=`<span class="log-ts">[${e.ts}]</span> <span style="color:${color}">${e.msg}</span>`;
-      box.appendChild(line);
-    });
-    while(box.children.length>300) box.removeChild(box.firstChild);
+    data.entries.forEach(e=>appendLogLine(e.ts,e.msg,e.tag));
     logCursor=data.latest;
-    if(atBottom) box.scrollTop=box.scrollHeight;
   }catch{}
 }
 
@@ -1000,6 +1437,9 @@ fetch('/api/config').then(r=>r.json())
   })
   .catch(()=>setStatus('Sem conexão'));
 
+buildWheels();
+document.getElementById('apiUrl').textContent='API: '+dashboardUrl();
+refreshPorts(false);
 initCameras();
 setInterval(syncConfig,2000);
 setInterval(syncVehicleInfo,700);
