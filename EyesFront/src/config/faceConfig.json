@@ -37,17 +37,18 @@
     // Animação de piscar
     "blink": {
       "enabled": true,           // Ativar/desativar animação
-      "intervalMs": 10000,       // Intervalo entre piscadas (em milissegundos)
-      // Exemplos: 5000 = 5 segundos, 10000 = 10 segundos, 15000 = 15 segundos, 30000 = 30 segundos
-      "minScale": 0.08           // Escala mínima ao piscar (0.08 = quase fechado)
+      "intervalMs": 5000,        // Intervalo MÉDIO entre piscadas (ms) - cada piscada varia entre 55% e 145% disso
+      "minScale": 0.08,          // Escala mínima ao piscar (0.08 = quase fechado)
+      "durationMs": 220,         // Duração de uma piscada (fecha rápido, abre mais devagar); com sono fica mais lenta
+      "doubleBlinkChance": 0.2   // Chance (0-1) de uma piscada dupla
     },
     
     // Animação de olhar ao redor
     "look": {
       "enabled": true,           // Ativar/desativar animação
-      "durationMs": 4200,        // Duração de um ciclo completo (em milissegundos)
-      "radius": 3,               // Raio de movimento dos olhos (em pixels)
-      "smoothness": 0.18         // Suavidade do movimento (0-1, maior = mais suave)
+      "durationMs": 4200,        // Tempo máximo parado num ponto antes da próxima olhada (mínimo = 25% disso)
+      "radius": 8,               // Raio máximo das olhadas (em pixels) - diminui quando o carro acelera (foco)
+      "smoothness": 0.18         // Velocidade da olhada (maior = mais rápida)
     },
     
     // Animação de flutuação (sobe e desce)
@@ -75,6 +76,7 @@
     "squint": {
       "enabled": true,           // Ativar/desativar animação
       "durationMs": 5000,        // Duração de um ciclo completo (em milissegundos)
+      "minDurationMs": 2000,     // Tempo mínimo com óculos; com PARE/sinal vermelho ativo eles ficam até a condição sumir
       "horizontalAmplitude": 8,  // Amplitude do movimento horizontal (em pixels)
       "verticalAmplitude": 4,    // Amplitude do movimento vertical (em pixels)
       "diagonalAmplitude": 3,    // Amplitude do movimento diagonal (em pixels)
@@ -120,13 +122,53 @@
     // Acionada/desativada manualmente pressionando 'a' três vezes rapidamente (toggle)
     "accelerate": {
       "enabled": true,           // Ativar/desativar animação
-      "blinkScale": 0.4,         // Escala do piscar durante acelerar (0.4 = olhos 40% abertos, meio fechados)
+      "blinkScale": 0.6,         // Abertura dos olhos durante acelerar (0.6 = 60% abertos); as pálpebras completam o olhar determinado
       "transitionDuration": 300,  // Duração da transição ao ativar/desativar (em milissegundos)
       "trembleIntensity": 5,     // Intensidade do tremor em pixels (quanto maior, mais intenso) - aumentado para tremor mais visível
       "trembleChangeInterval": 2000,  // Intervalo para mudar a direção do tremor (em milissegundos) - padrão: 2 segundos
       "trembleTransitionDuration": 500,  // Duração da transição suave entre direções (em milissegundos) - padrão: 500ms
       "speedLinesCount": 60,     // Número de linhas de velocidade (quanto mais, mais denso o efeito) - aumentado para mais linhas
       "speedLinesSpeed": 1000    // Velocidade das linhas (em milissegundos para atravessar a tela e desaparecer - 1 segundo)
+    }
+  },
+
+  // Ligação com o objeto car (main.py -> GET /api/vehicle_info do messaging_core, porta 5000)
+  "car": {
+    "pollIntervalMs": 150,       // Intervalo entre leituras do carro
+    "requestTimeoutMs": 1200,    // Tempo máximo de cada requisição
+    "staleAfterMs": 3000,        // Sem dados novos por esse tempo = "sem sinal" (olhos sonolentos)
+    "mirror": true,              // true = tela na frente do carro olhando para fora (esquerda do carro aparece à direita)
+    "steeringInvert": false,     // Inverte o sentido do servo se os olhos olharem para o lado errado nas curvas
+    "steeringRange": 45,         // Desvio do servo (graus a partir de 90) que leva o olhar ao máximo
+    "steeringGazePx": 26,        // Quanto os olhos acompanham a curva (pixels)
+    "obstacleGlancePx": 14,      // Quanto os olhos espiam o lado de um obstáculo próximo (pixels)
+    "acceleratePwmOn": 150,      // PWM a partir do qual entra a animação de acelerar
+    "acceleratePwmOff": 120,     // PWM abaixo do qual sai de acelerar (histerese)
+    "focusPwmMin": 30,           // PWM em que o olhar começa a ficar focado
+    "focusPwmMax": 200,          // PWM de foco máximo (pálpebras determinadas)
+    "sleepAfterIdleMs": 45000,   // Parado por esse tempo começa a ficar com sono
+    "sleepRampMs": 8000,         // Tempo para o sono chegar ao máximo
+    "lowBatteryPercent": 20,     // Bateria igual ou abaixo disso = olhos cansados
+    "happyDurationMs": 1400,     // Duração do olhar feliz ao partir / sinal verde
+    "cooldownMs": {              // Intervalo mínimo entre repetições de cada reação
+      "fright": 4000,
+      "surprise": 2500,
+      "search": 6000,
+      "happy": 3000
+    }
+  },
+
+  // Fluidez das expressões
+  "expressions": {
+    "squashStretch": 0.25,       // Quanto os olhos esticam em movimentos rápidos (0 = desliga)
+    "smoothing": {               // Velocidade de cada transição (maior = mais rápida)
+      "gaze": 9,
+      "mood": 3.5,
+      "lids": 7,
+      "scale": 22,
+      "blink": 45,
+      "shock": 12,
+      "bob": 5
     }
   }
 }

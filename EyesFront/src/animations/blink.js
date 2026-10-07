@@ -1,125 +1,101 @@
-import { lerp } from "../utils/dom.js";
+import { lerp, easeInOut } from "../utils/dom.js";
+
+const SPECIAL_BLINK_MS = 220;
+const CLOSE_SHARE = 0.35; // a palpebra fecha rapido e abre mais devagar
 
 /**
- * Animação de piscar dos olhos
- * @param {Object} config - Configuração da animação blink
- * @param {Object} state - Estado da animação (blinkScale será atualizado)
+ * Curva de uma piscada: 0..1 de progresso -> escala vertical do olho.
+ */
+function blinkCurve(progress, minScale) {
+  let closed;
+  if (progress < CLOSE_SHARE) {
+    const t = progress / CLOSE_SHARE;
+    closed = t * t;
+  } else {
+    const t = (progress - CLOSE_SHARE) / (1 - CLOSE_SHARE);
+    closed = 1 - easeInOut(t);
+  }
+  return lerp(1, minScale, closed);
+}
+
+/**
+ * Executa uma piscada agendada (apos surpresa, durante procurar).
+ * Retorna true enquanto ela estiver em andamento.
+ */
+function runSpecialBlink(state, key, now, minScale) {
+  const startedAt = state[key];
+  if (!startedAt || now < startedAt) return false;
+  const progress = (now - startedAt) / SPECIAL_BLINK_MS;
+  if (progress < 1) {
+    state.blinkScale = blinkCurve(progress, minScale);
+    return true;
+  }
+  state[key] = null;
+  return false;
+}
+
+function scheduleNextBlink(state, now, intervalMs, sleepy) {
+  // Intervalo irregular (55%..145% da media) para nao parecer mecanico
+  const jitter = 0.55 + Math.random() * 0.9;
+  state.nextBlinkAt = now + intervalMs * jitter * (1 - sleepy * 0.3);
+}
+
+/**
+ * Animacao de piscar dos olhos
+ * @param {Object} config - Configuracao da animacao blink
+ * @param {Object} state - Estado da animacao (blinkScale sera atualizado)
  * @param {number} now - Timestamp atual
  */
 export function animateBlink(config, state, now) {
-  const { intervalMs, minScale } = config;
-  
-  // Verifica se deve piscar após surpresa
-  if (state.postSurpriseBlinkTime && now >= state.postSurpriseBlinkTime) {
-    const postBlinkElapsed = now - state.postSurpriseBlinkTime;
-    const postBlinkDuration = 200; // 200ms de duração do piscar
-    
-    if (postBlinkElapsed < postBlinkDuration) {
-      // Executa o piscar após surpresa
-      const blinkProgress = postBlinkElapsed / postBlinkDuration;
-      const blinkWave = Math.max(0, Math.sin(blinkProgress * Math.PI));
-      const easedWave = blinkWave < 0.5 
-        ? 2 * blinkWave * blinkWave 
-        : 1 - Math.pow(-2 * blinkWave + 2, 2) / 2;
-      
-      const scale = lerp(1, minScale, easedWave);
-      state.blinkScale = scale;
-      return;
-    } else {
-      // Piscar após surpresa terminou - limpa todos os estados relacionados
-      state.postSurpriseBlinkTime = null;
-      state.surpriseEndTime = null;
-      state.surpriseStartTime = null;
-    }
-  }
-  
-  // Verifica se deve piscar durante animação de procurar (na direita ou esquerda)
-  if (state.searchBlinkRightTime && now >= state.searchBlinkRightTime) {
-    const blinkElapsed = now - state.searchBlinkRightTime;
-    const blinkDuration = 200; // 200ms de duração do piscar
-    
-    if (blinkElapsed < blinkDuration) {
-      // Executa o piscar na direita
-      const blinkProgress = blinkElapsed / blinkDuration;
-      const blinkWave = Math.max(0, Math.sin(blinkProgress * Math.PI));
-      const easedWave = blinkWave < 0.5 
-        ? 2 * blinkWave * blinkWave 
-        : 1 - Math.pow(-2 * blinkWave + 2, 2) / 2;
-      
-      const scale = lerp(1, minScale, easedWave);
-      state.blinkScale = scale;
-      return;
-    } else {
-      // Piscar na direita terminou
-      state.searchBlinkRightTime = null;
-    }
-  }
-  
-  if (state.searchBlinkLeftTime && now >= state.searchBlinkLeftTime) {
-    const blinkElapsed = now - state.searchBlinkLeftTime;
-    const blinkDuration = 200; // 200ms de duração do piscar
-    
-    if (blinkElapsed < blinkDuration) {
-      // Executa o piscar na esquerda
-      const blinkProgress = blinkElapsed / blinkDuration;
-      const blinkWave = Math.max(0, Math.sin(blinkProgress * Math.PI));
-      const easedWave = blinkWave < 0.5 
-        ? 2 * blinkWave * blinkWave 
-        : 1 - Math.pow(-2 * blinkWave + 2, 2) / 2;
-      
-      const scale = lerp(1, minScale, easedWave);
-      state.blinkScale = scale;
-      return;
-    } else {
-      // Piscar na esquerda terminou
-      state.searchBlinkLeftTime = null;
-    }
-  }
-  
-  // Se está em animação de procurar, desabilita piscadas normais
-  if (state.searchStartTime) {
-    // Mantém olhos abertos durante a animação de procurar (exceto nas piscadas específicas acima)
-    state.blinkScale = 1;
-    return;
-  }
-  
-  // Se está em animação de susto, desabilita piscadas normais (o susto controla o blinkScale)
-  if (state.frightStartTime) {
-    // O blinkScale é controlado pela animação de susto (frightBlinkScale)
-    // Não faz nada aqui, deixa o susto controlar
-    return;
-  }
-  
-  // Se está em animação de acelerar, desabilita piscadas normais (o acelerar controla o blinkScale)
-  if (state.accelerateActive) {
-    // O blinkScale é controlado pela animação de acelerar (accelerateBlinkScale)
-    // Não faz nada aqui, deixa o acelerar controlar
-    return;
-  }
-  
-  // Animação normal de piscar (apenas quando não está em animação de procurar, susto ou acelerar)
-  const period = intervalMs;
-  const phase = (now % period) / period;
-  
-  // Duração rápida do piscar (200ms de duração total)
-  const blinkDuration = 200; // milissegundos
-  const blinkPhase = (now % period) / blinkDuration;
-  
-  // Se está dentro do período de piscar (primeiros 200ms de cada ciclo)
-  if (blinkPhase < 1) {
-    // Usa uma função de easing mais suave para o piscar
-    // Cria uma curva mais natural de abertura/fechamento
-    const blinkWave = Math.max(0, Math.sin(blinkPhase * Math.PI));
-    // Aplica easing para movimento mais suave
-    const easedWave = blinkWave < 0.5 
-      ? 2 * blinkWave * blinkWave 
-      : 1 - Math.pow(-2 * blinkWave + 2, 2) / 2;
-    
-    const scale = lerp(1, minScale, easedWave);
-    state.blinkScale = scale;
-  } else {
-    // Fora do período de piscar - olhos ficam abertos
-    state.blinkScale = 1;
-  }
-}
+  const { intervalMs = 5000, minScale = 0.08, durationMs = 220, doubleBlinkChance = 0.2 } = config;
+  const sleepy = state.moodSleepy || 0;
 
+  // Piscar depois da surpresa encerra o ciclo da surpresa
+  if (state.postSurpriseBlinkTime && now >= state.postSurpriseBlinkTime) {
+    if (runSpecialBlink(state, "postSurpriseBlinkTime", now, minScale)) return;
+    state.surpriseEndTime = null;
+    state.surpriseStartTime = null;
+  }
+
+  if (runSpecialBlink(state, "searchBlinkRightTime", now, minScale)) return;
+  if (runSpecialBlink(state, "searchBlinkLeftTime", now, minScale)) return;
+
+  // Durante procurar os olhos ficam abertos (exceto nas piscadas acima)
+  if (state.searchStartTime) {
+    state.blinkScale = 1;
+    return;
+  }
+
+  // O susto controla a abertura dos olhos sozinho
+  if (state.frightStartTime) {
+    return;
+  }
+
+  if (state.nextBlinkAt === undefined) {
+    scheduleNextBlink(state, now, intervalMs, sleepy);
+  }
+
+  if (state.blinkStartAt == null && now >= state.nextBlinkAt) {
+    state.blinkStartAt = now;
+    // Com sono a piscada fica lenta e pesada
+    state.blinkDurationMs = durationMs * (1 + sleepy * 1.5);
+  }
+
+  if (state.blinkStartAt != null) {
+    const progress = (now - state.blinkStartAt) / state.blinkDurationMs;
+    if (progress < 1) {
+      state.blinkScale = blinkCurve(progress, minScale);
+      return;
+    }
+    state.blinkStartAt = null;
+    if (!state.blinkIsDouble && Math.random() < doubleBlinkChance) {
+      state.blinkIsDouble = true;
+      state.nextBlinkAt = now + 110;
+    } else {
+      state.blinkIsDouble = false;
+      scheduleNextBlink(state, now, intervalMs, sleepy);
+    }
+  }
+
+  state.blinkScale = 1;
+}

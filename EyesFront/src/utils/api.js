@@ -1,184 +1,103 @@
 /**
- * Módulo para comunicação com a API de emoções
+ * Comunicacao com o carro.
+ *
+ * GET /api/vehicle_info devolve o snapshot montado no main.py:
+ *   {
+ *     hud: { running, speed (PWM efetivo), servo, stop_active,
+ *            traffic_light_code, right_detour_active, control_mode, ... },
+ *     telemetry: { speed, battery, left, f_left, f_right, right, can },
+ *     command?: car.command.to_dict()   // opcional: { run, lights, stop, servo, speed, reverse }
+ *     _ts: timestamp da ultima atualizacao
+ *   }
+ *
+ * Se o servidor passar a publicar `command` (car.command.to_dict()), ele tem
+ * prioridade sobre o hud e libera stop/reverse/pessoa detectada (bit 0b100 de lights).
  */
 
-import { API_BASE_URL } from "./apiConfig.js";
+import { VEHICLE_INFO_URL } from "./apiConfig.js";
 
-/**
- * Faz uma requisição GET para verificar o estado de uma emoção
- * @param {string} emotion - Nome da emoção (surprise, squint, search, fright, accelerate)
- * @returns {Promise<boolean>} - Retorna true se a emoção está ativa, false caso contrário
- */
-export async function getEmotion(emotion) {
-  try {
-    // Mapeia os nomes das animações para os endpoints da API
-    const endpointMap = {
-      surprise: "surprise",
-      squint: "squint",
-      search: "search",
-      fright: "frigh", // Note: a API usa "frigh" não "fright"
-      accelerate: "accelerate"
-    };
+// Zonas dos ultrassonicos (microcontroller/Apex/Types.h -> UltrassonicZone)
+export const ZONE = { FREE: 0, FAR: 1, NEAR: 2, CRITICAL: 3 };
 
-    const endpoint = endpointMap[emotion];
-    if (!endpoint) {
-      console.warn(`Emoção desconhecida: ${emotion}`);
-      return false;
-    }
+const LIGHT_PERSON_BIT = 0b100;
 
-    const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+function toNumber(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
 
-    if (!response.ok) {
-      console.error(`Erro ao buscar emoção ${emotion}:`, response.statusText);
-      return false;
-    }
+function toZone(value) {
+  const n = Math.round(toNumber(value, ZONE.FREE));
+  return Math.max(ZONE.FREE, Math.min(ZONE.CRITICAL, n));
+}
 
-    const data = await response.json();
-    // A API pode retornar um booleano diretamente ou um objeto com propriedades
-    // Verifica diferentes formatos possíveis
-    if (typeof data === 'boolean') {
-      return data;
-    }
-    if (typeof data === 'object' && data !== null) {
-      return data.value === true || data.active === true || data.enabled === true || data[emotion] === true;
-    }
-    return false;
-  } catch (error) {
-    console.error(`Erro ao buscar emoção ${emotion}:`, error);
-    return false;
-  }
+function asObject(value) {
+  return value && typeof value === "object" ? value : null;
 }
 
 /**
- * Faz uma requisição PUT para atualizar o estado de uma emoção para false
- * @param {string} emotion - Nome da emoção (surprise, squint, search, fright)
- * @returns {Promise<boolean>} - Retorna true se a atualização foi bem-sucedida
+ * Converte o JSON de /api/vehicle_info num estado plano e tipado.
+ * Retorna null enquanto o main.py ainda nao publicou nada (objeto vazio).
  */
-export async function setEmotionFalse(emotion) {
-  try {
-    // Mapeia os nomes das animações para os endpoints da API
-    const endpointMap = {
-      surprise: "surprise",
-      squint: "squint",
-      search: "search",
-      fright: "frigh", // Note: a API usa "frigh" não "fright"
-      // accelerate não deve usar PUT, apenas GET
-    };
+export function normalizeCarState(raw) {
+  const data = asObject(raw);
+  if (!data) return null;
 
-    const endpoint = endpointMap[emotion];
-    if (!endpoint) {
-      console.warn(`Emoção desconhecida ou não permitida para PUT: ${emotion}`);
-      return false;
-    }
+  const hud = asObject(data.hud);
+  const command = asObject(data.command);
+  const telemetry = asObject(data.telemetry) || {};
+  if (!hud && !command) return null;
 
-    const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(false), // Envia false diretamente
-    });
+  const lights = toNumber(command?.lights, 0);
+  const speed = toNumber(command?.speed ?? hud?.speed, 0);
+  const run = Boolean(command ? command.run : hud?.running);
+  const battery = toNumber(telemetry.battery, null);
 
-    if (!response.ok) {
-      console.error(`Erro ao atualizar emoção ${emotion}:`, response.statusText);
-      return false;
-    }
-
-    return true;
-  } catch (error) {
-    console.error(`Erro ao atualizar emoção ${emotion}:`, error);
-    return false;
-  }
+  return {
+    ts: toNumber(data._ts, null),
+    hasCommand: Boolean(command),
+    running: run || speed > 0,
+    speed,
+    servo: toNumber(command?.servo ?? hud?.servo, 90),
+    stop: Boolean(command?.stop),
+    reverse: Boolean(command?.reverse),
+    personDetected: Boolean(lights & LIGHT_PERSON_BIT),
+    stopSign: Boolean(hud?.stop_active),
+    trafficLight: toNumber(hud?.traffic_light_code, -1),
+    rightDetour: Boolean(hud?.right_detour_active),
+    manual: hud?.control_mode === "MANUAL",
+    realSpeed: toNumber(telemetry.speed, 0),
+    // 0 = BMS sem leitura; so valores positivos contam como nivel real
+    battery: battery !== null && battery > 0 ? battery : null,
+    sensors: {
+      left: toZone(telemetry.left),
+      frontLeft: toZone(telemetry.f_left),
+      frontRight: toZone(telemetry.f_right),
+      right: toZone(telemetry.right),
+    },
+  };
 }
 
 /**
- * Busca o estado de todas as emoções de uma vez com um único GET
- * Retorna toda a tabela de emoções
- * @returns {Promise<{data: Object, error: string|null}>} - Objeto com os dados e código de erro (429 para Too Many Requests)
+ * Busca o estado atual do carro.
+ * Sem header Content-Type para o GET continuar "simples" e nao exigir preflight CORS.
+ * @returns {Promise<{ok: boolean, car: Object|null}>}
  */
-export async function getAllEmotions() {
+export async function fetchCarState(timeoutMs = 1200) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    // Faz um único GET que retorna toda a tabela de emoções
-    const response = await fetch(`${API_BASE_URL}`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
+    const response = await fetch(VEHICLE_INFO_URL, {
+      cache: "no-store",
+      signal: controller.signal,
     });
-
     if (!response.ok) {
-      // Se for erro 429 (Too Many Requests), retorna erro específico
-      if (response.status === 429) {
-        console.warn("Erro 429 (Too Many Requests) - aguardando antes de tentar novamente");
-        return {
-          data: {
-            surprise: false,
-            squint: false,
-            search: false,
-            fright: false,
-            accelerate: false,
-          },
-          error: "429"
-        };
-      }
-      
-      console.error("Erro ao buscar tabela de emoções:", response.statusText);
-      return {
-        data: {
-          surprise: false,
-          squint: false,
-          search: false,
-          fright: false,
-          accelerate: false,
-        },
-        error: null
-      };
+      return { ok: false, car: null };
     }
-
-    const data = await response.json();
-    
-    // A API pode retornar a tabela em diferentes formatos
-    // Tenta diferentes estruturas possíveis
-    let emotionsData = {
-      surprise: false,
-      squint: false,
-      search: false,
-      fright: false,
-      accelerate: false,
-    };
-    
-    if (typeof data === 'object' && data !== null) {
-      // Se retorna um objeto com as emoções como propriedades
-      emotionsData = {
-        surprise: data.surprise === true || data.emotions_surprise === true,
-        squint: data.squint === true || data.emotions_squint === true,
-        search: data.search === true || data.emotions_search === true,
-        fright: data.fright === true || data.frigh === true || data.emotions_frigh === true,
-        accelerate: data.accelerate === true || data.emotions_accelerate === true,
-      };
-    }
-    
-    return {
-      data: emotionsData,
-      error: null
-    };
-  } catch (error) {
-    console.error("Erro ao buscar tabela de emoções:", error);
-    return {
-      data: {
-        surprise: false,
-        squint: false,
-        search: false,
-        fright: false,
-        accelerate: false,
-      },
-      error: null
-    };
+    return { ok: true, car: normalizeCarState(await response.json()) };
+  } catch {
+    return { ok: false, car: null };
+  } finally {
+    clearTimeout(timer);
   }
 }
-

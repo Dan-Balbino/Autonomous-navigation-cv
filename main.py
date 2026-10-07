@@ -530,6 +530,8 @@ def mainLoop():
         dashboard_update_vehicle_info({
             "hud": hud,
             "raw_rx": last_rx,
+            # Último comando enviado ao Arduino (usado pelos olhos do EyesFront)
+            "command": car.command.to_dict(),
             "telemetry": {
                 "speed": car.telemetry.speed,
                 "battery": car.telemetry.battery,

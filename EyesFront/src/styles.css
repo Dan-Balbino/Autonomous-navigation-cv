@@ -43,6 +43,7 @@ body {
   display: grid;
   place-items: center;
   filter: none;
+  will-change: transform;
 }
 
 .eye {
@@ -53,6 +54,8 @@ body {
   overflow: visible;
   /* Mantém proporções em qualquer tamanho de tela usando vmin */
   box-sizing: border-box;
+  /* Transform e pálpebras (clip-path) mudam a cada frame: mantém o olho na GPU */
+  will-change: transform, clip-path;
   /* Remove qualquer posicionamento padrão - será definido via JS */
 }
 

@@ -33,7 +33,9 @@ function easeOutCubic(t) {
 
 export function animateSquint(config, state, elements, eyeOffsets, now) {
   const { enabled, durationMs, horizontalAmplitude, verticalAmplitude, diagonalAmplitude, squintScale, movementSpeed, glassesBridgeNoseCoveragePx } = config;
-  const squintDuration = 5000; // 5 segundos de duração total da animação
+  // Tempo mínimo com os óculos; enquanto state.squintHold estiver ativo (placa de PARE /
+  // sinal vermelho vindos do carro) os óculos ficam até a condição sumir
+  const squintDuration = config.minDurationMs ?? 5000;
   const entryDuration = 600; // Duração da animação de entrada (óculos caindo)
   const exitDuration = 500; // Duração da animação de saída (óculos jogados para cima)
   
@@ -250,8 +252,8 @@ export function animateSquint(config, state, elements, eyeOffsets, now) {
   
   const elapsed = now - state.squintStartTime;
   
-  // Verifica se passou 5 segundos - inicia animação de saída
-  if (elapsed >= squintDuration) {
+  // Passou o tempo mínimo e o carro não segura mais o squint - inicia animação de saída
+  if (elapsed >= squintDuration && !state.squintHold) {
     state.squintStartTime = null;
     state.squintExitStartTime = now;
     return;
