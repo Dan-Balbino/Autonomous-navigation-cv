@@ -105,7 +105,11 @@ function collectEvents(network, edges, line, ranges, targets) {
     }
   });
 
-  // Curvas nos cruzamentos (onde há escolha): virar à direita/esquerda ou seguir
+  // Curvas da trajetória inteira (cruzamentos e curvas da pista), lidas da geometria
+  const curves = curveEvents(line);
+  events.push(...curves);
+
+  // Cruzamento em que o carro segue reto: "Siga em frente" (se não houver curva ali)
   for (let i = 1; i < edges.length; i++) {
     const node = edges[i].from;
     const options = network.successors(edges[i - 1]);
@@ -117,12 +121,50 @@ function collectEvents(network, edges, line, ranges, targets) {
     const nb = Math.hypot(...before) || 1;
     const na = Math.hypot(...after) || 1;
     const angle = (Math.acos(Math.max(-1, Math.min(1, dot(before, after) / (nb * na)))) * 180) / Math.PI;
-    let turn = 'straight';
-    if (angle > NODE_TURN_EVENT_DEG) turn = cross(before, after) > 0 ? 'right' : 'left';   // y para baixo
-    events.push({ type: 'turn', turn, node, s: Math.max(0, ranges[i].s0 - 20) });
+    if (angle > NODE_TURN_EVENT_DEG) continue;
+    const s = Math.max(0, ranges[i].s0 - 20);
+    if (curves.some((curve) => Math.abs(curve.s - s) < 60)) continue;
+    events.push({ type: 'turn', turn: 'straight', node, s });
   }
 
   return events.sort((x, y) => x.s - y.s);
+}
+
+const CURVE_STEP_PX = 8;
+const CURVE_WINDOW_PX = 48;
+const CURVE_MIN_DEG = 20;
+
+/**
+ * Curvas suaves ao longo da trajetória: onde a direção muda mais de CURVE_MIN_DEG numa
+ * janela curta. Cada curva vira um evento 'turn' (right/left) um pouco antes do início.
+ */
+function curveEvents(line) {
+  const heading = (s) => {
+    const d = line.sample(s).dir;
+    return Math.atan2(d[1], d[0]);
+  };
+  const delta = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
+  const events = [];
+  let start = -1;
+  let sign = 0;
+  let total = 0;
+  for (let s = 0; s + CURVE_WINDOW_PX <= line.length; s += CURVE_STEP_PX) {
+    const deg = (delta(heading(s), heading(s + CURVE_WINDOW_PX)) * 180) / Math.PI;
+    if (start < 0) {
+      if (Math.abs(deg) > CURVE_MIN_DEG) {
+        start = s;
+        sign = Math.sign(deg);
+        total = 0;
+      }
+    } else if (Math.abs(deg) < CURVE_MIN_DEG * 0.5 || Math.sign(deg) !== sign) {
+      total = (delta(heading(start), heading(s + CURVE_WINDOW_PX * 0.5)) * 180) / Math.PI;
+      // y para baixo: ângulo positivo = sentido horário = direita
+      events.push({ type: 'turn', turn: sign > 0 ? 'right' : 'left', smooth: true, angle: Math.abs(total), s: start + CURVE_WINDOW_PX * 0.25 });
+      start = -1;
+    }
+  }
+  if (start >= 0) events.push({ type: 'turn', turn: sign > 0 ? 'right' : 'left', smooth: true, angle: 0, s: start + CURVE_WINDOW_PX * 0.25 });
+  return events;
 }
 
 /** Pontos-alvo ainda à frente de `s` (na ordem). */

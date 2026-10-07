@@ -14,8 +14,24 @@ trajetória da missão (coleta → entrega) em azul. Roda em celular, tablet e c
 ## Missão (rota)
 
 Vem do código em tempo real: `hud.route` (espelho de `nav.route` em `core/navigation.py`),
-em qualquer formato (`"A → C"`, `["A","C"]`, vazio). O 1º ponto é a **coleta**, o 2º a
-**entrega**. O painel mostra o texto recebido e o progresso.
+em qualquer formato (`"A → B → C"`, `["A","B","C"]`, vazio). O carro passa pelos três pontos
+na ordem recebida: **coleta** no primeiro, **passagem** no do meio e **entrega** no último.
+
+## Voz e avisos
+
+Sons em `sounds/` (cópia da pasta `sound/` do projeto; ao trocar um som lá, copie de novo).
+A voz fala quase em cima de cada manobra (~0,9 s antes, no máximo ~55 cm): curva suave à direita/esquerda, siga em frente,
+ponto de coleta e ponto de entrega à frente. Também toca:
+
+| Quando | Som |
+|---|---|
+| Carro começa a missão | `start-percurso` |
+| Último ponto confirmado (encomenda entregue) | `mercado-livre-entrega` |
+| Volta à linha de chegada depois da entrega ("Percurso finalizado") | `end-percurso` |
+| Pessoa (`command.stop`) ou obstáculo crítico nos ultrassônicos da frente | `pedestre-detectado` + faixa vermelha |
+
+O navegador só libera som depois do primeiro toque, clique ou tecla na página. Botão **Som**
+(tecla M) liga e desliga. Na simulação, "Simular pedestre" no debug testa o aviso.
 
 Circulação: todas as faixas são de mão dupla (não existe sentido único na pista). A trajetória
 vai pelo menor caminho até cada ponto, sem retorno em U, e volta à largada pelo caminho mais
@@ -62,6 +78,7 @@ o carro seguir. Quando ele volta a andar, a câmera retorna para trás do carro.
 |---|---|
 | **Simulação / Modo real** (topo, à direita) | No modo real o carro só anda com o que chega do servidor; começa na largada |
 | **Topo / Carro** (V) | Alterna entre a vista de topo e a perseguição |
+| **Som / Mudo** (M) | Liga e desliga a voz e os avisos |
 | **Tela cheia** (F) | Tela inteira (não aparece no iPhone, que não permite em páginas) |
 | **Placas** (E) | Editor 2D: arraste placas e semáforo; salvar recarrega a cena 3D |
 | **Debug** (D) | Fonte (servidor/simulação), missão simulada, velocidade, semáforo, câmera, .glb do carro, escala |

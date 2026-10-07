@@ -75,6 +75,10 @@
     <div class="metric"><span class="metric-label">Servo</span><span class="metric-value" id="servoValue">90°</span></div>
     <div class="metric"><span class="metric-label">Bateria</span><span class="metric-value" id="batteryValue">--</span></div>
     <div class="metric"><span class="metric-label">Modo</span><span class="metric-value" id="modeValue">--</span></div>
+    <div class="hazard" id="hazardBanner" role="alert" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"/><path d="M12 8v6m0 0-3 6m3-6 3 6M8 11l4-2 4 2"/></svg>
+      <span id="hazardText">Pedestre detectado</span>
+    </div>
     <section class="gps-card" id="gpsCard" hidden aria-live="polite">
       <div class="gps-kicker">
         <span class="gps-stop">PARE</span>
@@ -101,6 +105,11 @@
       <svg class="when-off" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16M12 4v16"/></svg>
       <svg class="when-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 20l8-4 8 4z"/></svg>
       <span class="map-button-label" id="viewToggleLabel">Topo</span>
+    </button>
+    <button class="map-button" id="soundToggle" type="button" aria-pressed="true" title="Desligar voz e avisos (M)">
+      <svg class="when-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6L8 10z"/><path d="m17 9 4 6M21 9l-4 6"/></svg>
+      <svg class="when-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6L8 10z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+      <span class="map-button-label" id="soundLabel">Som</span>
     </button>
     <button class="map-button" id="fullscreenToggle" type="button" aria-pressed="false" title="Tela cheia (F)">
       <svg class="when-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
@@ -201,6 +210,7 @@
         <button type="button" class="primary-button" id="playToggle">Pausar</button>
         <button type="button" class="text-button" id="resetPosition">Voltar à largada</button>
         <button type="button" class="text-button" id="skipEvent">Próximo evento</button>
+        <button type="button" class="text-button" id="simPedestrian">Simular pedestre</button>
       </div>
       <label class="slider">
         <span>Velocidade <output id="simSpeedOut">0.40 m/s</output></span>

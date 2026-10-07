@@ -442,6 +442,43 @@ html, body {
   color: var(--ink);
 }
 
+/* ── Pedestre / obstáculo ────────────────────────────────────────── */
+.hazard {
+  position: fixed;
+  top: clamp(108px, 14vh, 128px);
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px 10px 14px;
+  border-radius: 999px;
+  background: var(--stop);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transform: translateX(-50%);
+  animation: hazard-in 0.24s var(--ease-out);
+}
+
+.hazard[hidden] { display: none; }
+
+.hazard svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@keyframes hazard-in {
+  from { opacity: 0; transform: translate(-50%, -6px) scale(0.96); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
 /* ── Prévia GPS na placa PARE ────────────────────────────────────── */
 .gps-card {
   position: fixed;
@@ -969,7 +1006,44 @@ input[type='range'] { width: 100%; accent-color: var(--route-strong); }
   .route-empty { margin: 0; font-size: 12px; max-width: 120px; }
   .bottombar { gap: 12px; justify-content: flex-start; padding-right: 200px; flex-wrap: wrap; row-gap: 4px; }
   .metric { flex-direction: column; gap: 2px; }
-  /* ── Prévia GPS na placa PARE ────────────────────────────────────── */
+  /* ── Pedestre / obstáculo ────────────────────────────────────────── */
+.hazard {
+  position: fixed;
+  top: clamp(108px, 14vh, 128px);
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px 10px 14px;
+  border-radius: 999px;
+  background: var(--stop);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transform: translateX(-50%);
+  animation: hazard-in 0.24s var(--ease-out);
+}
+
+.hazard[hidden] { display: none; }
+
+.hazard svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@keyframes hazard-in {
+  from { opacity: 0; transform: translate(-50%, -6px) scale(0.96); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+/* ── Prévia GPS na placa PARE ────────────────────────────────────── */
 .gps-card {
   position: fixed;
   right: var(--gutter);
@@ -1075,6 +1149,7 @@ input[type='range'] { width: 100%; accent-color: var(--route-strong); }
   .map-button { width: 52px; padding: 9px 4px; }
   .map-button-label { display: none; }
   .mode-switch { position: static; }
+  .hazard { top: 168px; font-size: 14px; }
   .gps-card { top: 168px; bottom: auto; left: 10px; right: 10px; width: auto; padding: 10px 14px 12px; }
   .gps-target { font-size: 16px; }
   .gps-distance { font-size: 19px; }

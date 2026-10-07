@@ -2,11 +2,12 @@
  * HUD do painel: hora, velocidade, origem do dado, próxima manobra, missão e métricas.
  * Atualiza o DOM no máximo ~8x por segundo e só quando o texto muda.
  */
+import { roleName, roleAhead } from '../track/mission.js';
 
 const ICONS = {
   straight: '<path d="M24 41V9"/><path d="M13 20 24 9l11 11"/>',
-  right: '<path d="M17 41V27a9 9 0 0 1 9-9h13"/><path d="M32 11l7 7-7 7"/>',
-  left: '<path d="M31 41V27a9 9 0 0 0-9-9H9"/><path d="M16 11l-7 7 7 7"/>',
+  right: '<path d="M17 42v-9c0-9 5-15 15-18"/><path d="M24 10.5l8.5 4.3-4.6 8.3"/>',
+  left: '<path d="M31 42v-9c0-9-5-15-15-18"/><path d="M24 10.5l-8.5 4.3 4.6 8.3"/>',
   stop: '<path d="M17.4 6h13.2L42 17.4v13.2L30.6 42H17.4L6 30.6V17.4z"/><path d="M15 24h18"/>',
   light: '<rect x="15" y="5" width="18" height="38" rx="7"/><circle cx="24" cy="14" r="3"/><circle cx="24" cy="24" r="3"/><circle cx="24" cy="34" r="3"/>',
   flag: '<path d="M12 43V7"/><path d="M12 9h24l-5 8 5 8H12"/>',
@@ -15,7 +16,6 @@ const ICONS = {
 };
 
 const CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
-const ROLES = ['Coleta', 'Entrega'];
 
 const SOURCE_TEXT = {
   sim: 'Simulação',
@@ -32,24 +32,24 @@ export function formatDistance(meters) {
   return `${meters.toFixed(1).replace('.', ',')} m`;
 }
 
-const roleOf = (index) => ROLES[index] || 'Parada';
+const roleOf = (index, total) => roleName(index, total);
 
 /** Escolhe a próxima coisa que o motorista precisa saber, como nos mapas de carro. */
 export function pickManeuver(plan, s, mission, missionDone) {
-  if (missionDone) return { kind: 'done', icon: 'done', label: 'Missão concluída na largada', distancePx: 0 };
+  if (missionDone) return { kind: 'done', icon: 'done', label: 'Percurso finalizado', distancePx: 0 };
   const next = plan.events.find((event) => event.s - s > 3 &&
     (event.type === 'turn' || event.type === 'stop' || event.type === 'traffic-light' || (event.type === 'point' && event.target)));
   if (!next) return { kind: 'flag', icon: 'flag', label: 'Volta à largada', distancePx: plan.length - s };
   const distancePx = next.s - s;
   if (next.type === 'turn') {
-    const labels = { right: 'Vire à direita', left: 'Vire à esquerda', straight: 'Siga em frente' };
+    const labels = { right: 'Curva suave à direita', left: 'Curva suave à esquerda', straight: 'Siga em frente' };
     return { kind: next.turn, icon: next.turn, label: labels[next.turn], distancePx };
   }
   if (next.type === 'stop') return { kind: 'stop', icon: 'stop', label: 'Placa PARE', distancePx };
   if (next.type === 'traffic-light') return { kind: 'light', icon: 'light', label: 'Semáforo', distancePx };
   const index = mission.all.indexOf(next.point, mission.doneCount);
-  const role = index >= 0 ? roleOf(index) : 'Ponto';
-  return { kind: 'point', icon: 'point', point: next.point, label: `${role} no ponto ${next.point}`, distancePx };
+  const label = index >= 0 ? roleAhead(index, mission.all.length) : `Ponto ${next.point} à frente`;
+  return { kind: 'point', icon: 'point', point: next.point, label, distancePx };
 }
 
 export class Hud {
@@ -136,9 +136,9 @@ export class Hud {
         const current = i === doneCount;
         const cls = done ? 'is-done' : current ? 'is-current' : '';
         const state = done ? 'concluído' : current ? 'próximo' : 'pendente';
-        return `<li class="${cls}" aria-label="${roleOf(i)} no ponto ${p}, ${state}">
+        return `<li class="${cls}" aria-label="${roleOf(i, all.length)} no ponto ${p}, ${state}">
           <span class="route-point">${done ? CHECK : p}</span>
-          <span class="route-role">${roleOf(i)}${done ? ` ${p}` : ''}</span>
+          <span class="route-role">${roleOf(i, all.length)}${done ? ` ${p}` : ''}</span>
         </li>`;
       }).join('');
       el.missionEmpty.hidden = all.length > 0;
@@ -151,7 +151,7 @@ export class Hud {
     this.set('battery', el.battery, data && data.battery ? `${Math.round(data.battery)}%` : '--');
     let mode = '--';
     if (view.source === 'sim') {
-      if (view.missionDone) mode = 'Missão concluída';
+      if (view.missionDone) mode = 'Percurso finalizado';
       else if (view.sim.freeDrive) mode = 'Direção livre';
       else if (view.sim.held) mode = 'Parado na placa';
       else mode = view.sim.playing ? 'Simulando' : 'Pausado';

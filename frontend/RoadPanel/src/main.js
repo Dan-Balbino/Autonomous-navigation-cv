@@ -15,6 +15,8 @@ import * as THREE from 'three';
 import { TrackNetwork } from './track/network.js';
 import { buildPlan, sameRoute } from './track/planner.js';
 import { Localizer } from './track/localizer.js';
+import { roleName, roleAt, ROLE } from './track/mission.js';
+import { Voice } from './ui/voice.js';
 import { PX_TO_WORLD, DEFAULT_SIGNS } from './track/trackData.js';
 import { buildTrack } from './scene/trackMeshes.js';
 import { buildSigns } from './scene/signs.js';
@@ -57,7 +59,7 @@ const state = {
   // Simulação
   playing: true,
   simSpeed: 0.4,
-  simRoute: ['A', 'B'],
+  simRoute: ['A', 'B', 'C'],   // coleta no 1º, passagem no 2º, entrega no último
   simDone: 0,
   simLight: 'none',
   respectSignals: true,
@@ -212,7 +214,10 @@ function needsReplan() {
 function consumePoint() {
   state.planConsumed += 1;
   if (state.source === 'live') state.localConsumed += 1;
-  else state.simDone += 1;
+  else {
+    state.simDone += 1;
+    if (state.simRoute.length > 1 && state.simDone === state.simRoute.length) voice.say('delivered');
+  }
 }
 
 // ── Servidor ─────────────────────────────────────────────────────────────
@@ -231,6 +236,8 @@ function applyServerRoute(next, raw) {
   state.serverRoute = next;
   if (confirmed > 0) {
     state.liveDone.push(...prev.slice(0, confirmed));
+    // Último ponto confirmado = encomenda entregue
+    if (next.length === 0 && state.liveDone.length > 1 && state.source === 'live') voice.say('delivered');
     const target = state.plan && state.source === 'live' ? planTargets()[confirmed - 1] : null;
     if (target) state.s = Math.max(0, Math.min(state.plan.length, target.s + 1));
     localizer.confirmPoint(performance.now());
@@ -240,6 +247,9 @@ function applyServerRoute(next, raw) {
   } else if (!(next.length > prev.length && sameRoute(next.slice(0, prev.length), prev))) {
     state.liveDone = [];
     state.localConsumed = 0;
+    state.missionDone = false;
+  } else {
+    state.missionDone = false;      // pontos novos depois de finalizar: novo percurso
   }
 }
 
@@ -277,6 +287,8 @@ const controls = {
   fullscreen: document.getElementById('fullscreenToggle'),
   fullscreenLabel: document.getElementById('fullscreenLabel'),
   mode: document.getElementById('modeSwitch'),
+  sound: document.getElementById('soundToggle'),
+  soundLabel: document.getElementById('soundLabel'),
 };
 const root = document.documentElement;
 const fullscreenElement = () => document.fullscreenElement || document.webkitFullscreenElement || null;
@@ -297,6 +309,11 @@ function toggleFullscreen() {
   }
 }
 
+function toggleSound() {
+  voice.setEnabled(!voice.enabled);
+  syncControls();
+}
+
 function syncControls() {
   const top = rig.mode === 'top';
   controls.view.setAttribute('aria-pressed', String(top));
@@ -306,12 +323,16 @@ function syncControls() {
   controls.fullscreen.setAttribute('aria-pressed', String(full));
   controls.fullscreen.title = full ? 'Sair da tela cheia (F)' : 'Tela cheia (F)';
   controls.fullscreenLabel.textContent = full ? 'Sair' : 'Tela cheia';
+  controls.sound.setAttribute('aria-pressed', String(voice.enabled));
+  controls.sound.title = voice.enabled ? 'Desligar voz e avisos (M)' : 'Ligar voz e avisos (M)';
+  controls.soundLabel.textContent = voice.enabled ? 'Som' : 'Mudo';
   controls.mode.querySelectorAll('button').forEach((button) => {
     button.setAttribute('aria-checked', String(button.dataset.mode === state.source));
   });
 }
 
 controls.view.addEventListener('click', () => setCamera(rig.mode === 'top' ? 'chase' : 'top'));
+controls.sound.addEventListener('click', toggleSound);
 controls.fullscreen.hidden = !canFullscreen;   // iPhone não tem tela cheia para páginas
 controls.fullscreen.addEventListener('click', toggleFullscreen);
 document.addEventListener('fullscreenchange', syncControls);
@@ -325,7 +346,7 @@ controls.mode.addEventListener('click', (event) => {
 const nextEvent = (type, maxPx) => state.plan.events.find((e) => e.type === type && e.s - state.s >= -2 && e.s - state.s <= maxPx);
 
 function simSpeedPx(now) {
-  if (!state.playing || state.missionDone || now < state.stopHoldUntil) return 0;
+  if (!state.playing || state.missionDone || now < state.stopHoldUntil || now < guide.simHazardUntil) return 0;
   const speedPx = state.simSpeed / state.metersPerPx;
   if (!state.respectSignals) return speedPx;
   if (state.simLight === 'red' && nextEvent('traffic-light', 26)) return 0;
@@ -418,7 +439,7 @@ function signName(event) {
   if (event.type === 'point') {
     const mission = missionView();
     const index = mission.all.indexOf(event.point, mission.doneCount);
-    if (event.target && index >= 0) return `${['Coleta', 'Entrega'][index] || 'Parada'} · ponto ${event.point}`;
+    if (event.target && index >= 0) return `${roleName(index, mission.all.length)} · ponto ${event.point}`;
     return `Ponto ${event.point}`;
   }
   return event.sign?.label || 'Placa';
@@ -454,6 +475,93 @@ function updateGps(now) {
   gpsEl.status.textContent = left > 0 ? `Parado na placa · segue em ${left} s` : 'Parado na placa';
 }
 
+// ── Voz e avisos ─────────────────────────────────────────────────────────
+const voice = new Voice();
+const HAZARD_COOLDOWN_MS = 4000;
+const SIM_HAZARD_MS = 3000;
+const guide = {
+  plan: null,
+  announced: new Set(),
+  wasMoving: false,
+  startedMission: null,
+  hazard: false,
+  hazardAt: -1e9,
+  simHazardUntil: 0,
+};
+const hazardEl = document.getElementById('hazardBanner');
+const hazardText = document.getElementById('hazardText');
+
+function finishMission() {
+  if (state.missionDone) return;
+  state.missionDone = true;
+  guide.startedMission = null;
+  guide.wasMoving = false;
+  voice.say('finish');
+}
+
+// Antecedência da fala: o áudio leva ~1 s até dizer a direção, então ele começa um pouco
+// antes e termina com o carro já entrando na curva
+const CUE_LEAD_S = 0.9;
+const CUE_MIN_PX = 20;
+const CUE_MAX_PX = 110;
+
+/** Fala a manobra quase em cima dela (curva, siga em frente, coleta, entrega). */
+function updateGuide(now, speedMs) {
+  if (guide.plan !== state.plan) {
+    guide.plan = state.plan;
+    guide.announced = new Set();
+  }
+  const mission = missionView();
+  const moving = speedMs > 0.02 && !state.freeDrive;
+  if (moving && !guide.wasMoving && mission.all.length && mission.doneCount === 0 && !state.missionDone) {
+    const key = `${state.source}:${mission.all.join('')}`;
+    if (guide.startedMission !== key) {
+      guide.startedMission = key;
+      voice.say('start');
+    }
+  }
+  guide.wasMoving = moving;
+  if (!moving || state.missionDone) return;
+
+  const lead = Math.min(CUE_MAX_PX, Math.max(CUE_MIN_PX, (speedMs / state.metersPerPx) * CUE_LEAD_S));
+  for (const event of state.plan.events) {
+    const ahead = event.s - state.s;
+    if (ahead < 0) continue;
+    if (ahead > lead) break;
+    let cue = null;
+    if (event.type === 'turn') cue = event.turn;
+    else if (event.type === 'point' && event.target) {
+      const index = mission.all.indexOf(event.point, mission.doneCount);
+      const role = index >= 0 ? roleAt(index, mission.all.length) : null;
+      cue = role === ROLE.pickup ? 'pickup' : role === ROLE.delivery ? 'delivery' : null;
+    }
+    const key = `${event.type}@${Math.round(event.s)}`;
+    if (!cue || guide.announced.has(key)) continue;
+    guide.announced.add(key);
+    voice.say(cue);
+  }
+}
+
+/** Pedestre (o carro trava com command.stop) ou obstáculo crítico nos ultrassônicos da frente. */
+function updateHazard(now) {
+  let kind = null;
+  if (state.source === 'sim') {
+    if (now < guide.simHazardUntil) kind = 'person';
+  } else if (state.linkStatus === 'live' && state.liveData) {
+    const data = state.liveData;
+    if (data.pedestrian) kind = 'person';
+    else if (data.proximity.frontLeft >= 3 || data.proximity.frontRight >= 3) kind = 'obstacle';
+  }
+  const active = Boolean(kind);
+  if (active && !guide.hazard && now - guide.hazardAt > HAZARD_COOLDOWN_MS) {
+    guide.hazardAt = now;
+    voice.say('pedestrian', { interrupt: true });
+  }
+  if (active) hazardText.textContent = kind === 'person' ? 'Pedestre detectado' : 'Obstáculo à frente';
+  hazardEl.hidden = !active;
+  guide.hazard = active;
+}
+
 // ── Loop ─────────────────────────────────────────────────────────────────
 let last = performance.now();
 let firstFrame = true;
@@ -485,6 +593,8 @@ function frame(now) {
       if (state.s >= state.plan.length) {
         replan(false, START);
         localizer.lapStart(now);
+        // Volta fechada depois do último ponto: percurso finalizado na linha de chegada
+        if (state.serverRoute.length === 0 && state.liveDone.length > 0) finishMission();
       }
     } else {
       speedPx = simSpeedPx(now);
@@ -497,7 +607,7 @@ function frame(now) {
           // Volta completa: missão cumprida para na largada; sem missão, segue em voltas
           const hadMission = state.planQueue.length > 0;
           replan(false, START);
-          if (hadMission && currentQueue().length === 0) state.missionDone = true;
+          if (hadMission && currentQueue().length === 0) finishMission();
         }
       }
     }
@@ -522,6 +632,8 @@ function frame(now) {
   ribbon.tick(now, state.freeDrive ? 0 : state.s);
   if (state.source === 'live' && speedMs > 0.05) state.cruiseMs += (speedMs - state.cruiseMs) * Math.min(1, dt * 0.5);
   updateGps(now);
+  updateGuide(now, speedMs);
+  updateHazard(now);
   gps.tick(now);
   proximity.update(state.source === 'live' && state.linkStatus === 'live' ? state.liveData?.proximity : null, dt);
   track.tick(now / 1000);
@@ -597,7 +709,12 @@ const debug = new DebugPanel({
     state.planMode = mode;
     replan(true);
   },
+  simulatePedestrian: () => {
+    if (state.source === 'sim') guide.simHazardUntil = performance.now() + SIM_HAZARD_MS;
+  },
   resetPosition: () => {
+    guide.startedMission = null;
+    guide.wasMoving = false;
     state.freeDrive = false;
     state.simDone = 0;
     state.stoppedAt = null;
@@ -640,6 +757,7 @@ window.addEventListener('keydown', (event) => {
   if (key === '2') setCamera('top');
   if (key === '3') setCamera('free');
   if (key === 'v') setCamera(rig.mode === 'top' ? 'chase' : 'top');
+  if (key === 'm' && !event.ctrlKey && !event.metaKey) toggleSound();
   if (key === 'f' && canFullscreen && !event.ctrlKey && !event.metaKey) toggleFullscreen();
 });
 window.addEventListener('keyup', (event) => state.keys.delete(event.key.toLowerCase()));
