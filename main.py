@@ -451,6 +451,10 @@ def mainLoop():
             traffic_light_code=flag_tl,
             traffic_light_label=TRAFFIC_LIGHT_LABELS.get(flag_tl, "Nenhum"),
             right_detour_active=flag_right_detour,
+            wheel_speeds=(car.telemetry.speed1, car.telemetry.speed2,
+                          car.telemetry.speed3, car.telemetry.speed4),
+            ultrasonic={"left": car.telemetry.left, "f_left": car.telemetry.f_left,
+                        "f_right": car.telemetry.f_right, "right": car.telemetry.right},
         )
 
         # ── Envio de dados para o Arduino ─────────────────────────────

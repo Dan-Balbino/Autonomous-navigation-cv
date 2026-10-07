@@ -235,37 +235,44 @@ body:not(.vertical-driving-mode) .top-clock {
 }
 
 /* ============================================
-   Faixa de sinais (placa de PARE / semáforo / veículo)
+   Sinais (placa de PARE / semáforo / desvio / veículo)
+   Mesmo padrão do PWM e do Farol na barra de baixo: ícone em cima,
+   rótulo e valor grande, sem card. Ícone e valor recebem a cor do estado.
    ============================================ */
-.signal-strip {
-    position: fixed;
-    top: 44px;
-    left: 12px;
-    z-index: 1001;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+.hud-signal-divider {
+    width: 1px;
+    align-self: stretch;
+    margin: clamp(10px, 1vw, 16px) 0;
+    background: linear-gradient(180deg,
+        transparent 0%,
+        rgba(0, 240, 255, 0.1) 15%,
+        rgba(0, 240, 255, 0.3) 50%,
+        rgba(0, 240, 255, 0.1) 85%,
+        transparent 100%);
+    flex-shrink: 0;
 }
 
-/* Mesmo padrão visual dos indicator-item (PWM / Farol): ícone + label/valor,
-   com a barra lateral colorida indicando o estado atual. */
-.signal-chip {
+.hud-signals {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    min-width: 150px;
-    background: rgba(4, 8, 15, 0.55);
-    border: 1px solid var(--border-neon-dim);
-    border-left: 2px solid var(--cyber-cyan-dim);
-    box-shadow: 0 0 5px var(--cyber-cyan-glow);
-    transition: border-left-color 0.2s ease;
+    gap: clamp(8px, 1.2vw, 20px);
 }
 
-.signal-chip-icon {
-    width: clamp(18px, 1.4vw, 22px);
-    height: clamp(18px, 1.4vw, 22px);
+.hud-signal {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: clamp(104px, 8vw, 140px);
+    min-height: clamp(96px, 7.2vw, 124px);
     flex-shrink: 0;
+    text-align: center;
+}
+
+.hud-signal-icon {
+    width: clamp(36px, 2.8vw, 46px);
+    height: clamp(36px, 2.8vw, 46px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -273,50 +280,74 @@ body:not(.vertical-driving-mode) .top-clock {
     transition: color 0.2s ease;
 }
 
-.signal-chip-icon svg {
+.hud-signal-icon svg {
     width: 100%;
     height: 100%;
     stroke: currentColor;
     fill: none;
 }
 
-.signal-chip-content {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    min-width: 0;
-}
-
-.signal-chip-label {
-    font-size: 8px;
+.hud-signal-label {
+    font-size: clamp(9px, 0.7vw, 11px);
     font-weight: 700;
-    letter-spacing: 1.5px;
     color: var(--text-mid);
     text-transform: uppercase;
-    opacity: 0.75;
+    letter-spacing: 2px;
+    line-height: 1.2;
     font-family: 'Courier New', monospace;
     white-space: nowrap;
 }
 
-.signal-chip-value {
-    font-size: 13px;
+.hud-signal-value {
+    font-size: clamp(20px, 1.6vw, 28px);
     font-weight: 700;
-    letter-spacing: 0.5px;
-    color: var(--text-mid);
-    font-family: 'BebasNeue', 'Courier New', monospace;
+    color: var(--text-bright);
+    line-height: 1;
+    font-family: 'BebasNeue', monospace;
+    letter-spacing: 1px;
     white-space: nowrap;
     transition: color 0.2s ease;
 }
 
-.signal-chip.state-green  { border-left-color: var(--cyber-green); }
-.signal-chip.state-red    { border-left-color: var(--cyber-magenta); }
-.signal-chip.state-yellow { border-left-color: var(--cyber-yellow); }
-.signal-chip.state-muted  { border-left-color: var(--cyber-cyan-dim); }
+.hud-signal.state-green  .hud-signal-icon, .hud-signal.state-green  .hud-signal-value { color: var(--cyber-green); }
+.hud-signal.state-red    .hud-signal-icon, .hud-signal.state-red    .hud-signal-value { color: var(--cyber-magenta); }
+.hud-signal.state-yellow .hud-signal-icon, .hud-signal.state-yellow .hud-signal-value { color: var(--cyber-yellow); }
+.hud-signal.state-muted  .hud-signal-icon { color: var(--text-mid); }
+.hud-signal.state-muted  .hud-signal-value { color: var(--text-bright); }
 
-.signal-chip.state-green  .signal-chip-icon, .signal-chip.state-green  .signal-chip-value { color: var(--cyber-green); }
-.signal-chip.state-red    .signal-chip-icon, .signal-chip.state-red    .signal-chip-value { color: var(--cyber-magenta); }
-.signal-chip.state-yellow .signal-chip-icon, .signal-chip.state-yellow .signal-chip-value { color: var(--cyber-yellow); }
-.signal-chip.state-muted  .signal-chip-icon, .signal-chip.state-muted  .signal-chip-value { color: var(--text-mid); }
+/* Modo vertical: uma linha compacta de 4 colunas no painel lateral, abaixo do PWM e do Farol */
+.dashboard-signal-grid {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: clamp(4px, 0.5vw, 8px);
+}
+
+.dashboard-signal-grid .hud-signal {
+    min-width: 0;
+    min-height: 0;
+    gap: 4px;
+    justify-content: flex-start;
+}
+
+.dashboard-signal-grid .hud-signal-icon {
+    width: clamp(26px, 2vw, 32px);
+    height: clamp(26px, 2vw, 32px);
+}
+
+.dashboard-signal-grid .hud-signal-label {
+    font-size: clamp(7px, 0.55vw, 9px);
+    letter-spacing: 1px;
+    white-space: normal;
+    min-height: 2.4em;
+    display: flex;
+    align-items: center;
+}
+
+.dashboard-signal-grid .hud-signal-value {
+    font-size: clamp(15px, 1.15vw, 19px);
+    white-space: normal;
+}
 
 /* ============================================
    Side Dashboard (Modo Vertical)
@@ -1147,6 +1178,164 @@ body.vertical-driving-mode .horizontal-dashboard:not(.animating):not(.exiting) {
 .wave-3 { animation: wavePulse 2s ease-out infinite; animation-delay: 0.8s; }
 .wave-4 { animation: wavePulse 2s ease-out infinite; animation-delay: 1.2s; }
 
+/* ============================================
+   Telemetria das rodas (modo horizontal, à direita do carro)
+   Barras segmentadas estilo painel de corrida: cada segmento é um LED
+   (só borda quando apagado) e a marca de pico desce devagar.
+   ============================================ */
+.wheel-telemetry {
+    position: fixed;
+    right: clamp(24px, 4.5vw, 90px);
+    top: calc(50% - clamp(40px, 4vh, 60px));
+    transform: translateY(-50%);
+    width: clamp(230px, 19vw, 330px);
+    z-index: 700;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(12px, 1.2vw, 18px);
+    pointer-events: none;
+    transition: opacity 0.4s ease, transform 0.4s ease, visibility 0.4s;
+}
+
+body.vertical-driving-mode .wheel-telemetry {
+    opacity: 0;
+    visibility: hidden;
+    transform: translate(30px, -50%);
+}
+
+.wheel-telemetry-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-bottom: 8px;
+    font-family: 'Courier New', monospace;
+    font-size: clamp(9px, 0.7vw, 11px);
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: var(--text-mid);
+    background:
+        linear-gradient(90deg, rgba(74, 184, 200, 0.45), rgba(74, 184, 200, 0.05)) bottom / 100% 1px no-repeat;
+}
+
+.wheel-telemetry-unit {
+    letter-spacing: 1px;
+    opacity: 0.7;
+    text-transform: lowercase;
+}
+
+.wheel-telemetry-rows {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(14px, 1.6vw, 24px);
+}
+
+.wheel-row {
+    display: grid;
+    grid-template-columns: 2.6em 1fr 2.8em;
+    align-items: center;
+    gap: clamp(8px, 0.8vw, 12px);
+}
+
+.wheel-tag {
+    font-family: 'Courier New', monospace;
+    font-size: clamp(10px, 0.8vw, 12px);
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--text-mid);
+}
+
+.wheel-bar {
+    display: flex;
+    gap: 2px;
+    height: clamp(14px, 1.2vw, 18px);
+    transform: skewX(-18deg);
+}
+
+.wheel-seg {
+    --seg: var(--neon-lime);
+    flex: 1;
+    border: 1px solid rgba(74, 184, 200, 0.35);
+    background: transparent;
+    box-shadow: 0 0 2px rgba(74, 184, 200, 0.15);
+    transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.wheel-seg.seg-green  { --seg: #00ff9f; }
+.wheel-seg.seg-yellow { --seg: #ffa41b; }
+.wheel-seg.seg-red    { --seg: #861a36; }
+
+.wheel-seg.on {
+    background: var(--seg);
+    border-color: var(--seg);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--seg) 60%, transparent);
+}
+
+.wheel-seg.peak:not(.on) {
+    background: color-mix(in srgb, var(--seg) 30%, transparent);
+    border-color: var(--seg);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--seg) 70%, transparent);
+}
+
+.wheel-value {
+    font-family: 'BebasNeue', monospace;
+    font-size: clamp(22px, 1.8vw, 30px);
+    color: var(--text-bright);
+    letter-spacing: 1px;
+    text-align: right;
+    line-height: 1;
+}
+
+/* Em telas estreitas a telemetria cobriria o carro */
+@media (max-width: 1024px) {
+    .wheel-telemetry {
+        display: none;
+    }
+}
+
+/* ── Sensores em estilo LED ──
+   Apagado: só a borda, ciano com brilho sutil, e miolo na cor do fundo.
+   Aceso: borda e miolo na cor da zona (--led-color) com glow, como um LED. */
+.wave.wave-outline,
+.wave.wave-core {
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.wave.wave-outline {
+    stroke: rgba(74, 184, 200, 0.55);
+    filter: drop-shadow(0 0 2px rgba(74, 184, 200, 0.45));
+    transition: stroke 0.35s ease, filter 0.35s ease;
+}
+
+.wave.wave-core {
+    stroke: var(--bg-color);
+    transition: stroke 0.35s ease;
+}
+
+.wave.wave-outline.is-active {
+    stroke: var(--led-color);
+    filter:
+        drop-shadow(0 0 2px var(--led-color))
+        drop-shadow(0 0 7px color-mix(in srgb, var(--led-color) 55%, transparent));
+}
+
+.wave.wave-core.is-active {
+    stroke: color-mix(in srgb, var(--led-color) 96%, #ffffff);
+}
+
+/* Acendimento: sobe rápido, dá uma leve oscilação e estabiliza */
+.wave.led-on {
+    animation: ledOn 0.5s ease-out var(--led-delay, 0ms) both;
+}
+
+@keyframes ledOn {
+    0%   { opacity: 0.15; }
+    35%  { opacity: 1; }
+    50%  { opacity: 0.72; }
+    65%  { opacity: 1; }
+    100% { opacity: 1; }
+}
+
 @keyframes wavePulse {
     0%   { opacity: 0.28; stroke-width: var(--wave-stroke-width); }
     20%  { opacity: 0.62; }
@@ -1330,6 +1519,15 @@ body.vertical-layout-animating .proximity-waves {
 
     .horizontal-indicators {
         gap: clamp(10px, 1.2vw, 16px);
+    }
+
+    .hud-signal-divider {
+        display: none;
+    }
+
+    .hud-signals {
+        width: 100%;
+        justify-content: space-around;
     }
 
     .app-container {

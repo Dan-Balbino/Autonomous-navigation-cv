@@ -123,6 +123,10 @@ export class ProximityWaves {
             espessuraLinhas: 8,
             distanciaTravarVermelho: 18,
             escalaGlobalVertical: 1,
+            // Altura do carro (px) em que as distâncias valem; 0 = altura natural da imagem
+            alturaReferenciaCarro: 0,
+            // Deslocamento vertical dos sensores (fração da altura do carro; negativo = para cima)
+            ajusteCentroVertical: 0,
             // Sensores frontais - Ponta Superior (SFPS)
             SFPS_quantidade: 4,
             SFPS_comprimento: 75,
@@ -238,9 +242,13 @@ export class ProximityWaves {
      * A referência é capturada na primeira renderização de cada modo (horizontal/vertical).
      */
     getResponsiveScale(carRect, isVerticalMode) {
-        // Mantém horizontal exatamente como já está.
+        // Horizontal: os valores do JSON são pixels para o carro na altura de referência
+        // (alturaReferenciaCarro, o tamanho natural da imagem). Em telas menores o carro
+        // encolhe e os sensores acompanham, mantendo a mesma posição relativa.
         if (!isVerticalMode) {
-            return 1;
+            const configured = Number(this.config.alturaReferenciaCarro);
+            const refHeight = configured > 0 ? configured : (this.carImage.naturalHeight || carRect.height);
+            return carRect.height / refHeight;
         }
 
         // Escala estável e separada para vertical, baseada no viewport.
@@ -331,11 +339,14 @@ export class ProximityWaves {
             }
             return normalValue;
         };
+        // Centro de referência dos sensores: o carro pode não estar centralizado na imagem
+        // (ajusteCentroVertical é uma fração da altura do carro; negativo = para cima).
+        const sensorCenterY = carCenterY + (isVerticalMode ? 0 : carHeight * (Number(this.config.ajusteCentroVertical) || 0));
         // Sensores frontais (3 sensores: superior, centro, inferior)
         const frontSensors = [
             {
                 id: 'ponta-superior',
-                y: carCenterY + (carHeight * pickModeValue(-0.36, this.config.SFPS_posicaoVertical)),
+                y: sensorCenterY + (carHeight * pickModeValue(-0.36, this.config.SFPS_posicaoVertical)),
                 length: scaleMetric(pickModeValue(this.config.SFPS_comprimento, this.config.SFPS_comprimentoVertical)),
                 range: scaleMetric(this.config.SFPS_alcance),
                 rotation: pickModeValue(this.config.SFPS_rotacao, this.config.SFPS_rotacaoVertical),
@@ -347,7 +358,7 @@ export class ProximityWaves {
             },
             {
                 id: 'centro',
-                y: carCenterY,
+                y: sensorCenterY,
                 length: scaleMetric(pickModeValue(this.config.SFCI_comprimento, this.config.SFCI_comprimentoVertical)),
                 range: scaleMetric(this.config.SFCI_alcance),
                 rotation: pickModeValue(this.config.SFCI_rotacao, this.config.SFCI_rotacaoVertical),
@@ -359,7 +370,7 @@ export class ProximityWaves {
             },
             {
                 id: 'ponta-inferior',
-                y: carCenterY + (carHeight * pickModeValue(0.36, this.config.SFPI_posicaoVertical)),
+                y: sensorCenterY + (carHeight * pickModeValue(0.36, this.config.SFPI_posicaoVertical)),
                 length: scaleMetric(pickModeValue(this.config.SFPI_comprimento, this.config.SFPI_comprimentoVertical)),
                 range: scaleMetric(this.config.SFPI_alcance),
                 rotation: -pickModeValue(this.config.SFPI_rotacao, this.config.SFPI_rotacaoVertical),
@@ -415,11 +426,14 @@ export class ProximityWaves {
             }
             return normalValue;
         };
+        // Centro de referência dos sensores: o carro pode não estar centralizado na imagem
+        // (ajusteCentroVertical é uma fração da altura do carro; negativo = para cima).
+        const sensorCenterY = carCenterY + (isVerticalMode ? 0 : carHeight * (Number(this.config.ajusteCentroVertical) || 0));
         // Sensores frontais (3 sensores)
         const frontSensors = [
-            { id: 'ponta-superior', y: carCenterY + (carHeight * pickModeValue(-0.36, this.config.SFPS_posicaoVertical)), range: scaleMetric(this.config.SFPS_alcance), initialOffset: scaleMetric(pickModeValue(this.config.SFPS_distancia, this.config.SFPS_distanciaVertical)), rotation: pickModeValue(this.config.SFPS_rotacao, this.config.SFPS_rotacaoVertical) },
-            { id: 'centro', y: carCenterY, range: scaleMetric(this.config.SFCI_alcance), initialOffset: scaleMetric(pickModeValue(this.config.SFCI_distancia, this.config.SFCI_distanciaVertical)), rotation: pickModeValue(this.config.SFCI_rotacao, this.config.SFCI_rotacaoVertical) },
-            { id: 'ponta-inferior', y: carCenterY + (carHeight * pickModeValue(0.36, this.config.SFPI_posicaoVertical)), range: scaleMetric(this.config.SFPI_alcance), initialOffset: scaleMetric(pickModeValue(this.config.SFPI_distancia, this.config.SFPI_distanciaVertical)), rotation: -pickModeValue(this.config.SFPI_rotacao, this.config.SFPI_rotacaoVertical) }
+            { id: 'ponta-superior', y: sensorCenterY + (carHeight * pickModeValue(-0.36, this.config.SFPS_posicaoVertical)), range: scaleMetric(this.config.SFPS_alcance), initialOffset: scaleMetric(pickModeValue(this.config.SFPS_distancia, this.config.SFPS_distanciaVertical)), rotation: pickModeValue(this.config.SFPS_rotacao, this.config.SFPS_rotacaoVertical) },
+            { id: 'centro', y: sensorCenterY, range: scaleMetric(this.config.SFCI_alcance), initialOffset: scaleMetric(pickModeValue(this.config.SFCI_distancia, this.config.SFCI_distanciaVertical)), rotation: pickModeValue(this.config.SFCI_rotacao, this.config.SFCI_rotacaoVertical) },
+            { id: 'ponta-inferior', y: sensorCenterY + (carHeight * pickModeValue(0.36, this.config.SFPI_posicaoVertical)), range: scaleMetric(this.config.SFPI_alcance), initialOffset: scaleMetric(pickModeValue(this.config.SFPI_distancia, this.config.SFPI_distanciaVertical)), rotation: -pickModeValue(this.config.SFPI_rotacao, this.config.SFPI_rotacaoVertical) }
         ];
         
         // Cria áreas frontais
@@ -456,8 +470,8 @@ export class ProximityWaves {
         riskCircle.setAttribute('cx', sensorAxisX);
         riskCircle.setAttribute('cy', sensorAxisY);
         riskCircle.setAttribute('r', riskZone);
-        riskCircle.setAttribute('fill', 'rgba(255, 59, 48, 0.15)'); // Vermelho transparente
-        riskCircle.setAttribute('stroke', 'rgba(255, 59, 48, 0.4)');
+        riskCircle.setAttribute('fill', 'rgba(134, 26, 54, 0.15)'); // Vinho transparente
+        riskCircle.setAttribute('stroke', 'rgba(134, 26, 54, 0.4)');
         riskCircle.setAttribute('stroke-width', '1');
         areaGroup.appendChild(riskCircle);
         
@@ -466,8 +480,8 @@ export class ProximityWaves {
         mediumCircle.setAttribute('cx', sensorAxisX);
         mediumCircle.setAttribute('cy', sensorAxisY);
         mediumCircle.setAttribute('r', mediumZone);
-        mediumCircle.setAttribute('fill', 'rgba(255, 211, 74, 0.15)'); // Amarelo transparente
-        mediumCircle.setAttribute('stroke', 'rgba(255, 211, 74, 0.4)');
+        mediumCircle.setAttribute('fill', 'rgba(255, 164, 27, 0.15)'); // Âmbar transparente
+        mediumCircle.setAttribute('stroke', 'rgba(255, 164, 27, 0.4)');
         mediumCircle.setAttribute('stroke-width', '1');
         areaGroup.appendChild(mediumCircle);
         
@@ -504,12 +518,12 @@ export class ProximityWaves {
     getSensorZoneColor(distance, maxRange) {
         const zoneSize = maxRange / 3;
         if (distance > zoneSize * 2) {
-            return '#ffffff'; // Branco (longe, mas detectando)
+            return '#2f78d4'; // Azul meio escuro (longe, mas detectando)
         }
         if (distance > zoneSize) {
-            return '#ffd34a'; // Amarelo (média distância)
+            return '#ffa41b'; // Âmbar puxado para laranja (média distância)
         }
-        return '#ff3b30'; // Vermelho (muito próximo)
+        return '#861a36'; // Vermelho vinho (muito próximo)
     }
 
     /**
@@ -692,104 +706,74 @@ export class ProximityWaves {
                     return `${x} ${y}`;
                 });
 
-                // Cria elemento SVG com borda preta (duplo stroke)
-                // Primeiro cria a borda preta (stroke mais grosso)
-                const borderWave = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                borderWave.setAttribute('d', worldPath);
-                borderWave.setAttribute('class', 'wave');
-                borderWave.setAttribute('data-direction', side);
-                borderWave.setAttribute('data-sensor-id', sensor.id);
-                borderWave.setAttribute('data-index', i);
-                borderWave.setAttribute('stroke-linecap', 'butt');
-                borderWave.setAttribute('stroke-linejoin', 'miter');
-                borderWave.setAttribute('stroke', '#000000');
-                borderWave.setAttribute('stroke-width', `${this.config.espessuraLinhas + 2}px`);
-                borderWave.style.opacity = '0.65';
-                borderWave.style.animation = 'none';
-                
-                // Adiciona ao grupo do sensor (rotação será aplicada no grupo)
-                sensorGroup.appendChild(borderWave);
-                this.waves.push(borderWave);
-
-                // Depois cria a linha principal (sobreposta)
-                const wave = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                wave.setAttribute('d', worldPath);
-                wave.setAttribute('class', 'wave');
-                wave.setAttribute('data-direction', side);
-                wave.setAttribute('data-sensor-id', sensor.id);
-                wave.setAttribute('data-index', i);
-                wave.setAttribute('stroke-linecap', 'butt');
-                wave.setAttribute('stroke-linejoin', 'miter');
+                // Cada linha é um "LED": um traço mais grosso por baixo faz a borda
+                // (com brilho sutil) e um traço por cima faz o miolo. Apagado, o miolo
+                // tem a cor do fundo (linha só com bordas); aceso, borda e miolo
+                // ganham a cor da zona com glow.
+                const lineWidth = this.config.espessuraLinhas;
+                const borderSize = Math.max(1.5, lineWidth * 0.22);
 
                 // Identificador único para esta onda
                 const waveKey = `${sensor.id}-${i}`;
                 const previousState = this.waveStates.get(waveKey);
-                
+
                 // Define estado desejado baseado na detecção
-                let targetStroke = null;
-                let targetOpacity = '0.65';
-                let isActive = false;
-                
+                let ledColor = null;
                 if (isLocked) {
                     // Muito perto: apenas primeira linha vermelha fixa
-                    if (i === 0) {
-                        targetStroke = '#ff3b30';
-                        targetOpacity = '1';
-                        isActive = true;
-                    }
-                } else if (inRange && sensorDistance !== null) {
-                    // Objeto detectado: aplica cor baseada na distância do objeto
-                    if (i < wavesReached) {
-                        targetStroke = sensorColor;
-                        targetOpacity = '0.95';
-                        isActive = true;
-                    }
+                    if (i === 0) ledColor = '#861a36';
+                } else if (inRange && sensorDistance !== null && i < wavesReached) {
+                    // Objeto detectado: cor baseada na distância do objeto
+                    ledColor = sensorColor;
                 }
-                
-                // Aplica transição suave se o estado mudou
-                const currentStroke = wave.style.stroke || (wave.getAttribute('stroke') !== 'none' ? wave.getAttribute('stroke') : null);
-                const currentOpacity = wave.style.opacity || '0.65';
-                
-                const strokeChanged = targetStroke !== currentStroke;
-                const opacityChanged = targetOpacity !== currentOpacity;
-                
-                // Calcula delay progressivo baseado no índice da linha para animação sequencial
-                // Linhas mais próximas (índice menor) animam primeiro
-                const sequentialDelay = isActive && (strokeChanged || opacityChanged) 
-                    ? (i * 50) // 50ms de delay entre cada linha
-                    : 0;
-                
-                if (strokeChanged || opacityChanged || !previousState) {
-                    // Aplica transição CSS para animação suave com delay progressivo
-                    wave.style.transition = `stroke 0.5s cubic-bezier(0.4, 0, 0.2, 1) ${sequentialDelay}ms, opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1) ${sequentialDelay}ms`;
-                    
-                    // Força reflow para garantir que a transição seja aplicada
-                    wave.offsetHeight;
-                    
-                    if (targetStroke) {
-                        wave.style.stroke = targetStroke;
-                    } else {
-                        wave.style.removeProperty('stroke');
+                const isActive = ledColor !== null;
+                // Só anima o "acender" na borda de subida (apagado -> aceso)
+                const justLit = isActive && (!previousState || !previousState.isActive);
+
+                const createLedPath = (part, width) => {
+                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    path.setAttribute('d', worldPath);
+                    path.setAttribute('class', `wave wave-${part}${isActive ? ' is-active' : ''}${justLit ? ' led-on' : ''}`);
+                    path.setAttribute('data-direction', side);
+                    path.setAttribute('data-sensor-id', sensor.id);
+                    path.setAttribute('data-index', i);
+                    // Pontas arredondadas (borda e miolo são círculos concêntricos na ponta)
+                    path.setAttribute('stroke-linecap', 'round');
+                    path.setAttribute('stroke-linejoin', 'round');
+                    path.setAttribute('stroke-width', `${width}px`);
+                    path.style.opacity = '1';
+                    if (isActive) {
+                        path.style.setProperty('--led-color', ledColor);
+                        // Linhas mais próximas (índice menor) acendem primeiro
+                        path.style.setProperty('--led-delay', `${i * 50}ms`);
                     }
-                    wave.style.opacity = targetOpacity;
-                } else {
-                    // Sem mudança, remove transição para melhor performance
-                    wave.style.transition = '';
+                    sensorGroup.appendChild(path);
+                    this.waves.push(path);
+                    return path;
+                };
+
+                const outline = createLedPath('outline', lineWidth + borderSize * 2);
+                const core = createLedPath('core', lineWidth);
+
+                // A ponta redonda avança meia espessura além do fim do traço. Encurtamos
+                // as duas camadas pelo raio da borda, para a linha manter o comprimento
+                // original (sem invadir o sensor vizinho). Com o mesmo recuo nas duas, as
+                // pontas ficam concêntricas e a borda tem espessura uniforme também na curva.
+                const capInset = lineWidth / 2 + borderSize;
+                const totalLength = core.getTotalLength();
+                if (totalLength > capInset * 3) {
+                    [outline, core].forEach((path) => {
+                        path.setAttribute('stroke-dasharray', `${totalLength - capInset * 2} ${totalLength}`);
+                        path.setAttribute('stroke-dashoffset', `${-capInset}`);
+                    });
                 }
-                
-                wave.setAttribute('stroke-width', `${this.config.espessuraLinhas}px`);
-                wave.style.animation = 'none';
-                
+
                 // Salva estado atual para próxima comparação
                 this.waveStates.set(waveKey, {
-                    stroke: targetStroke,
-                    opacity: targetOpacity,
+                    stroke: ledColor,
+                    opacity: '1',
                     isActive: isActive
                 });
-
-                // Adiciona ao grupo do sensor (rotação será aplicada no grupo)
-                sensorGroup.appendChild(wave);
-                this.waves.push(wave);
             }
             
             // Adiciona o grupo completo do sensor ao SVG

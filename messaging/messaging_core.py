@@ -28,6 +28,11 @@ _state: dict = {
     "tabDashboard_sensor_5": None,
     # Velocidade e bateria reais, lidas de car.telemetry (não simuladas a partir do PWM).
     "tabDashboard_speed":                0.0,
+    # Velocidade de cada roda (m/s), de car.telemetry.speed1..4, para a telemetria do Digital Twin.
+    "tabDashboard_speed1":               0.0,
+    "tabDashboard_speed2":               0.0,
+    "tabDashboard_speed3":               0.0,
+    "tabDashboard_speed4":               0.0,
     "tabDashboard_battery":              None,
     "tabDashboard_running":              False,
     # Placa de PARE / semáforo / desvio à direita, para os indicadores do Digital Twin.
@@ -164,10 +169,24 @@ def push_log(msg, tag="info") -> None:
         _log_next_id += 1
 
 
+# Zonas dos ultrassônicos (0 livre, 1 longe, 2 perto, 3 crítico) -> distância em cm
+# para as ondas do Digital Twin, que usam a escala 0-60 cm:
+# acima de 40 cm acende branco, de 20 a 40 amarelo, abaixo de 20 vermelho.
+_ZONE_TO_CM = {1: 50, 2: 30, 3: 8}
+
+
+def _zone_to_cm(zone):
+    try:
+        return _ZONE_TO_CM.get(int(zone))
+    except (TypeError, ValueError):
+        return None
+
+
 def update_state(pwm, running, *, real_speed=None, battery=None,
                   stop_active=None, traffic_light_code=None,
                   traffic_light_label=None,
-                  right_detour_active=None) -> None:
+                  right_detour_active=None,
+                  wheel_speeds=None, ultrasonic=None) -> None:
     """Atualiza o estado do Digital Twin.
 
     `pwm`/`running` seguem o comportamento antigo (indicador de PWM e farol).
@@ -200,6 +219,21 @@ def update_state(pwm, running, *, real_speed=None, battery=None,
             _state["tabDashboard_traffic_light_label"] = str(traffic_light_label)
         if right_detour_active is not None:
             _state["tabDashboard_right_detour_active"] = bool(right_detour_active)
+        if wheel_speeds is not None:
+            for index, value in enumerate(list(wheel_speeds)[:4], start=1):
+                try:
+                    _state[f"tabDashboard_speed{index}"] = round(float(value), 2)
+                except (TypeError, ValueError):
+                    pass
+        if ultrasonic is not None:
+            # Carro visto de cima apontando para a esquerda: o topo da tela é o lado
+            # direito do carro. Ponta superior = right, centro = pior frontal, ponta inferior = left.
+            left = ultrasonic.get("left", 0)
+            right = ultrasonic.get("right", 0)
+            front = max(int(ultrasonic.get("f_left", 0) or 0), int(ultrasonic.get("f_right", 0) or 0))
+            _state["tabDashboard_sensor_1"] = _zone_to_cm(right)
+            _state["tabDashboard_sensor_2"] = _zone_to_cm(front)
+            _state["tabDashboard_sensor_3"] = _zone_to_cm(left)
 
 
 # ── Ações do painel web que dependem de objetos do main.py ───────────────────
