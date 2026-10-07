@@ -4,6 +4,14 @@
 
   // --- CONFIGURAÇÕES GERAIS ---
   "espessuraLinhas": 8,
+  // Altura (px) do carro em que os valores de distância/comprimento abaixo valem.
+  // É a altura natural de "AutoCar Model.png"; em telas menores tudo escala junto com o carro.
+  // Se trocar a imagem do carro, atualize para a altura da imagem nova.
+  "alturaReferenciaCarro": 375,
+  // Desloca os sensores na vertical quando o carro não está centralizado na imagem
+  // (fração da altura do carro; negativo = para cima). No PNG atual a frente do carro
+  // é simétrica em y=176 de 375, ou seja, 11,5 px acima do centro: -11.5/375 = -0.031.
+  "ajusteCentroVertical": -0.031,
   "distanciaTravarVermelho": 18,
   "escalaGlobalVertical": 1.08,
   "debugAceleracaoPorTecla": 3,
@@ -12,6 +20,7 @@
 
   // Diâmetro da roda em cm (carrinho elétrico 4x4 infantil ~21cm de roda)
   "diametro_roda": 21,
+
   // Relação de redução da caixa de engrenagens (motor RPM / roda RPM)
   // Calibrar com medição real: medir velocidade real e ajustar até bater
   "motor_rpm_max": 30000,
@@ -19,54 +28,57 @@
   "velocimetroRangeMax": 80,
   "velocimetroVelocidadeInicial": 0,
 
+  // Velocidade de cada roda (m/s) que enche a barra da telemetria das rodas
+  "rodasVelocidadeMax": 10,
+
   // --- SENSOR FRONTAL - PONTA SUPERIOR (4 linhas: primeira + 3) ---
   "SFPS_quantidade": 3,
-  "SFPS_comprimento": 80,
+  "SFPS_comprimento": 90,
   "SFPS_alcance": 210,
-  "SFPS_rotacao": 30,
-  "SFPS_espacamento": 12,
-  "SFPS_distancia": 280,
+  "SFPS_rotacao": 20,
+  "SFPS_espacamento": 16,
+  "SFPS_distancia": 310,
   "SFPS_crescimento": 3,
   "SFPS_curvatura": 10,
 
   // Vertical (SFPS)
   "SFPS_comprimentoVertical": 66,
   "SFPS_rotacaoVertical": 40,
-  "SFPS_espacamentoVertical": 16,
-  "SFPS_distanciaVertical": 270,
+  "SFPS_espacamentoVertical": 20,
+  "SFPS_distanciaVertical": 300,
   "SFPS_posicaoVertical": -0.34,
 
   // --- SENSOR FRONTAL - CENTRO (5 linhas: primeira + 4) ---
   "SFCI_quantidade": 4,
-  "SFCI_comprimento": 150,
+  "SFCI_comprimento": 155,
   "SFCI_alcance": 320,
   "SFCI_rotacao": 0,
-  "SFCI_espacamento": 12,
-  "SFCI_distancia": 300,
+  "SFCI_espacamento": 16,
+  "SFCI_distancia": 330,
   "SFCI_crescimento": 4,
-  "SFCI_curvatura": 15,
+  "SFCI_curvatura": 8,
 
   // Vertical (SFCI)
   "SFCI_comprimentoVertical": 70,
   "SFCI_rotacaoVertical": -14,
-  "SFCI_espacamentoVertical": 16,
+  "SFCI_espacamentoVertical": 20,
   "SFCI_distanciaVertical": 303,
   "SFCI_posicaoVertical": 0.14,
 
   // --- SENSOR FRONTAL - PONTA INFERIOR (4 linhas: primeira + 3) ---
   "SFPI_quantidade": 3,
-  "SFPI_comprimento": 80,
+  "SFPI_comprimento": 90,
   "SFPI_alcance": 210,
-  "SFPI_rotacao": 30,
-  "SFPI_espacamento": 12,
-  "SFPI_distancia": 280,
+  "SFPI_rotacao": 20,
+  "SFPI_espacamento": 16,
+  "SFPI_distancia": 310,
   "SFPI_crescimento": 3,
   "SFPI_curvatura": 10,
 
   // Vertical (SFPI)
   "SFPI_comprimentoVertical": 66,
   "SFPI_rotacaoVertical": -40,
-  "SFPI_espacamentoVertical": 16,
+  "SFPI_espacamentoVertical": 20,
   "SFPI_distanciaVertical": 270,
   "SFPI_posicaoVertical": 0.34,
 
@@ -76,14 +88,14 @@
   "ST_quantidade": 5,
   "ST_comprimento": 240,
   "ST_alcance": 200,
-  "ST_espacamento": 12,
+  "ST_espacamento": 16,
   "ST_distancia": 290,
   "ST_crescimento": 7,
   "ST_curvatura": 20,
 
   // Vertical (ST)
   "ST_comprimentoVertical": 250,
-  "ST_espacamentoVertical": 16,
+  "ST_espacamentoVertical": 20,
   "ST_distanciaVertical": 290,
   "ST_posicaoVertical": 0,
   "ST_rotacaoVertical": 0

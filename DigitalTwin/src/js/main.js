@@ -13,6 +13,7 @@ import { ProximityDetector } from './modules/proximityDetector.js';
 import { DeviceStatusManager } from './modules/deviceStatusManager.js';
 import { SpeedometerManager } from './modules/speedometerManager.js';
 import { ProximityAudioManager } from './modules/proximityAudioManager.js';
+import { WheelTelemetry } from './modules/wheelTelemetry.js';
 
 /**
  * Inicializa a aplicação quando o DOM estiver pronto
@@ -29,10 +30,6 @@ function init() {
     const wavesContainer = document.getElementById('proximityWaves');
     const appContainer = document.querySelector('.app-container');
     const proximityPanel = document.querySelector('.proximity-panel');
-    const signalStopValueEl = document.getElementById('signalStopValue');
-    const signalLightValueEl = document.getElementById('signalLightValue');
-    const signalReasonValueEl = document.getElementById('signalReasonValue');
-    const signalRightDetourValueEl = document.getElementById('signalRightDetourValue');
 
     if (!imageElement) {
         console.error('Elemento da imagem não encontrado');
@@ -99,6 +96,13 @@ function init() {
                 speedometer.decelerationTimer = null;
             }
 
+            // Telemetria das rodas (speed1..4); a barra enche em rodasVelocidadeMax (m/s)
+            const wheelTelemetry = new WheelTelemetry(
+                document.getElementById('wheelTelemetry'),
+                Number(config?.rodasVelocidadeMax) || 10
+            );
+            wheelTelemetry.init();
+
             // Cache de elementos DOM para melhor performance
             const rpmValueEl = document.getElementById('rpmValue');
             const horizontalRpmValueEl = document.getElementById('horizontalRpmValue');
@@ -131,12 +135,17 @@ function init() {
                 if (explicitBase) {
                     return explicitBase.replace(/\/+$/, '');
                 }
-                const apiHost = getParam('apiHost') || window.location.hostname || '127.0.0.1';
-                const apiPort = getParam('apiPort') || '8000';
-                return `http://${apiHost}:${apiPort}/api`;
+                const apiHost = getParam('apiHost');
+                const apiPort = getParam('apiPort');
+                // Servido pelo Flask do carro (messaging_core, porta 5000): a API está na mesma origem
+                if (!apiHost && !apiPort && window.location.protocol.startsWith('http')) {
+                    return `${window.location.origin}/api`;
+                }
+                return `http://${apiHost || window.location.hostname || '127.0.0.1'}:${apiPort || '5000'}/api`;
             })();
             const dashboardApiUrl = `${dashboardApiBaseUrl}/dashboard`;
-            const dashboardPollIntervalMs = 1000;
+            // 400 ms: rápido o bastante para a telemetria das rodas responder como painel de corrida
+            const dashboardPollIntervalMs = 400;
             let dashboardPollTimer = null;
             let speedRecalcTimer = null;
             let latestRpm = 0;
@@ -237,35 +246,35 @@ function init() {
 
             let setLayoutMode = () => {};
 
-            // Placa de PARE / semáforo — mesma lógica de indicação do painel web.
-            // O estado (cor) é aplicado no card inteiro (.signal-chip), pois ícone e
-            // valor mudam de cor juntos, no mesmo padrão dos indicator-item existentes.
-            const setSignalChip = (valueEl, text, state) => {
-                if (!valueEl) return;
-                valueEl.textContent = text;
-                const chip = valueEl.closest('.signal-chip');
-                if (!chip) return;
-                chip.classList.remove('state-green', 'state-red', 'state-yellow', 'state-muted');
-                chip.classList.add(`state-${state}`);
+            // Placa de PARE / semáforo / desvio / veículo — mesma lógica de indicação do painel web.
+            // Cada sinal existe na barra de baixo (horizontal) e no painel lateral (vertical);
+            // o estado (cor) vai no item inteiro, pois ícone e valor mudam de cor juntos.
+            const setSignalChip = (name, text, state) => {
+                document.querySelectorAll(`[data-signal="${name}"]`).forEach((item) => {
+                    const valueEl = item.querySelector('.hud-signal-value');
+                    if (valueEl) valueEl.textContent = text;
+                    item.classList.remove('state-green', 'state-red', 'state-yellow', 'state-muted');
+                    item.classList.add(`state-${state}`);
+                });
             };
 
             const updateSignalChips = (dashboardData) => {
                 const stopRaw = dashboardData?.tabDashboard_stop_active ?? dashboardData?.tabdashboard_stop_active;
                 const stopActive = typeof stopRaw === 'boolean' ? stopRaw : null;
-                if (stopActive === true) setSignalChip(signalStopValueEl, 'ATIVA', 'red');
-                else if (stopActive === false) setSignalChip(signalStopValueEl, 'LIVRE', 'green');
-                else setSignalChip(signalStopValueEl, '—', 'muted');
+                if (stopActive === true) setSignalChip('stop', 'ATIVA', 'red');
+                else if (stopActive === false) setSignalChip('stop', 'LIVRE', 'green');
+                else setSignalChip('stop', '—', 'muted');
 
                 const lightCode = parseNumber(dashboardData?.tabDashboard_traffic_light_code ?? dashboardData?.tabdashboard_traffic_light_code);
                 const lightMap = { 0: ['VERMELHO', 'red'], 1: ['AMARELO', 'yellow'], 2: ['VERDE', 'green'], '-1': ['NENHUM', 'muted'] };
                 const [lightText, lightState] = lightMap[lightCode] ?? ['—', 'muted'];
-                setSignalChip(signalLightValueEl, lightText, lightState);
+                setSignalChip('light', lightText, lightState);
 
                 const rightDetourRaw = dashboardData?.tabDashboard_right_detour_active ?? dashboardData?.tabdashboard_right_detour_active;
                 const rightDetourActive = typeof rightDetourRaw === 'boolean' ? rightDetourRaw : null;
-                if (rightDetourActive === true) setSignalChip(signalRightDetourValueEl, 'ATIVA', 'green');
-                else if (rightDetourActive === false) setSignalChip(signalRightDetourValueEl, 'LIVRE', 'muted');
-                else setSignalChip(signalRightDetourValueEl, '—', 'muted');
+                if (rightDetourActive === true) setSignalChip('detour', 'ATIVA', 'green');
+                else if (rightDetourActive === false) setSignalChip('detour', 'LIVRE', 'muted');
+                else setSignalChip('detour', '—', 'muted');
 
                 const runningRaw = dashboardData?.tabDashboard_running ?? dashboardData?.tabdashboard_running;
                 const running = Boolean(runningRaw);
@@ -275,7 +284,7 @@ function init() {
                 else if (lightCode === 0) { reasonText = 'PARADO — SEMÁFORO'; reasonState = 'red'; }
                 else if (rightDetourActive) { reasonText = 'DESVIO — DIREITA'; reasonState = 'green'; }
                 else { reasonText = 'EM MOVIMENTO'; reasonState = 'green'; }
-                setSignalChip(signalReasonValueEl, reasonText, reasonState);
+                setSignalChip('reason', reasonText, reasonState);
             };
 
             const applyDashboardPayload = (dashboardData) => {
@@ -305,6 +314,7 @@ function init() {
 
                 deviceStatusManager.setLevel(batteryLevel);
                 updateSignalChips(dashboardData);
+                wheelTelemetry.update(dashboardData);
 
                 isHeadlightOn = light;
                 updateHeadlightUI();
