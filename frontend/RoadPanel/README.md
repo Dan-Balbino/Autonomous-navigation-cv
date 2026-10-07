@@ -20,7 +20,7 @@ na ordem recebida: **coleta** no primeiro, **passagem** no do meio e **entrega**
 ## Voz e avisos
 
 Sons em `sounds/` (cópia da pasta `sound/` do projeto; ao trocar um som lá, copie de novo).
-A voz fala quase em cima de cada manobra (~0,9 s antes, no máximo ~55 cm): curva suave à direita/esquerda, siga em frente,
+A voz fala quase em cima de cada manobra (~0,9 s antes, no máximo ~1,2 m): curva suave à direita/esquerda, siga em frente,
 ponto de coleta e ponto de entrega à frente. Também toca:
 
 | Quando | Som |
@@ -61,8 +61,8 @@ Se mudar o `lane_guide_map` no Python, mude também `LANE_GUIDE_MAP` em `src/tra
 **Posição** (`src/track/localizer.js`): não há GPS. A posição anda pela velocidade das rodas e
 é corrigida em cada detecção (desvio, semáforo, PARE, ponto confirmado). Ela espera em cada
 placa de desvio e no ponto-alvo até o carro detectar; se o carro passar sem detectar, libera
-depois de ~1 m. O rodapé mostra a última referência usada. A escala (m por px) no debug
-precisa bater com a pista real para a odometria ficar boa.
+depois de ~1,5 m. O rodapé mostra a última referência usada. A escala vem das medidas reais da pista
+(21 m × 10 m, faixa de 1,5 m = 0,02 m por px da imagem).
 
 ## Prévia GPS na placa PARE
 

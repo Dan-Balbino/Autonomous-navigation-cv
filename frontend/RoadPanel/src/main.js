@@ -17,7 +17,7 @@ import { buildPlan, sameRoute } from './track/planner.js';
 import { Localizer } from './track/localizer.js';
 import { roleName, roleAt, ROLE } from './track/mission.js';
 import { Voice } from './ui/voice.js';
-import { PX_TO_WORLD, DEFAULT_SIGNS } from './track/trackData.js';
+import { PX_TO_WORLD, DEFAULT_SIGNS, METERS_PER_PX } from './track/trackData.js';
 import { buildTrack } from './scene/trackMeshes.js';
 import { buildSigns } from './scene/signs.js';
 import { Car } from './scene/car.js';
@@ -44,7 +44,7 @@ const state = {
   source: 'sim',               // 'live' | 'sim'
   linkStatus: 'connecting',
   liveData: null,
-  metersPerPx: 0.005,
+  metersPerPx: METERS_PER_PX,   // pista de 21 m × 10 m
   planMode: 'car',             // 'car' (lógica do carro) | 'shortest' (menor caminho)
   pwmToMs: 0.004,              // m/s por unidade de PWM quando a telemetria não traz velocidade
   pointConfirmed: false,
@@ -503,7 +503,7 @@ function finishMission() {
 // antes e termina com o carro já entrando na curva
 const CUE_LEAD_S = 0.9;
 const CUE_MIN_PX = 20;
-const CUE_MAX_PX = 110;
+const CUE_MAX_PX = 60;        // ~1,2 m
 
 /** Fala a manobra quase em cima dela (curva, siga em frente, coleta, entrega). */
 function updateGuide(now, speedMs) {

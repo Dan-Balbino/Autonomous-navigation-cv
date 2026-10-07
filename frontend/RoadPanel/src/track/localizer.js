@@ -19,7 +19,7 @@ const LEAD = { detour: 40, 'traffic-light': 90, stop: 30 };
 const SEARCH_BACK = 160;
 const SEARCH_AHEAD = 520;
 const GATE_SLACK = 20;          // quanto a estimativa pode passar do portão
-const GATE_RELEASE = 220;       // odometria além do portão para desistir de esperar
+const GATE_RELEASE = 75;        // ~1,5 m de odometria além do portão para desistir de esperar
 
 const REF_LABELS = {
   detour: 'placa de desvio',

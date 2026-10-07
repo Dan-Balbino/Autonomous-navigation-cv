@@ -10,6 +10,13 @@
 export const IMAGE_SIZE = { w: 1128, h: 582 };
 export const PX_TO_WORLD = 0.02;
 
+/**
+ * Escala real da pista: 21 m × 10 m, faixa de 1,5 m. Na imagem o contorno externo mede
+ * 1056 × 499 px e a faixa 75 px entre as linhas, ou seja 0,02 m por px nas três medidas
+ * (1 unidade do mundo 3D = 1 m).
+ */
+export const METERS_PER_PX = 0.02;
+
 // Largura das linhas pintadas na pista (px da imagem)
 export const LINE_WIDTH_PX = 8;
 
