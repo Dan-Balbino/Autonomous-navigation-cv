@@ -48,6 +48,14 @@ placa de desvio e no ponto-alvo até o carro detectar; se o carro passar sem det
 depois de ~1 m. O rodapé mostra a última referência usada. A escala (m por px) no debug
 precisa bater com a pista real para a odometria ficar boa.
 
+## Prévia GPS na placa PARE
+
+Quando o carro para na PARE (simulação: 3 s, igual ao `STOP_WAIT_SECONDS` do detector; modo
+real: enquanto `hud.stop_active` estiver ligado), a câmera sobe e o mapa traça, como um GPS, o
+caminho até a próxima placa (ponto, desvio, semáforo ou PARE; sem placa à frente, a largada).
+Um alfinete marca a placa e o cartão mostra nome, distância, tempo estimado e quanto falta para
+o carro seguir. Quando ele volta a andar, a câmera retorna para trás do carro.
+
 ## Atalhos e ferramentas
 
 | Tecla / botão | O que faz |
