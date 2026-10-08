@@ -9,6 +9,8 @@
 #define SIDE_RIGHT 1
 #define SIDE SIDE_LEFT
 
+#define DIFFERENTIAL_LIMIT 0.10;
+
 // --- PWM Control ---
 #define OUTPUT_LIMIT 255
 #define REVERSE_PWM -60

@@ -69,6 +69,10 @@ int stop_step = 0;
 unsigned long last_stop_step_time = 0;
 const unsigned long STOP_STEP_INTERVAL_MS = 10;
 
+// ================= RATIO LIMITS =================
+float max_ratio = 1.0 + DIFFERENTIAL_LIMIT;
+float min_ratio = 1.0 - DIFFERENTIAL_LIMIT;
+
 // ================= TELEMETRY =================
 
 float speed_3 = 0.0;
@@ -189,25 +193,24 @@ void startMotors() {
 }
 
 // ================= DIRECT PWM CONTROL =================
-
 float calculate_side_pwm_ratio() {
-  int16_t clamped_angle = constrain(steering_angle, -45, 45);
-
-  if (clamped_angle == 0) {
+  if (steering_angle == 0) {
     return 1.0;
   }
 
+  int16_t clamped_angle = constrain(steering_angle, -45, 45);
   float angle_rad = clamped_angle * PI / 180.0;
   float radius = WHEEL_BASE / tan(abs(angle_rad));
+
   float inner_radius = max(radius - (TRACK_WIDTH / 2.0), 0.0);
   float outer_radius = radius + (TRACK_WIDTH / 2.0);
 
-  float inner_ratio = inner_radius / radius;
-  float outer_ratio = outer_radius / radius;
+  float ratio = (SIDE == SIDE_LEFT)
+      ? (clamped_angle > 0 ? outer_radius / radius : inner_radius / radius)
+      : (clamped_angle > 0 ? inner_radius / radius : outer_radius / radius);
 
-  return (SIDE == SIDE_LEFT)
-      ? (clamped_angle > 0 ? outer_ratio : inner_ratio)
-      : (clamped_angle > 0 ? inner_ratio : outer_ratio);
+  //return constrain(ratio, min_ratio, max_ratio);
+  return 1.0;
 }
 
 void applyTargetPwm() {
@@ -216,8 +219,11 @@ void applyTargetPwm() {
   int side_pwm = round(target_pwm * ratio);
   side_pwm = constrain(side_pwm, 0, OUTPUT_LIMIT);
 
-  pwm_1 = side_pwm;
-  pwm_2 = side_pwm;
+  //pwm_1 = side_pwm;
+  //pwm_2 = side_pwm;
+
+  pwm_1 = target_pwm;
+  pwm_2 = target_pwm;
 
   motor1.move(side_pwm);
   motor2.move(side_pwm);
@@ -242,8 +248,11 @@ void taskSmoothAccel() {
 
   int side_pwm = constrain((int)round(ramped_base * ratio), 0, OUTPUT_LIMIT);
 
-  pwm_1 = side_pwm;
-  pwm_2 = side_pwm;
+  //pwm_1 = side_pwm;
+  //pwm_2 = side_pwm;
+
+  pwm_1 = target_pwm;
+  pwm_2 = target_pwm;
 
   motor1.move(side_pwm);
   motor2.move(side_pwm);

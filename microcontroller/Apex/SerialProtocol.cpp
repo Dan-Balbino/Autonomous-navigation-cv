@@ -41,6 +41,13 @@ bool receiveCommand(CarCommand &cmd) {
 
 void processCommand(CarCommand &cmd) {
   // Envia o comando para o módulo de controle via CAN
+  bool parar;
+  if (cmd.run) {
+    parar = cmd.stop;
+  } else {
+    parar = false;
+  }
+  
   sendMotorCommand(MOTOR_COMMAND, (int16_t)(cmd.servo - 90), cmd.speed, cmd.reverse, cmd.stop, cmd.vehicleState);
 }
 

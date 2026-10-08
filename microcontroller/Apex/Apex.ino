@@ -32,7 +32,7 @@ void setup() {
   Serial.begin(115200);
 
   // Serial1 do Arduino Mega
-  Serial1.begin(9600);
+  Serial1.begin(115200);
 
   pinMode(LED_BUILTIN, OUTPUT);
   randomSeed(analogRead(A0));
@@ -76,7 +76,7 @@ void loop() {
   }
 
   // Lê Serial1
-  //readSerial1(telemetry.battery, telemetry.battery_current, telemetry.battery_percentage, telemetry.battery_state);
+  readSerial1(telemetry.battery, telemetry.battery_current, telemetry.battery_percentage, telemetry.battery_state);
 
   testBlock();
 
