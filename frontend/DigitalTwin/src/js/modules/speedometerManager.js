@@ -78,7 +78,7 @@ export class SpeedometerManager {
         this.needle.setAttribute('x2', `${x2.toFixed(2)}`);
         this.needle.setAttribute('y2', `${y2.toFixed(2)}`);
 
-        this.valueEl.textContent = clamped.toFixed(1);
+        this.valueEl.textContent = clamped.toFixed(2);
     }
 
     increaseSpeed(delta = 1) {
@@ -158,7 +158,7 @@ export class SpeedometerManager {
 
             if (isMajor) {
                 const value = Math.round(progress * this.maxSpeed);
-                const displayValue = value === 0 ? 10 : value;
+                const displayValue = value;
                 const labelRadius = this.radius + 16;
                 const lx = this.centerX + labelRadius * Math.cos(angle);
                 const ly = this.centerY - labelRadius * Math.sin(angle);

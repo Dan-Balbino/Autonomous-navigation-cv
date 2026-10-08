@@ -44,6 +44,12 @@
             <path d="M8 3H5C3.89543 3 3 3.89543 3 5V8M21 8V5C21 3.89543 20.1046 3 19 3H16M16 21H19C20.1046 21 21 20.1046 21 19V16M3 16V19C3 20.1046 3.89543 21 5 21H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
     </button>
+    <button class="road-map-btn" aria-label="Abrir mapa da pista" title="Mapa da pista" onclick="window.location.href='/road/'">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M9 4 3 6.5v13.5L9 17.5l6 2.5 6-2.5V4l-6 2.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            <path d="M9 4v13.5M15 6.5V20" stroke="currentColor" stroke-width="2"/>
+        </svg>
+    </button>
     <button class="layout-mode-btn" id="layoutModeBtn" aria-label="Girar tela" title="Girar tela">
         <svg class="rotate-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <polyline points="1 4 1 10 7 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -69,14 +75,15 @@
             </div>
             <div class="speedometer-readout">
                 <span id="speedometerValue">0.0</span>
-                <span class="speed-unit">m/min</span>
+                <span class="speed-unit">m/s</span>
             </div>
         </div>
 
         <!-- Separador -->
         <div class="dashboard-separator"></div>
 
-        <!-- Indicadores Secundários -->
+        <!-- Indicadores em grade 3 colunas: PWM, farol e sinais -->
+        <div class="dashboard-icon-grid">
         <div class="dashboard-secondary-indicators">
             <div class="indicator-item rpm-indicator-item">
                 <div class="indicator-icon rpm-icon">
@@ -118,7 +125,6 @@
         </div>
 
         <!-- Sinais (placa de PARE / semáforo / desvio / veículo) -->
-        <div class="dashboard-separator"></div>
         <div class="dashboard-signal-grid" aria-label="Sinais de trânsito">
             <div class="hud-signal state-muted" data-signal="stop">
                 <div class="hud-signal-icon">
@@ -165,6 +171,7 @@
                 <div class="hud-signal-value">—</div>
             </div>
         </div>
+        </div>
 
         <!-- Rodapé do Painel -->
         <div class="dashboard-footer">
@@ -180,7 +187,7 @@
                 <div class="horizontal-speed-label">VELOCIDADE</div>
                 <div class="horizontal-speed-value">
                     <span id="horizontalSpeedValue">0.0</span>
-                    <span class="horizontal-speed-unit">m/min</span>
+                    <span class="horizontal-speed-unit">m/s</span>
                 </div>
             </div>
             

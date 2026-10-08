@@ -14,6 +14,10 @@ import { DeviceStatusManager } from './modules/deviceStatusManager.js';
 import { SpeedometerManager } from './modules/speedometerManager.js';
 import { ProximityAudioManager } from './modules/proximityAudioManager.js';
 import { WheelTelemetry } from './modules/wheelTelemetry.js';
+import { startDotBackground } from './modules/dotBackground.js';
+
+// Fundo com a malha de pontos animada (independe do resto da inicialização)
+startDotBackground();
 
 /**
  * Inicializa a aplicação quando o DOM estiver pronto
@@ -236,7 +240,7 @@ function init() {
 
                 speedometer.setSpeed(displayedSpeed);
                 if (horizontalSpeedValueEl) {
-                    horizontalSpeedValueEl.textContent = displayedSpeed.toFixed(1);
+                    horizontalSpeedValueEl.textContent = displayedSpeed.toFixed(2);
                 }
 
                 const pwmText = String(Math.round(Math.max(0, Math.min(255, latestPwm))));

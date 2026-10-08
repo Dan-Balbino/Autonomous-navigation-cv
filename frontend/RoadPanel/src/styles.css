@@ -666,6 +666,7 @@ html, body {
 }
 
 .map-button + .map-button { border-top: 1px solid var(--panel-line); }
+a.map-button { text-decoration: none; }
 .map-button:hover { color: var(--ink); background: var(--control); }
 .map-button[aria-pressed='true'] { color: var(--route-strong); }
 .map-button[hidden] { display: none; }

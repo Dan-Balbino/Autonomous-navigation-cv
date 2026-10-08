@@ -25,7 +25,7 @@
   // Calibrar com medição real: medir velocidade real e ajustar até bater
   "motor_rpm_max": 30000,
   "relacao_reducao": 250,
-  "velocimetroRangeMax": 80,
+  "velocimetroRangeMax": 5,
   "velocimetroVelocidadeInicial": 0,
 
   // Velocidade de cada roda (m/s) que enche a barra da telemetria das rodas
