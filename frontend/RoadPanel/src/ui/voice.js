@@ -19,7 +19,7 @@ const FILES = {
 };
 
 // Falas que não perdem a validade na fila
-const KEEP = new Set(['delivered', 'finish', 'start', 'pedestrian']);
+const KEEP = new Set(['delivered', 'finish', 'start', 'pedestrian', 'pickup', 'delivery']);
 const MAX_WAIT_MS = 2500;
 const STORAGE_KEY = 'apex.roadpanel.sound';
 

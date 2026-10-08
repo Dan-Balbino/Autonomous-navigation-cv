@@ -500,6 +500,12 @@ function openGps(reason, now) {
     gpsEl.label.textContent = 'Próxima placa';
   }
   gpsEl.target.textContent = signName(gpsState.target);
+  // Saindo da coleta com o GPS mostrando o caminho até a entrega: "indo ao local de entrega"
+  if (reason === 'point' && gpsState.target.type === 'point' && gpsState.target.target) {
+    const mission = missionView();
+    const index = mission.all.indexOf(gpsState.target.point, mission.doneCount);
+    if (index >= 0 && roleAt(index, mission.all.length) === ROLE.delivery) voice.say('delivery');
+  }
   gpsEl.card.hidden = false;
 }
 
@@ -534,6 +540,7 @@ const guide = {
   announced: new Set(),
   wasMoving: false,
   startedMission: null,
+  lastCue: null,               // última manobra falada
   hazard: false,
   hazardAt: -1e9,
   simHazardUntil: 0,
@@ -568,6 +575,7 @@ function updateGuide(now, speedMs) {
     if (guide.startedMission !== key) {
       guide.startedMission = key;
       voice.say('start');
+      voice.say('pickup');          // "indo ao local de coleta"
     }
   }
   guide.wasMoving = moving;
@@ -583,11 +591,15 @@ function updateGuide(now, speedMs) {
     else if (event.type === 'point' && event.target) {
       const index = mission.all.indexOf(event.point, mission.doneCount);
       const role = index >= 0 ? roleAt(index, mission.all.length) : null;
-      cue = role === ROLE.pickup ? 'pickup' : role === ROLE.delivery ? 'delivery' : null;
+      // Coleta e entrega são faladas no início do percurso e no GPS após a coleta, não aqui
+      cue = null;
     }
     const key = `${event.type}@${Math.round(event.s)}`;
     if (!cue || guide.announced.has(key)) continue;
     guide.announced.add(key);
+    // Nunca repete a mesma fala seguida (ex.: dois "siga em frente" em cruzamentos seguidos)
+    if (cue === guide.lastCue) continue;
+    guide.lastCue = cue;
     voice.say(cue);
   }
 }
