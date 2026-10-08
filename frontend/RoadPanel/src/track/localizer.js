@@ -52,8 +52,15 @@ export class Localizer {
       return 0;
     }
     if (data.speed > 0.005) {
+      this.wheelsSeen = true;
       this.speedSource = 'telemetria';
       return data.speed;
+    }
+    // Rodas já mandaram velocidade alguma vez: 0 nelas é o carro parado de verdade
+    // (freou, travou na placa, obstáculo), mesmo com PWM ainda ligado
+    if (this.wheelsSeen) {
+      this.speedSource = 'telemetria';
+      return 0;
     }
     if (data.pwm > 0 && pwmToMs > 0) {
       this.speedSource = 'pwm';
@@ -131,6 +138,7 @@ export class Localizer {
   /** Entrou no modo real: esquece contadores e referências da sessão anterior. */
   restart() {
     this.prev = null;
+    this.wheelsSeen = false;
     this.detours = 0;
     this.ref = null;
     this.reset();

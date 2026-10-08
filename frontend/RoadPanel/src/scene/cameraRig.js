@@ -50,11 +50,22 @@ export class CameraRig {
     let target;
     let look;
     if (this.mode === 'top') {
-      const span = IMAGE_SIZE.w * PX_TO_WORLD;
+      // Distância calculada pelo campo de visão para a pista inteira caber na área livre
+      // da tela (fora do cartão da missão, da barra de cima e dos botões laterais)
+      const w = IMAGE_SIZE.w * PX_TO_WORLD;
+      const h = IMAGE_SIZE.h * PX_TO_WORLD;
       const aspect = this.camera.aspect || 1.6;
-      const height = Math.max(span / aspect, IMAGE_SIZE.h * PX_TO_WORLD) * 0.95;
-      target = new THREE.Vector3(this.trackCenter.x, height, this.trackCenter.z + height * 0.42);
-      look = this.trackCenter.clone();
+      const portrait = aspect < 0.9;
+      const safe = portrait ? { w: 0.9, h: 0.42, x: 0, y: -0.12 } : { w: 0.6, h: 0.66, x: 0.09, y: -0.02 };
+      const tan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+      const dist = Math.max(h / (safe.h * 2 * tan), w / (safe.w * aspect * 2 * tan)) * 1.04;
+      const viewW = 2 * dist * tan * aspect;
+      const viewH = 2 * dist * tan;
+      // Desloca o centro para a pista ficar no meio da área livre
+      const center = this.trackCenter.clone().add(new THREE.Vector3(-safe.x * viewW, 0, -safe.y * viewH));
+      const tilt = 0.18;   // leve inclinação, mantém a sensação de 3D
+      target = new THREE.Vector3(center.x, dist * Math.cos(tilt), center.z + dist * Math.sin(tilt));
+      look = center;
     } else if (this.focus) {
       // Quase de cima, um pouco atrás do carro; o carro fica acima do cartão da prévia
       const { center, radius, dir } = this.focus;

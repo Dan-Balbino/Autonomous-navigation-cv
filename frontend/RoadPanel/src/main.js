@@ -51,7 +51,8 @@ const state = {
   planMode: 'shortest',
   pwmToMs: 0.004,              // m/s por unidade de PWM quando a telemetria não traz velocidade
   pointConfirmed: false,
-  cruiseMs: 0.4,               // velocidade típica do carro real (para o tempo estimado)       // o servidor confirmou um ponto desde o último quadro
+  cruiseMs: 0.4,
+  liveSpeed: 0,                // velocidade exibida no modo real (suavizada)               // velocidade típica do carro real (para o tempo estimado)       // o servidor confirmou um ponto desde o último quadro
   // Trajetória atual
   plan: null,
   s: 0,                        // posição do carro na trajetória (px)
@@ -633,7 +634,11 @@ function frame(now) {
     if (state.source === 'live') {
       // Carro real: telemetria + marcos detectados (o ponto só conta quando o servidor confirma)
       const data = state.linkStatus === 'live' ? state.liveData : null;
-      speedMs = localizer.speed(data, state.pwmToMs);
+      // Acompanha a velocidade real: freia e acelera junto (~0,25 s), sem dar saltos
+      const target = localizer.speed(data, state.pwmToMs);
+      state.liveSpeed += (target - state.liveSpeed) * (1 - Math.exp(-dt * 8));
+      if (target === 0 && state.liveSpeed < 0.01) state.liveSpeed = 0;
+      speedMs = state.liveSpeed;
       state.s = localizer.step(state.plan, state.s, data, dt, speedMs, state.metersPerPx, now, {
         routeShrank: state.pointConfirmed,
         hasRoute: state.serverRoute.length > 0,

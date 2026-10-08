@@ -132,7 +132,7 @@ export class DebugPanel {
       });
     });
     el.apiHint.textContent = state.source === 'live'
-      ? `Lendo ${api.apiBase}/vehicle_info a cada 0,4 s. A rota vem de hud.route (nav.route).`
+      ? `Lendo ${api.apiBase}/vehicle_info a cada 0,2 s. A rota vem de hud.route (nav.route).`
       : 'Dados simulados. Nada aqui é lido do carro.';
     el.simRouteText.textContent = state.simRoute.length
       ? state.simRoute.map((p, i) => (i < state.simDone ? `${p} (feito)` : p)).join('  ›  ')

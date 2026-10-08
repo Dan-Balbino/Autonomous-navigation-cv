@@ -13,7 +13,7 @@
  */
 import { parseRoute } from '../track/planner.js';
 
-const POLL_MS = 400;
+const POLL_MS = 200;          // rápido o bastante para o mapa parar junto com o carro
 const OFFLINE_POLL_MS = 2000;
 const TIMEOUT_MS = 1500;
 const STALE_MS = 3000;
