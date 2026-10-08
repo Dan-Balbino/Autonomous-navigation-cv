@@ -85,6 +85,7 @@ o carro seguir. Quando ele volta a andar, a câmera retorna para trás do carro.
 |---|---|
 | **Simulação / Modo real** (topo, à direita) | No modo real o carro só anda com o que chega do servidor; começa na largada |
 | **Twin** | Volta para o Digital Twin (`/`) |
+| **Oficial / Teste** | Troca entre a pista oficial e a pista de teste (ilha grande + 1 ilha retangular); cada pista guarda as próprias placas, largada e partida. Também por `?pista=teste` |
 | **Topo / Carro** (V) | Alterna entre a vista de topo e a perseguição |
 | **Som / Mudo** (M) | Liga e desliga a voz e os avisos |
 | **Tela cheia** (F) | Tela inteira (não aparece no iPhone, que não permite em páginas) |

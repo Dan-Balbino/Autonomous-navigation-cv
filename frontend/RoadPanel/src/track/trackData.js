@@ -12,6 +12,36 @@ export const PX_TO_WORLD = 0.02;
 export const METERS_PER_PX = 0.02;
 
 /**
+ * Duas pistas: a oficial (ilha grande + 2 ilhas retangulares) e a de teste (a mesma ilha
+ * grande, na mesma posição, + 1 ilha retangular). A escolha vem de ?pista=oficial|teste
+ * ou da última usada (navegador); a página recarrega ao trocar.
+ */
+export const TRACKS = { oficial: 'Pista oficial', teste: 'Pista de teste' };
+const TRACK_KEY = 'apex.roadpanel.track';
+export const TRACK_ID = (() => {
+  try {
+    const asked = new URLSearchParams(location.search).get('pista');
+    if (asked && TRACKS[asked]) {
+      localStorage.setItem(TRACK_KEY, asked);
+      return asked;
+    }
+    const saved = localStorage.getItem(TRACK_KEY);
+    if (saved && TRACKS[saved]) return saved;
+  } catch { /* fora do navegador ou sem armazenamento */ }
+  return 'oficial';
+})();
+const IS_TEST = TRACK_ID === 'teste';
+
+/** Troca de pista (recarrega a página com a outra geometria). */
+export function switchTrack(id) {
+  if (!TRACKS[id] || id === TRACK_ID) return;
+  try { localStorage.setItem(TRACK_KEY, id); } catch { /* segue pela URL */ }
+  const url = new URL(location.href);
+  url.searchParams.set('pista', id);
+  location.href = url.toString();
+}
+
+/**
  * Medidas oficiais (mm), entre os centros das linhas:
  * pista 20645,7 × 10858,3; faixa entre ilhas 1598,9; faixas retas das laterais 1599,5.
  * A imagem não tem a mesma proporção (e os corredores saíram mais largos nela), então cada
@@ -19,7 +49,8 @@ export const METERS_PER_PX = 0.02;
  * que sobra, na proporção da imagem.
  */
 const OFFICIAL = { w: 20.6457, h: 10.8583, corridor: 1.5989, side: 1.5995 };
-const IMG_X = [30, 114, 429, 524, 722, 815, 1000, 1086];   // linhas: externo | ilha 1 | ilha 2 | ilha 3 | externo
+// linhas: externo | ilha 1 | ilha 2 | ilha 3 | externo (teste: sem a ilha 3, faixa da direita logo após a ilha 2)
+const IMG_X = IS_TEST ? [30, 114, 429, 524, 722, 808] : [30, 114, 429, 524, 722, 815, 1000, 1086];
 const IMG_Y = [58, 141, 474, 557];                         // externo | ilhas | externo
 
 function breakpoints(img, lanes, total) {
@@ -35,7 +66,12 @@ function breakpoints(img, lanes, total) {
   return meters.map((m) => img[0] + m / METERS_PER_PX);
 }
 
-const OUT_X = breakpoints(IMG_X, [OFFICIAL.side, OFFICIAL.corridor, OFFICIAL.corridor, OFFICIAL.side], OFFICIAL.w);
+// Metros por px de ilha, igual nas duas pistas (as ilhas mantêm o tamanho real)
+const ISLAND_M_PER_PX = (OFFICIAL.w - 2 * OFFICIAL.side - 2 * OFFICIAL.corridor) / ((429 - 114) + (722 - 524) + (1000 - 815));
+const OUT_X = IS_TEST
+  ? breakpoints(IMG_X, [OFFICIAL.side, OFFICIAL.corridor, OFFICIAL.side],
+    2 * OFFICIAL.side + OFFICIAL.corridor + ISLAND_M_PER_PX * ((429 - 114) + (722 - 524)))
+  : breakpoints(IMG_X, [OFFICIAL.side, OFFICIAL.corridor, OFFICIAL.corridor, OFFICIAL.side], OFFICIAL.w);
 const OUT_Y = breakpoints(IMG_Y, [OFFICIAL.side, OFFICIAL.side], OFFICIAL.h);
 
 function piecewise(v, from, to) {
@@ -50,7 +86,7 @@ function piecewise(v, from, to) {
 export const toTrack = ([x, y]) => [piecewise(x, IMG_X, OUT_X), piecewise(y, IMG_Y, OUT_Y)];
 
 export const IMAGE_SIZE = (() => {
-  const [w, h] = toTrack([1128, 582]);
+  const [w, h] = toTrack([IS_TEST ? 870 : 1128, 582]);
   return { w: Math.round(w), h: Math.round(h) };
 })();
 
@@ -151,7 +187,9 @@ const RAW_SEGMENTS = [
 ];
 
 /** Volta externa padrão (rota vazia): trechos seguidos a partir da largada. */
-export const OUTER_LOOP = ['topo-1', 'topo-2', 'faixa-direita', 'baixo', 'esquerda'];
+export const OUTER_LOOP = IS_TEST
+  ? ['topo-1', 'faixa-direita', 'esquerda']
+  : ['topo-1', 'topo-2', 'faixa-direita', 'baixo', 'esquerda'];
 
 /**
  * Placas e sinais (posição padrão, medida na imagem). O editor de placas pode
@@ -167,10 +205,50 @@ const RAW_SIGNS = [
   { id: 'ponto-C', kind: 'point', point: 'C', at: [957, 306], label: 'Ponto C' },
 ];
 
+// ── Pista de teste: ilha grande igual, uma só ilha retangular ───────────
+const TEST_RIGHT = 765;
+const TEST_BOUNDARIES = [
+  {
+    id: 'externo',
+    closed: true,
+    points: [
+      [160, 58], [556, 58], [712, 58], [743, 76], [765, 92], [780, 108], [791, 124], [801, 148],
+      [808, 200], [808, 432], [805, 456], [796, 480], [783, 504], [760, 528], [742, 540], [713, 552],
+      [682, 557], ...RAW_BOUNDARIES[0].points.slice(RAW_BOUNDARIES[0].points.findIndex(([x, y]) => x === 380 && y === 557)),
+    ],
+  },
+  RAW_BOUNDARIES.find((b) => b.id === 'ilha-1'),
+  RAW_BOUNDARIES.find((b) => b.id === 'ilha-2'),
+];
+const TEST_NODES = { S: RAW_NODES.S, T1: RAW_NODES.T1, B1: RAW_NODES.B1 };
+const TEST_SEGMENTS = [
+  RAW_SEGMENTS.find((seg) => seg.id === 'topo-1'),
+  RAW_SEGMENTS.find((seg) => seg.id === 'corredor-1'),
+  {
+    id: 'faixa-direita', from: 'T1', to: 'B1',
+    points: [RAW_NODES.T1, [531, TOP], [622, TOP], [707, TOP], [735, 107], [755, 125], [TEST_RIGHT, 160],
+      [TEST_RIGHT, 300], [TEST_RIGHT, 440], [755, 490], [735, 508], [707, BOTTOM], [622, BOTTOM], [531, BOTTOM], RAW_NODES.B1],
+  },
+  RAW_SEGMENTS.find((seg) => seg.id === 'esquerda'),
+];
+const TEST_SIGNS = [
+  { id: 'semaforo', kind: 'traffic-light', at: [204, 231], label: 'Semáforo' },
+  { id: 'desvio-1', kind: 'detour', at: [403, 158], label: 'Desvio à direita' },
+  { id: 'ponto-A', kind: 'point', point: 'A', at: [411, 361], label: 'Ponto A' },
+  { id: 'pare', kind: 'stop', at: [558, 438], label: 'PARE' },
+  { id: 'ponto-B', kind: 'point', point: 'B', at: [705, 290], label: 'Ponto B' },
+  { id: 'ponto-C', kind: 'point', point: 'C', at: [338, 363], label: 'Ponto C' },
+];
+
+const BOUNDARY_SET = IS_TEST ? TEST_BOUNDARIES : RAW_BOUNDARIES;
+const NODE_SET = IS_TEST ? TEST_NODES : RAW_NODES;
+const SEGMENT_SET = IS_TEST ? TEST_SEGMENTS : RAW_SEGMENTS;
+const SIGN_SET = IS_TEST ? TEST_SIGNS : RAW_SIGNS;
+
 // ── Exportados já nas medidas oficiais ─────────────────────────────────
 const mapPoints = (points) => points.map(toTrack);
 
-export const BOUNDARIES = RAW_BOUNDARIES.map((b) => ({ ...b, points: mapPoints(b.points) }));
+export const BOUNDARIES = BOUNDARY_SET.map((b) => ({ ...b, points: mapPoints(b.points) }));
 
 export const START_LINE = (() => {
   const [x0, y0] = toTrack([RAW_START.x, RAW_START.y]);
@@ -182,16 +260,16 @@ export const LANES = {
   TOP: toTrack([0, TOP])[1],
   BOTTOM: toTrack([0, BOTTOM])[1],
   LEFT: toTrack([LEFT, 0])[0],
-  RIGHT: toTrack([RIGHT, 0])[0],
+  RIGHT: toTrack([IS_TEST ? TEST_RIGHT : RIGHT, 0])[0],
   C1: toTrack([C1, 0])[0],
   C2: toTrack([C2, 0])[0],
 };
 
-export const NODES = Object.fromEntries(Object.entries(RAW_NODES).map(([id, p]) => [id, toTrack(p)]));
+export const NODES = Object.fromEntries(Object.entries(NODE_SET).map(([id, p]) => [id, toTrack(p)]));
 
-export const SEGMENTS = RAW_SEGMENTS.map((seg) => ({ ...seg, points: mapPoints(seg.points) }));
+export const SEGMENTS = SEGMENT_SET.map((seg) => ({ ...seg, points: mapPoints(seg.points) }));
 
-export const DEFAULT_SIGNS = RAW_SIGNS.map((sign) => ({ ...sign, at: toTrack(sign.at) }));
+export const DEFAULT_SIGNS = SIGN_SET.map((sign) => ({ ...sign, at: toTrack(sign.at) }));
 
 // ── Linha de largada/chegada móvel ──────────────────────────────────────
 /**

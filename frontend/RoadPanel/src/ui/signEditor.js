@@ -4,16 +4,18 @@
  * placa vai se ligar fica destacada. Salvar grava no navegador e recarrega a cena 3D;
  * Exportar baixa um JSON (para fixar no projeto em src/config/signs.json).
  */
-import { BOUNDARIES, IMAGE_SIZE, toTrack, layoutTrack, finishCells, FINISH_STRETCH } from '../track/trackData.js';
+import { BOUNDARIES, IMAGE_SIZE, toTrack, layoutTrack, finishCells, FINISH_STRETCH, TRACK_ID } from '../track/trackData.js';
 import { smoothPolyline } from '../track/network.js';
 import { drawSignFace } from '../scene/signs.js';
 
 // v2: px da pista em medidas oficiais; v1 (px da imagem) é convertido na leitura
-const STORAGE_KEY = 'apex.roadpanel.signs.v2';
-const LEGACY_KEY = 'apex.roadpanel.signs.v1';
-const START_KEY = 'apex.roadpanel.start.v1';
+// Cada pista guarda as próprias posições (a oficial mantém as chaves antigas)
+const SUFFIX = TRACK_ID === 'oficial' ? '' : `.${TRACK_ID}`;
+const STORAGE_KEY = `apex.roadpanel.signs.v2${SUFFIX}`;
+const LEGACY_KEY = TRACK_ID === 'oficial' ? 'apex.roadpanel.signs.v1' : `apex.roadpanel.none${SUFFIX}`;
+const START_KEY = `apex.roadpanel.start.v1${SUFFIX}`;
 export const START_ID = 'partida';
-const FINISH_KEY = 'apex.roadpanel.finish.v1';
+const FINISH_KEY = `apex.roadpanel.finish.v1${SUFFIX}`;
 export const FINISH_ID = 'chegada';
 
 /** Linha de largada/chegada: navegador > item "chegada" do signs.json > posição oficial. */
@@ -396,7 +398,7 @@ export class SignEditor {
     const data = JSON.stringify(list, null, 2);
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
-    link.download = 'signs.json';
+    link.download = TRACK_ID === 'oficial' ? 'signs.json' : `signs-${TRACK_ID}.json`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     this.say('Arquivo signs.json baixado.');
