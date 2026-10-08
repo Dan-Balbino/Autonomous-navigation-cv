@@ -17,7 +17,7 @@ import { buildPlan, sameRoute } from './track/planner.js';
 import { Localizer } from './track/localizer.js';
 import { roleName, roleAt, ROLE } from './track/mission.js';
 import { Voice } from './ui/voice.js';
-import { PX_TO_WORLD, DEFAULT_SIGNS, METERS_PER_PX } from './track/trackData.js';
+import { PX_TO_WORLD, DEFAULT_SIGNS, METERS_PER_PX, layoutTrack } from './track/trackData.js';
 import { buildTrack } from './scene/trackMeshes.js';
 import { buildSigns } from './scene/signs.js';
 import { Car } from './scene/car.js';
@@ -28,11 +28,12 @@ import { CameraRig } from './scene/cameraRig.js';
 import { CarLink, apiBase } from './data/carLink.js';
 import { Hud } from './ui/hud.js';
 import { DebugPanel } from './ui/debugPanel.js';
-import { SignEditor, loadSavedSigns } from './ui/signEditor.js';
+import { SignEditor, loadSavedSigns, loadSavedStart, loadSavedFinish } from './ui/signEditor.js';
 import { loader } from './ui/loader.js';
 
 const LIGHT_BY_CODE = { 0: 'red', 1: 'yellow', 2: 'green' };
 const STOP_HOLD_MS = 3000;   // igual a STOP_WAIT_SECONDS do detector de placas
+// Linha de largada/chegada: fim de volta e de missão. A partida do carro é configurável.
 const START = { edgeId: 'topo-1', s: 0 };
 // Modelo do carro real (versão web de 3DModel/base_basic_pbr.glb, ver tools/optimize_car.py)
 const CAR_MODEL_URL = 'models/car.glb';
@@ -44,8 +45,10 @@ const state = {
   source: 'sim',               // 'live' | 'sim'
   linkStatus: 'connecting',
   liveData: null,
-  metersPerPx: METERS_PER_PX,   // pista de 21 m × 10 m
-  planMode: 'car',             // 'car' (lógica do carro) | 'shortest' (menor caminho)
+  metersPerPx: METERS_PER_PX,   // medidas oficiais da pista
+  // 'shortest': caminho livre pelos pontos (desvio opcional, pode repetir trecho, sem retorno em U)
+  // 'car': tabela fixa lane_guide_map do navigation.py (só vale com as placas na posição original)
+  planMode: 'shortest',
   pwmToMs: 0.004,              // m/s por unidade de PWM quando a telemetria não traz velocidade
   pointConfirmed: false,
   cruiseMs: 0.4,               // velocidade típica do carro real (para o tempo estimado)       // o servidor confirmou um ponto desde o último quadro
@@ -59,7 +62,9 @@ const state = {
   // Simulação
   playing: true,
   simSpeed: 0.4,
-  simRoute: ['A', 'B', 'C'],   // coleta no 1º, passagem no 2º, entrega no último
+  simRoute: ['A', 'C'],        // na prova vêm 2 dos 3 pontos: coleta no 1º, entrega no último
+  pointHoldUntil: 0,           // parado no ponto (GPS até o próximo)
+  pointArrival: null,
   simDone: 0,
   simLight: 'none',
   respectSignals: true,
@@ -116,8 +121,16 @@ const projectSigns = await fetch('src/config/signs.json', { cache: 'no-store' })
   .then((response) => (response.ok ? response.json() : null))
   .catch(() => null);
 const savedSigns = loadSavedSigns(DEFAULT_SIGNS, projectSigns);
-const network = new TrackNetwork(savedSigns);
-const track = buildTrack();
+// Linha de largada/chegada (móvel no editor) define onde a volta começa e termina
+let finishAt = loadSavedFinish(projectSigns);
+let layout = layoutTrack(finishAt);
+const network = new TrackNetwork(savedSigns, layout.segments);
+// Partida do carro (editor de placas); null = na linha de largada
+let startSpot = loadSavedStart(projectSigns);
+// Partida padrão: logo depois da linha (~70 cm), sem o marcador cobrir a linha no editor
+const DEFAULT_START = { edgeId: START.edgeId, s: 35 };
+const carStart = () => (startSpot ? network.placeStart(startSpot.at, startSpot.reverse) : DEFAULT_START);
+let track = buildTrack(layout.finish);
 scene.add(track.group);
 
 loader.step('Desenhando as placas', 0.55);
@@ -177,7 +190,7 @@ function missionView() {
 
 /** Onde o carro está, em termos de aresta da rede (para replanejar dali). */
 function currentLocation() {
-  if (!state.plan) return START;
+  if (!state.plan) return carStart();
   const plan = state.plan;
   let index = plan.ranges.findIndex((range) => state.s >= range.s0 && state.s <= range.s1 + 0.5);
   if (index < 0) index = plan.edges.length - 1;
@@ -215,6 +228,8 @@ function consumePoint() {
   state.planConsumed += 1;
   if (state.source === 'live') state.localConsumed += 1;
   else {
+    const total = state.simRoute.length;
+    arrivedAtPoint(state.simRoute[state.simDone], roleName(state.simDone, total));
     state.simDone += 1;
     if (state.simRoute.length > 1 && state.simDone === state.simRoute.length) voice.say('delivered');
   }
@@ -236,6 +251,10 @@ function applyServerRoute(next, raw) {
   state.serverRoute = next;
   if (confirmed > 0) {
     state.liveDone.push(...prev.slice(0, confirmed));
+    if (state.source === 'live') {
+      const index = state.liveDone.length - 1;
+      arrivedAtPoint(state.liveDone[index], roleName(index, state.liveDone.length + next.length));
+    }
     // Último ponto confirmado = encomenda entregue
     if (next.length === 0 && state.liveDone.length > 1 && state.source === 'live') voice.say('delivered');
     const target = state.plan && state.source === 'live' ? planTargets()[confirmed - 1] : null;
@@ -272,7 +291,7 @@ function setSource(source, byUser = false) {
     state.localConsumed = 0;
     localizer.restart();
     if (state.liveData) applyServerRoute(state.liveData.route, state.liveData.routeText);
-    replan(true, START);
+    replan(true, carStart());
   } else {
     replan(true);
   }
@@ -346,7 +365,8 @@ controls.mode.addEventListener('click', (event) => {
 const nextEvent = (type, maxPx) => state.plan.events.find((e) => e.type === type && e.s - state.s >= -2 && e.s - state.s <= maxPx);
 
 function simSpeedPx(now) {
-  if (!state.playing || state.missionDone || now < state.stopHoldUntil || now < guide.simHazardUntil) return 0;
+  if (!state.playing || state.missionDone || now < state.stopHoldUntil || now < state.pointHoldUntil ||
+    now < guide.simHazardUntil) return 0;
   const speedPx = state.simSpeed / state.metersPerPx;
   if (!state.respectSignals) return speedPx;
   if (state.simLight === 'red' && nextEvent('traffic-light', 26)) return 0;
@@ -409,33 +429,48 @@ function adaptQuality(now) {
   }
 }
 
-// ── Prévia GPS na PARE ───────────────────────────────────────────────────
-// Parado na placa PARE: mostra o caminho até a próxima placa, com distância e tempo.
+// ── Modo GPS (PARE e pontos A/B/C) ───────────────────────────────────────
+// Parado na PARE: caminho até a próxima placa. Chegou num ponto da missão (coleta/entrega):
+// caminho até o próximo ponto da missão, ou até a linha de chegada depois da entrega.
 const SIGN_EVENTS = new Set(['point', 'detour', 'traffic-light', 'stop']);
+const POINT_HOLD_MS = 4000;
 const gpsEl = {
   card: document.getElementById('gpsCard'),
+  badge: document.getElementById('gpsBadge'),
   status: document.getElementById('gpsStatus'),
+  label: document.getElementById('gpsLabel'),
   target: document.getElementById('gpsTarget'),
   distance: document.getElementById('gpsDistance'),
   eta: document.getElementById('gpsEta'),
 };
-const gpsState = { stopped: false, since: 0, target: null };
+const gpsState = { reason: null, since: 0, until: 0, target: null };
 
-function stoppedAtStop(now) {
-  if (state.freeDrive) return false;
-  if (state.source === 'sim') return now < state.stopHoldUntil;
+/** 'stop' (parado na PARE), 'point' (acabou de chegar num ponto da missão) ou null. */
+function gpsReason(now) {
+  if (state.freeDrive) return null;
+  if (now < state.pointHoldUntil) return 'point';
+  if (state.source === 'sim') return now < state.stopHoldUntil ? 'stop' : null;
   const data = state.linkStatus === 'live' ? state.liveData : null;
-  return Boolean(data && data.stopActive);
+  return data && data.stopActive ? 'stop' : null;
 }
 
-function nextSign() {
-  const next = state.plan.events.find((e) => SIGN_EVENTS.has(e.type) && e.s > state.s + 12);
+/** Chegou num ponto da missão: segura o carro (simulação) e abre o GPS. */
+function arrivedAtPoint(point, role) {
+  state.pointHoldUntil = performance.now() + POINT_HOLD_MS;
+  state.pointArrival = { point, role };
+}
+
+function nextSign(reason) {
+  const wanted = reason === 'point'
+    ? (e) => e.type === 'point' && e.target
+    : (e) => SIGN_EVENTS.has(e.type);
+  const next = state.plan.events.find((e) => wanted(e) && e.s > state.s + 12);
   if (next) return next;
   return { type: 'start', s: state.plan.length };
 }
 
 function signName(event) {
-  if (event.type === 'start') return 'Largada';
+  if (event.type === 'start') return 'Linha de chegada';
   if (event.type === 'point') {
     const mission = missionView();
     const index = mission.all.indexOf(event.point, mission.doneCount);
@@ -447,32 +482,46 @@ function signName(event) {
 
 const formatMeters = (m) => (m < 1 ? `${Math.round(m * 100)} cm` : `${m.toFixed(1).replace('.', ',')} m`);
 
+function openGps(reason, now) {
+  gpsState.reason = reason;
+  gpsState.since = now;
+  gpsState.until = reason === 'point' ? state.pointHoldUntil : now + STOP_HOLD_MS;
+  gpsState.target = nextSign(reason);
+  gps.show(state.plan, state.s, gpsState.target, now);
+  if (reason === 'point') {
+    const { point, role } = state.pointArrival || {};
+    gpsEl.badge.textContent = `${role || 'Ponto'} ${point || ''}`.trim();
+    gpsEl.badge.dataset.kind = 'point';
+    gpsEl.label.textContent = gpsState.target.type === 'start' ? 'Próximo destino' : 'Próximo ponto';
+  } else {
+    gpsEl.badge.textContent = 'PARE';
+    gpsEl.badge.dataset.kind = 'stop';
+    gpsEl.label.textContent = 'Próxima placa';
+  }
+  gpsEl.target.textContent = signName(gpsState.target);
+  gpsEl.card.hidden = false;
+}
+
+function closeGps(now) {
+  gps.hide(now);
+  gpsEl.card.hidden = true;
+  gpsState.reason = null;
+}
+
 function updateGps(now) {
-  const stopped = stoppedAtStop(now);
-  if (stopped && !gpsState.stopped) {
-    gpsState.since = now;
-    gpsState.target = nextSign();
-    gps.show(state.plan, state.s, gpsState.target, now);
-    gpsEl.target.textContent = signName(gpsState.target);
-    gpsEl.card.hidden = false;
-  } else if (!stopped && gpsState.stopped) {
-    gps.hide(now);
-    gpsEl.card.hidden = true;
-  }
-  gpsState.stopped = stopped;
-  if (gps.active && gps.plan !== state.plan) {
-    gps.hide(now);
-    gpsEl.card.hidden = true;
-  }
+  const reason = gpsReason(now);
+  if (reason && (reason !== gpsState.reason || (gps.active && gps.plan !== state.plan))) openGps(reason, now);
+  else if (!reason && gpsState.reason) closeGps(now);
   rig.setFocus(gps.active ? gps.focus() : null);
   if (!gps.active) return;
 
   const meters = Math.max(0, gpsState.target.s - state.s) * state.metersPerPx;
   const speed = state.source === 'sim' ? state.simSpeed : state.cruiseMs;
-  const left = Math.max(0, Math.ceil((gpsState.since + STOP_HOLD_MS - now) / 1000));
+  const left = Math.max(0, Math.ceil((gpsState.until - now) / 1000 - 0.05));
+  const where = gpsState.reason === 'point' ? 'No ponto' : 'Parado na placa';
   gpsEl.distance.textContent = formatMeters(meters);
   gpsEl.eta.textContent = speed > 0.02 ? `~${Math.max(1, Math.round(meters / speed))} s` : '--';
-  gpsEl.status.textContent = left > 0 ? `Parado na placa · segue em ${left} s` : 'Parado na placa';
+  gpsEl.status.textContent = left > 0 && state.source === 'sim' ? `${where} · segue em ${left} s` : where;
 }
 
 // ── Voz e avisos ─────────────────────────────────────────────────────────
@@ -687,12 +736,38 @@ const editor = new SignEditor({
   network,
   getSigns: () => network.signs.map(({ id, kind, point, label, at }) => ({ id, kind, point, label, at: [...at] })),
   defaults: DEFAULT_SIGNS,
-  onSave: (defs) => {
+  getStart: () => startSpot,
+  getFinish: () => finishAt,
+  defaultStart: (() => {
+    const p = network.edge(START.edgeId).line.sample(DEFAULT_START.s);
+    return { at: [p.x, p.y], reverse: false };
+  })(),
+  onSave: (defs, start, finish) => {
+    const finishChanged = JSON.stringify(finish) !== JSON.stringify(finishAt);
+    const startChanged = finishChanged || JSON.stringify(start) !== JSON.stringify(startSpot);
+    startSpot = start;
+    if (finishChanged) {
+      finishAt = finish;
+      layout = layoutTrack(finishAt);
+      network.setSegments(layout.segments);
+      scene.remove(track.group);
+      track = buildTrack(layout.finish);
+      scene.add(track.group);
+    }
     network.setSigns(defs);
     scene.remove(signs.group);
     signs = buildSigns(network.signs);
     scene.add(signs.group);
-    replan(true);
+    if (startChanged) {
+      // Nova partida: o carro volta para ela e a missão recomeça
+      state.simDone = 0;
+      state.missionDone = false;
+      state.stoppedAt = null;
+      state.stopHoldUntil = 0;
+      replan(true, carStart());
+    } else {
+      replan(true);
+    }
   },
 });
 
@@ -719,7 +794,8 @@ const debug = new DebugPanel({
     state.simDone = 0;
     state.stoppedAt = null;
     state.stopHoldUntil = 0;
-    replan(true, START);
+    state.pointHoldUntil = 0;
+    replan(true, carStart());
   },
   skipEvent: () => {
     const next = state.plan.events.find((event) => event.s - state.s > 4);
@@ -764,7 +840,7 @@ window.addEventListener('keyup', (event) => state.keys.delete(event.key.toLowerC
 window.addEventListener('blur', () => state.keys.clear());
 
 loader.step('Conectando ao carro', 0.8);
-replan(false, START);
+replan(false, carStart());
 link.start();
 debug.sync();
 syncControls();

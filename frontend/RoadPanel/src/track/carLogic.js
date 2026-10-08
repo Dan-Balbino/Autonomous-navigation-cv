@@ -19,7 +19,8 @@ export const LANE_GUIDE_MAP = {
 };
 
 const MAX_EDGES = 48;
-const MAX_LAPS = 3;
+// Uma volta por ponto + a volta parcial de quem parte no meio da pista + folga
+const EXTRA_LAPS = 2;
 
 const unit = (a, b) => {
   const dx = b[0] - a[0];
@@ -101,9 +102,9 @@ export function walkCarLogic(network, start, queue, detoursDone = 0) {
     }
     if (edge.to === 'S') {
       laps += 1;
-      // Volta fechada sem pontos pendentes: fim. Ponto que não aparece em 3 voltas
+      // Volta fechada sem pontos pendentes: fim. Ponto que não aparece depois de uma volta por ponto (+2)
       // é inalcançável com a lógica atual (ex.: placa movida para fora do caminho).
-      if (!pending.length || laps >= MAX_LAPS) break;
+      if (!pending.length || laps >= queue.length + EXTRA_LAPS) break;
     }
     const branching = network.successors(edge).length > 1;
     const next = chooseNext(network, edge, preference);

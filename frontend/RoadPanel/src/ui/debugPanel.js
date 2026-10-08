@@ -143,8 +143,8 @@ export class DebugPanel {
         ` (feitos: ${state.simDone})`;
     }
     el.planModeHint.textContent = state.planMode === 'car'
-      ? 'Igual ao código: lane_guide_map do navigation.py decide a faixa em cada placa de desvio.'
-      : 'Menor caminho pelos pontos, em qualquer sentido (referência; o carro não planeja assim).';
+      ? 'Tabela fixa lane_guide_map do navigation.py: só acerta com as placas na posição original.'
+      : 'Menor caminho pelos pontos na ordem, sempre no sentido da pista: desvia só quando compensa e pode dar mais voltas.';
     el.pwmToMs.value = String(state.pwmToMs);
     el.pwmToMsOut.textContent = state.pwmToMs.toFixed(4).replace('.', ',');
     el.play.textContent = state.playing ? 'Pausar' : 'Andar';

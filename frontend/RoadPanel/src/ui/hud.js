@@ -74,6 +74,7 @@ export class Hud {
       battery: $('batteryValue'),
       mode: $('modeValue'),
       estimate: $('estimateNote'),
+      warning: $('missionWarning'),
     };
     this.last = 0;
     this.cache = new Map();
@@ -159,6 +160,13 @@ export class Hud {
       mode = data.controlMode ? data.controlMode.charAt(0) + data.controlMode.slice(1).toLowerCase() : (data.running ? 'Em movimento' : 'Parado');
     }
     this.set('mode', el.mode, mode);
+    const unreachable = view.plan?.unreachable || [];
+    this.set('warning', el.warning, unreachable.length
+      ? (view.plan.mode === 'car'
+        ? `A tabela lane_guide_map não leva a ${unreachable.join(', ')} com as placas nestas posições. Use "Caminho livre" no debug.`
+        : `Não há caminho até ${unreachable.join(', ')} a partir desta partida.`)
+      : '');
+    this.set('warningHidden', el.warning, unreachable.length === 0, 'hidden');
     this.set('estimate', el.estimate, view.source !== 'live' || view.linkStatus !== 'live', 'hidden');
     if (view.locator) this.set('estimateText', el.estimate, view.locator);
   }

@@ -1,5 +1,5 @@
 /**
- * Rede de caminhos da pista (grafo dirigido, com trechos de mão dupla).
+ * Rede de caminhos da pista (grafo dirigido; hoje toda a pista é de mão única).
  *
  * - Cada trecho vira uma aresta; trechos `twoWay` ganham a aresta contrária ("<id>~r").
  * - Rotas são calculadas por menor caminho (Dijkstra), sem retorno em U.
@@ -108,10 +108,17 @@ const unit = (a, b) => {
 };
 
 export class TrackNetwork {
-  constructor(signDefs = DEFAULT_SIGNS) {
+  constructor(signDefs = DEFAULT_SIGNS, segments = SEGMENTS) {
     this.nodes = NODES;
+    this.build(segments);
+    this.setSigns(signDefs);
+  }
+
+  /** (Re)cria as arestas; usado quando a linha de largada muda de lugar. */
+  build(segments) {
+    this.segments = segments;
     this.edges = new Map();
-    for (const seg of SEGMENTS) {
+    for (const seg of segments) {
       this.addEdge({ id: seg.id, base: seg.id, from: seg.from, to: seg.to, points: seg.points });
       if (seg.twoWay) {
         this.addEdge({ id: `${seg.id}~r`, base: seg.id, from: seg.to, to: seg.from, points: [...seg.points].reverse() });
@@ -122,7 +129,12 @@ export class TrackNetwork {
       if (!this.outgoing.has(edge.from)) this.outgoing.set(edge.from, []);
       this.outgoing.get(edge.from).push(edge);
     }
-    this.setSigns(signDefs);
+  }
+
+  /** Nova linha de largada: refaz as arestas e religa as placas aos trechos novos. */
+  setSegments(segments) {
+    this.build(segments);
+    this.setSigns(this.signs.map(({ id, kind, point, label, at }) => ({ id, kind, point, label, at })));
   }
 
   addEdge(def) {
@@ -142,7 +154,7 @@ export class TrackNetwork {
   setSigns(defs) {
     this.signs = defs.map((def) => {
       let best = null;
-      for (const seg of SEGMENTS) {
+      for (const seg of this.segments) {
         const edge = this.edges.get(seg.id);
         const p = edge.line.project(def.at);
         if (!best || p.d < best.d) best = { base: seg.id, s: p.s, d: p.d };
@@ -211,6 +223,22 @@ export class TrackNetwork {
       }
     }
     return null;
+  }
+
+  /**
+   * Partida do carro: trecho mais próximo de `at` (mesmo critério das placas) e o sentido.
+   * `reverse` só vale em trecho de mão dupla; na mão única a partida segue o sentido da pista.
+   */
+  placeStart(at, reverse = false) {
+    let best = null;
+    for (const seg of this.segments) {
+      const p = this.edges.get(seg.id).line.project(at);
+      if (!best || p.d < best.d) best = { base: seg.id, s: p.s, d: p.d };
+    }
+    const forward = this.edges.get(best.base);
+    const s = Math.max(1, Math.min(forward.length - 1, best.s));
+    if (!reverse || !this.edges.has(`${best.base}~r`)) return { edgeId: best.base, s };
+    return { edgeId: `${best.base}~r`, s: forward.length - s };
   }
 
   /** Aresta e s mais próximos de um ponto livre (direção livre / replanejamento). */

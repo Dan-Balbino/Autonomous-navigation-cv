@@ -67,6 +67,7 @@
       <p class="mission-raw" id="missionRaw">Nenhuma missão recebida</p>
       <ol class="route-points" id="missionPoints"></ol>
       <p class="route-empty" id="missionEmpty" hidden>Sem pontos: o carro faz a volta externa.</p>
+      <p class="route-warning" id="missionWarning" hidden></p>
     </section>
   </aside>
 
@@ -81,13 +82,13 @@
     </div>
     <section class="gps-card" id="gpsCard" hidden aria-live="polite">
       <div class="gps-kicker">
-        <span class="gps-stop">PARE</span>
+        <span class="gps-stop" id="gpsBadge" data-kind="stop">PARE</span>
         <span id="gpsStatus">Parado na placa</span>
       </div>
       <div class="gps-main">
         <svg class="gps-pin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></svg>
         <div class="gps-text">
-          <span class="gps-label">Próxima placa</span>
+          <span class="gps-label" id="gpsLabel">Próxima placa</span>
           <span class="gps-target" id="gpsTarget">--</span>
         </div>
         <div class="gps-figures">
@@ -138,7 +139,7 @@
   <dialog class="editor" id="signEditor" aria-labelledby="signEditorTitle">
     <header class="editor-head">
       <div>
-        <h2 id="signEditorTitle">Posição das placas</h2>
+        <h2 id="signEditorTitle">Placas, largada e partida do carro</h2>
         <p class="editor-status" id="signEditorStatus" aria-live="polite"></p>
       </div>
       <button class="icon-button" id="signEditorClose" type="button" aria-label="Fechar editor">
@@ -177,8 +178,8 @@
     <section class="debug-section">
       <h3>Trajetória</h3>
       <div class="segmented" role="radiogroup" aria-label="Como a trajetória é calculada" data-control="planMode">
-        <button type="button" role="radio" data-value="car">Lógica do carro</button>
-        <button type="button" role="radio" data-value="shortest">Menor caminho</button>
+        <button type="button" role="radio" data-value="shortest">Caminho livre</button>
+        <button type="button" role="radio" data-value="car">Tabela do carro</button>
       </div>
       <p class="debug-hint" id="planModeHint"></p>
     </section>
@@ -260,7 +261,7 @@
         <span>Metros por px da imagem <output id="scaleOut">0,0200</output></span>
         <input type="range" id="scale" min="0.01" max="0.03" step="0.0005" value="0.02">
       </label>
-      <p class="debug-hint">Padrão 0,02: pista de 21 m × 10 m com faixa de 1,5 m (medidas reais). Mude só se a pista mudar.</p>
+      <p class="debug-hint">Padrão 0,02: medidas oficiais (20,65 m × 10,86 m, faixas de 1,6 m). Mude só se a pista mudar.</p>
     </section>
 
     <section class="debug-section debug-readout" aria-live="off">

@@ -7,7 +7,7 @@
  */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { BOUNDARIES, START_LINE, PX_TO_WORLD, LINE_WIDTH_PX, IMAGE_SIZE } from '../track/trackData.js';
+import { BOUNDARIES, PX_TO_WORLD, LINE_WIDTH_PX, IMAGE_SIZE, finishCells, layoutTrack } from '../track/trackData.js';
 import { smoothPolyline } from '../track/network.js';
 
 export const COLORS = {
@@ -173,7 +173,7 @@ function dotField(center) {
   return mesh;
 }
 
-export function buildTrack() {
+export function buildTrack(finish = layoutTrack().finish) {
   const group = new THREE.Group();
   group.name = 'pista';
   const center = toWorld([IMAGE_SIZE.w / 2, IMAGE_SIZE.h / 2]);
@@ -225,22 +225,15 @@ export function buildTrack() {
   group.add(lines);
 
   // Largada quadriculada (sólida)
-  const startGeometries = [];
-  const { x, y, w, h, cols, rows } = START_LINE;
-  const cellW = (w / cols) * PX_TO_WORLD;
-  const cellH = (h / rows) * PX_TO_WORLD;
-  for (let c = 0; c < cols; c++) {
-    for (let r = 0; r < rows; r++) {
-      if ((c + r) % 2 === 1) continue;
-      const square = new THREE.PlaneGeometry(cellW, cellH);
-      square.rotateX(-Math.PI / 2);
-      square.translate((x + (c + 0.5) * (w / cols)) * PX_TO_WORLD, 0.005, (y + (r + 0.5) * (h / rows)) * PX_TO_WORLD);
-      square.deleteAttribute('uv');
-      square.deleteAttribute('normal');
-      startGeometries.push(square);
-    }
-  }
-  group.add(new THREE.Mesh(mergeGeometries(startGeometries), new THREE.MeshBasicMaterial({ color: COLORS.line, side: THREE.DoubleSide })));
+  const cells = finishCells(finish);
+  const positions = new Float32Array(cells.length * 18);
+  cells.forEach((quad, k) => {
+    const [a, b, c, d] = quad.map(([px, py]) => [px * PX_TO_WORLD, 0.005, py * PX_TO_WORLD]);
+    positions.set([...a, ...b, ...c, ...a, ...c, ...d], k * 18);
+  });
+  const startGeometry = new THREE.BufferGeometry();
+  startGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  group.add(new THREE.Mesh(startGeometry, new THREE.MeshBasicMaterial({ color: COLORS.line, side: THREE.DoubleSide })));
 
   return { group, tick: (time) => { field.material.uniforms.uTime.value = time; } };
 }
