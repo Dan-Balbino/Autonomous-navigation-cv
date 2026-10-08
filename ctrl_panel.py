@@ -749,6 +749,12 @@ class ControlPanel:
         add_btn.clicked.connect(self._add_route_point)
         selector_row.addWidget(add_btn)
         card_layout.addLayout(selector_row)
+        
+        add_btn = _btn("Resetar Rota", RED)
+        add_btn.clicked.connect(self.nav._reset_route)
+        selector_row.addWidget(add_btn)
+        card_layout.addLayout(selector_row)
+        
 
         route_row = QHBoxLayout()
         route_row.addWidget(QLabel("Rota atual"))

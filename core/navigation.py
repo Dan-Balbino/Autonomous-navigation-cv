@@ -46,7 +46,11 @@ class Navigation:
         self.action_counter += 1
 
         return lane_preference
-        
+    
+    def _reset_route(self):
+        self.route = []
+        self.current_route = ""
+        self.action_counter = 0
 
 if __name__ == "__main__":
     nav = Navigation()
