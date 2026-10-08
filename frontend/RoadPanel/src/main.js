@@ -17,7 +17,7 @@ import { buildPlan, sameRoute } from './track/planner.js';
 import { Localizer } from './track/localizer.js';
 import { roleName, roleAt, ROLE } from './track/mission.js';
 import { Voice } from './ui/voice.js';
-import { PX_TO_WORLD, DEFAULT_SIGNS, METERS_PER_PX, layoutTrack } from './track/trackData.js';
+import { PX_TO_WORLD, DEFAULT_SIGNS, METERS_PER_PX, layoutTrack, TRACK_ID, TRACKS, switchTrack } from './track/trackData.js';
 import { buildTrack } from './scene/trackMeshes.js';
 import { buildSigns } from './scene/signs.js';
 import { Car } from './scene/car.js';
@@ -118,7 +118,8 @@ sun.position.set(-6, 12, 4);
 scene.add(sun);
 
 // Posições fixadas no projeto (opcional) + edições salvas no navegador
-const projectSigns = await fetch('src/config/signs.json', { cache: 'no-store' })
+const signsFile = TRACK_ID === 'oficial' ? 'src/config/signs.json' : `src/config/signs-${TRACK_ID}.json`;
+const projectSigns = await fetch(signsFile, { cache: 'no-store' })
   .then((response) => (response.ok ? response.json() : null))
   .catch(() => null);
 const savedSigns = loadSavedSigns(DEFAULT_SIGNS, projectSigns);
@@ -307,6 +308,8 @@ const controls = {
   fullscreen: document.getElementById('fullscreenToggle'),
   fullscreenLabel: document.getElementById('fullscreenLabel'),
   mode: document.getElementById('modeSwitch'),
+  track: document.getElementById('trackToggle'),
+  trackLabel: document.getElementById('trackLabel'),
   sound: document.getElementById('soundToggle'),
   soundLabel: document.getElementById('soundLabel'),
 };
@@ -353,6 +356,12 @@ function syncControls() {
 
 controls.view.addEventListener('click', () => setCamera(rig.mode === 'top' ? 'chase' : 'top'));
 controls.sound.addEventListener('click', toggleSound);
+// Pista real <-> pista de teste (recarrega com a outra geometria e as placas dela)
+controls.track.addEventListener('click', () => switchTrack(TRACK_ID === 'teste' ? 'oficial' : 'teste'));
+controls.track.setAttribute('aria-pressed', String(TRACK_ID === 'teste'));
+controls.track.title = TRACK_ID === 'teste' ? 'Trocar para a pista oficial' : 'Trocar para a pista de teste';
+controls.trackLabel.textContent = TRACK_ID === 'teste' ? 'Teste' : 'Oficial';
+document.title = `${TRACKS[TRACK_ID]} · APEX`;
 controls.fullscreen.hidden = !canFullscreen;   // iPhone não tem tela cheia para páginas
 controls.fullscreen.addEventListener('click', toggleFullscreen);
 document.addEventListener('fullscreenchange', syncControls);
