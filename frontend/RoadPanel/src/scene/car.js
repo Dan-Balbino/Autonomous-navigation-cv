@@ -5,7 +5,8 @@
  */
 import * as THREE from 'three';
 
-export const CAR_SIZE = { length: 1.05, width: 0.62, height: 0.42 };
+// Medidas reais do carro (m): 1,2 de comprimento × 0,8 de largura
+export const CAR_SIZE = { length: 1.2, width: 0.8, height: 0.48 };
 
 function placeholder() {
   const group = new THREE.Group();
@@ -90,7 +91,7 @@ export class Car {
 
   /**
    * Troca o corpo atual pelo modelo 3D (.glb/.gltf). `yaw` gira o modelo para a frente
-   * ficar em -Z; ele é escalado para o comprimento CAR_SIZE.length e apoiado no chão.
+   * ficar em -Z; é ajustado ao comprimento e à largura de CAR_SIZE e apoiado no chão.
    */
   async loadModel(url, { yaw = 0 } = {}) {
     const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
@@ -104,7 +105,9 @@ export class Car {
     holder.add(model);
     const box = new THREE.Box3().setFromObject(holder);
     const size = box.getSize(new THREE.Vector3());
-    holder.scale.setScalar(CAR_SIZE.length / Math.max(size.z, 1e-6));
+    // Comprimento e largura exatos; a altura acompanha o comprimento (proporção do modelo)
+    const k = CAR_SIZE.length / Math.max(size.z, 1e-6);
+    holder.scale.set(CAR_SIZE.width / Math.max(size.x, 1e-6), k, k);
     box.setFromObject(holder);
     const center = box.getCenter(new THREE.Vector3());
     holder.position.set(-center.x, -box.min.y, -center.z);

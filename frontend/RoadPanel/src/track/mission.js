@@ -1,6 +1,7 @@
 /**
- * Papéis dos pontos da missão. O carro passa sempre pelos três pontos (A, B e C, na ordem
- * recebida): recebe a encomenda no primeiro, entrega no último e o do meio é só passagem.
+ * Papéis dos pontos da missão (na ordem recebida): coleta no primeiro, entrega no último.
+ * Na prova vêm só 2 dos 3 pontos (ex.: A → C, sem passar por B); se vierem mais, os do
+ * meio são passagem.
  */
 export const ROLE = { pickup: 'pickup', pass: 'pass', delivery: 'delivery' };
 

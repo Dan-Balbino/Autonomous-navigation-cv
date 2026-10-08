@@ -4,8 +4,8 @@
  * A rota chega em tempo de execução (servidor: `hud.route`, que espelha `nav.route`
  * de core/navigation.py; ou o debug). Dois modos:
  * - 'car' (lógica do carro): reproduz as decisões do código real (ver carLogic.js);
- * - 'shortest' (menor caminho): visita os pontos na ordem pelo menor caminho (todas as
- *   faixas em mão dupla) e volta à largada.
+ * - 'shortest' (menor caminho): visita os pontos na ordem pelo menor caminho (mão única,
+ *   no sentido da pista) e volta à largada.
  * Rota vazia = volta externa.
  */
 import { walkCarLogic } from './carLogic.js';

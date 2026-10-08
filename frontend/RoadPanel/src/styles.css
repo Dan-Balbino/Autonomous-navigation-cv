@@ -518,6 +518,8 @@ html, body {
   letter-spacing: 0.08em;
 }
 
+.gps-stop[data-kind='point'] { background: var(--route-strong); }
+
 .gps-main {
   display: flex;
   align-items: center;
@@ -972,6 +974,33 @@ input[type='range'] { width: 100%; accent-color: var(--route-strong); }
 .map-sign:focus-visible image { transform: scale(1.12); }
 .map-sign.is-dragging { cursor: grabbing; }
 .map-sign.is-dragging image { transform: scale(1.18); }
+
+.map-finish { cursor: grab; outline: none; }
+.map-finish-hit { fill: transparent; stroke: transparent; stroke-width: 2; }
+.map-finish:hover .map-finish-hit,
+.map-finish:focus-visible .map-finish-hit,
+.map-finish.is-dragging .map-finish-hit { stroke: var(--route-strong); stroke-dasharray: 6 5; }
+.map-finish.is-dragging { cursor: grabbing; }
+
+.map-start { cursor: grab; outline: none; }
+.map-start-ring { fill: rgba(31, 95, 216, 0.18); stroke: none; }
+.map-start-dot { fill: var(--route-strong); stroke: #fff; stroke-width: 4; }
+.map-start-arrow { fill: #fff; }
+.map-start:focus-visible .map-start-ring,
+.map-start:hover .map-start-ring { fill: rgba(31, 95, 216, 0.3); }
+.map-start.is-dragging { cursor: grabbing; }
+
+.route-warning {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fff4df;
+  color: var(--sim);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.route-warning[hidden] { display: none; }
 
 .editor-actions {
   display: flex;
