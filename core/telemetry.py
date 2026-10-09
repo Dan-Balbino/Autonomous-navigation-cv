@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 @dataclass
 class CarTelemetry:
     speed: float = 0.0
-    battery: int = 0
+    battery: int = 70
     battery_state: int = 0
     
     speed1: float = 0.0

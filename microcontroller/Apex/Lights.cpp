@@ -1,4 +1,5 @@
 #include "Lights.h"
+#include <Arduino.h>
 
 // Mapa dos LEDs (índices)
 //  0–9    lanterna/farol esquerdo
@@ -225,6 +226,9 @@ void Lights::update() {
 
   // Farol / lanternas
   if (headlight_on) {
+    digitalWrite(A6 ,HIGH);
+  } else {
+    digitalWrite(A6,LOW);
   }
 
   // Ré
@@ -244,12 +248,12 @@ void Lights::update() {
   // Setas
   if (left && blink_state) {
     fill(10, 14, turnColor);
-    fill(32, 34, turnColor);
+    fill(40, 42, turnColor);
   }
 
   if (right && blink_state) {
     fill(26, 30, turnColor);
-    fill(40, 42, turnColor);
+    fill(32, 34, turnColor);
   }
 
   // Parado

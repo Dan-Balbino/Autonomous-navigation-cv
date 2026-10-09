@@ -9,7 +9,7 @@ import serial
 
 from core.pid import PID
 from ctrl_panel import ControlPanel
-from vision.lane_detection import lane_detection_pipeline, get_frame_dimensions, extract_bird_eye_view, set_lane_preference
+from vision.lane_detection import lane_detection_pipeline, get_frame_dimensions, extract_bird_eye_view, set_lane_preference, reset_lane
 import vision.lane_detection as lane_detection
 from vision.object_detector import ObjectDetector
 from messaging.messaging_core import (
@@ -423,6 +423,7 @@ def mainLoop():
         if (not run or flag_stop or flag_tl == 0 or pwm_value < MIN_MOVING_PWM
             or flag_point_detected or flag_person_detected):
             effective_pwm = 0
+            reset_lane()
         elif flag_tl == 1:
             effective_pwm = yellow_pwm
         else:

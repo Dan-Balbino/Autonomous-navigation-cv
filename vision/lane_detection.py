@@ -18,10 +18,6 @@ def lane_detection_pipeline(roi_h, roi_w, limiar, limiar_bgr, last_error=0):
     # Realiza uma busca por janelas deslizantes para detectar as faixas na imagem limiarizada
     left_lane, right_lane, left_valid, right_valid = sliding_window_search(limiar, roi_h // 2, roi_w, minimum_limit, num_windows=3)
     
-    # Se uma das faixas não for detectada, define o estado da pista como "neutral"
-    if not left_valid or not right_valid:
-        preference_lane = "neutral"
-    
     if track_size == 0:
         track_size = right_lane - left_lane
     
@@ -220,3 +216,8 @@ def extract_bird_eye_view(frame, img, upper, lower, y_top, y_bot, roi_w, roi_h):
     roi = cv2.warpPerspective(frame, M, (roi_w, roi_h))
     
     return roi, img
+
+def reset_lane():
+    global preference_lane
+    # Se uma das faixas não for detectada, define o estado da pista como "neutral"
+    preference_lane = "neutral"
