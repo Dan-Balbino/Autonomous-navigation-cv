@@ -1,14 +1,27 @@
+import time
+
 lane_guide_map = {
     "A": ["right"],
     "B": ["left", "right"],
     "C": ["left", "left"]
 }
 
+# Tempo (s) sem ver a placa pra considerar que ela "acabou" e a próxima detecção é outra placa.
+# Tem que ser MAIOR que o maior buraco de detecção da mesma placa
+# e MENOR que o tempo entre duas placas diferentes.
+SIGN_RELEASE_TIME = 12.0
+
+
 class Navigation:
     def __init__(self):
         self.route = []
         self.current_route = ""
         self.action_counter = 0
+
+        # Trava da placa: enquanto ativa, novas detecções da mesma placa não avançam a ação
+        self.current_lane = "left"
+        self.sign_latched = False
+        self.last_sign_seen = 0.0
 
     def add_point(self, point):
         self.route.append(point)
@@ -19,6 +32,7 @@ class Navigation:
     def _next_point(self):
         self.route.pop(0)
         self.action_counter = 0
+        self.sign_latched = False  # novo ponto: a próxima placa é sempre nova
         self.current_route = self.route[0] if self.route else ""
         if self.current_route:
             print(f"Current route updated to: {self.current_route}")
@@ -30,7 +44,28 @@ class Navigation:
         self._next_point()
         return True
 
+    def on_sign_detected(self, now=None):
+        """Chame a cada frame em que a placa de desvio é detectada (no lugar de update_lane).
+
+        A primeira detecção consome uma ação da rota e trava. Enquanto a placa continuar
+        aparecendo, ou voltar a aparecer em menos de SIGN_RELEASE_TIME, devolve a mesma
+        preferência sem avançar. Só destrava depois de SIGN_RELEASE_TIME sem ver a placa.
+        """
+        now = time.monotonic() if now is None else now
+
+        if self.sign_latched and now - self.last_sign_seen > SIGN_RELEASE_TIME:
+            self.sign_latched = False
+
+        self.last_sign_seen = now
+
+        if not self.sign_latched:
+            self.sign_latched = True
+            self.current_lane = self.update_lane()
+
+        return self.current_lane
+
     def update_lane(self):
+        """Consome a próxima ação da rota. Use on_sign_detected() no loop de detecção."""
         if not self.route:
             return "left"  # Faixa de preferência padrão quando não há rota definida
 
@@ -46,52 +81,25 @@ class Navigation:
         self.action_counter += 1
 
         return lane_preference
-    
+
     def _reset_route(self):
         self.route = []
         self.current_route = ""
         self.action_counter = 0
+        self.sign_latched = False
+        self.current_lane = "left"
+
 
 if __name__ == "__main__":
     nav = Navigation()
     nav.add_point("B")
-    print(f"Added point B. Current route: {nav.current_route}")
-    next_lane = nav.update_lane()
-    print(f"Next lane: {next_lane}")
-    
-    next_lane = nav.update_lane()
-    print(f"Next lane: {next_lane}")
 
-    next_lane = nav.update_lane()
-    print(f"Next lane: {next_lane}")    
-    
-    nav.add_point("C")
-    print(f"Added point C. Current route: {nav.current_route}")
-    
-    next_lane = nav.update_lane()
-    print(f"Next lane: {next_lane}")
-    
-    next_lane = nav.update_lane()
-    print(f"Next lane: {next_lane}")
-    
-    next_lane = nav.update_lane()
-    print(f"Next lane: {next_lane}")
-    
-    nav.add_point("A")
-    print(f"Added point A. Current route: {nav.current_route}")
-    
-    nav.add_point("B")
-    print(f"Added point B. Current route: {nav.current_route}")
-    
-    next_lane = nav.update_lane()
-    print(f"Next lane: {next_lane}")
-    
-    next_lane = nav.update_lane()
-    print(f"Next lane: {next_lane}")
-    
-    next_lane = nav.update_lane()
-    print(f"Next lane: {next_lane}")
-    
-    next_lane = nav.update_lane()
-    print(f"Next lane: {next_lane}")
-    
+    # Placa 1 do ponto B: vista, perdida por 0.5s, vista de novo -> mesma placa (left, left, left)
+    print(nav.on_sign_detected())
+    time.sleep(2)
+
+    # Fica 5s sem ver nada, aí aparece a placa 2 -> próxima ação (right, right)
+    print(nav.on_sign_detected())
+    print(nav.route)
+    nav._next_point()
+    print(nav.route)

@@ -46,6 +46,9 @@ flag_tl = -1
 flag_right_detour = False
 flag_person_detected = False
 right_detour = False
+lane_reset_standby = False
+reset_request = None
+
 
 _project_dir = os.path.dirname(os.path.abspath(__file__))
 # Configure image testing here; leave disabled to use the camera.
@@ -219,7 +222,7 @@ def pidHub(erro, pid_straight, pid_curve, pid_close_curve, dt=0.2):
 # ── Loop principal ───────────────
 def mainLoop():
     global camera, camera_idx
-    global shared_frame, shared_frame_id, right_detour, flag_person_detected
+    global shared_frame, shared_frame_id, right_detour, flag_person_detected, lane_reset_standby, reset_request
 
     error = 0
     angle = 0
@@ -277,6 +280,7 @@ def mainLoop():
         sign_view = frame_1.copy()
         if not _image_test_mode:
             frame_1 = corrector.correct(frame_1)
+            pass
         img = frame_1.copy()
         frame_scale_x = frame_1.shape[1] / width
         frame_scale_y = frame_1.shape[0] / height
@@ -411,26 +415,30 @@ def mainLoop():
 
         # ── Detecção de Desvio ──────────────────────────────────────────────
         if flag_right_detour and not right_detour:    
-            lane = nav.update_lane()
+            lane = nav.on_sign_detected()
             set_lane_preference(lane)
             right_detour = True
         elif not flag_right_detour and right_detour:
             right_detour = False
 
         error, limiar_bgr, lane_state = lane_detection_pipeline(ROI_H, ROI_W, limiar, limiar_bgr, last_error=error)
-
+        
+        if lane_state != "both":
+            if reset_request is None:
+                reset_request = time.monotonic()
+            if reset_lane(reset_request):
+                reset_request = None
+        else:
+            reset_request = None
+        
         # ── Dtecções da IA ──────────────────────────────────────────────
         if (not run or flag_stop or flag_tl == 0 or pwm_value < MIN_MOVING_PWM
             or flag_point_detected or flag_person_detected):
             effective_pwm = 0
-            reset_lane()
         elif flag_tl == 1:
             effective_pwm = yellow_pwm
         else:
-            curve_speed_error = panel.get(
-                "PARÂMETROS DO CARRO",
-                "Erro para iniciar velocidade na curva (px)",
-            )
+            curve_speed_error = panel.get( "PARÂMETROS DO CARRO","Erro para iniciar velocidade na curva (px)")
             curve_pwm = panel.get("PARÂMETROS DO CARRO", "Velocidade na curva (PWM)")
             effective_pwm = curve_pwm if abs(error) >= curve_speed_error else pwm_value
 
