@@ -6,6 +6,11 @@ import time
 TRACK_NOMINAL = 200
 # Tolerância ao redor do nominal para aceitar uma medição de largura (±20%)
 TRACK_TOLERANCE = 0.2
+# Largura da pista (px, na bird's eye) quando UMA faixa de preferência guia o carro.
+# Nesse modo a largura não é medida, então use a real de cada lado. MEÇA com a pista real.
+TRACK_WIDTH = {"left": TRACK_NOMINAL, "right": TRACK_NOMINAL}
+# Zona morta (px) do indicador de direção: abaixo disso mostra "RETO"
+DIRECTION_DEADZONE = 15
 # Distância máxima (px) que a faixa pode "andar" de uma janela pra próxima
 TRACK_MARGIN = 60
 # Liga o log por frame pra debugar as saídas de A/B
@@ -18,7 +23,6 @@ filtered_error = None
 GLARE_FILTER = True
 # Tem que ser MAIOR que a espessura da linha na bird's eye e MENOR que a mancha (em px)
 GLARE_KERNEL = 33
-
 LANE_RESET_TIME = 1.0
 
 
@@ -61,7 +65,7 @@ def lane_detection_pipeline(roi_h, roi_w, limiar, limiar_bgr, last_error=0):
     if DEBUG:
         print(f"state={lane_state} L={left_lane} R={right_lane} "
               f"Lv={left_valid} Rv={right_valid} near_w={near_width} "
-              f"track_size={track_size} raw_err={raw_error} err={error}")
+              f"pref={preference_lane} center={track_center} track_size={track_size} raw_err={raw_error} err={error}")
 
     # Desenha um círculo verde no centro da pista
     if track_center != 0:
@@ -70,8 +74,31 @@ def lane_detection_pipeline(roi_h, roi_w, limiar, limiar_bgr, last_error=0):
     # Desenha um círculo vermelho no ponto de referência para o cálculo do erro
     cv2.circle(limiar_bgr, (roi_w // 2, round(roi_h * 0.9)), 5, (0, 0, 255), -1)
 
+    # Seta e texto com a direção que o carro está indo
+    draw_direction(limiar_bgr, error, roi_w, roi_h)
+
     return error, limiar_bgr, lane_state
 
+
+ARROW_SCALE = 0.6  # 1.0 = tamanho anterior; menor = seta menor
+
+def draw_direction(img, error, roi_w, roi_h):
+    # Seta saindo do ponto de referência (círculo vermelho) em direção ao centro da pista.
+    # error > 0: centro à direita -> vira à direita; error < 0: vira à esquerda
+    start = (roi_w // 2, round(roi_h * 0.9))
+    dx = error * ARROW_SCALE
+    dy = round(roi_h * 0.35 * ARROW_SCALE)
+    end = (int(np.clip(start[0] + dx, 0, roi_w - 1)), start[1] - dy)
+
+    if error > DIRECTION_DEADZONE:
+        label, color = "DIR", (0, 165, 255)
+    elif error < -DIRECTION_DEADZONE:
+        label, color = "ESQ", (255, 200, 0)
+    else:
+        label, color = "RETO", (0, 255, 0)
+
+    cv2.arrowedLine(img, start, end, color, 3, tipLength=0.2)
+    #cv2.putText(img, f"{label} ({error:+d})", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
 def remove_glare(limiar):
     # Abertura morfológica com kernel grande: só sobrevive o que é mais largo que o kernel (a mancha).
@@ -216,6 +243,10 @@ def process_lanes(left_lane, right_lane, left_valid, right_valid, roi_w, referen
     elif preference_lane == "left":
         right_valid = False
 
+    # Largura usada quando só uma faixa guia o carro: com preferência, a calibrada daquele lado;
+    # sem preferência, a medida em tempo real
+    lane_width = TRACK_WIDTH[preference_lane] if preference_lane in TRACK_WIDTH else track_size
+
     # ===== Caso 1 - Duas faixas foram detectadas =====
     if left_valid and right_valid:
         # O centro da pista é a média entre as duas faixas detectadas
@@ -234,22 +265,22 @@ def process_lanes(left_lane, right_lane, left_valid, right_valid, roi_w, referen
     # ===== Caso 2 - Apenas a faixa da direita foi detectada =====
     elif not left_valid and right_valid:
         # O centro da pista é diferença entre a posição da faixa direita e metade do tamanho da pista
-        track_center = right_lane - (track_size // 2)
+        track_center = right_lane - (lane_width // 2)
         error = track_center - (roi_w // 2)
 
         # Desenha uma linha cinza do centro da pista para a faixa da direita e uma linha vermelha do centro da pista para onde a faixa da esquerda deveria estar
-        cv2.line(limiar_bgr, (track_center - (track_size // 2), reference_line_y), (track_center + (track_size // 2), reference_line_y), (0, 0, 255), 2)
+        cv2.line(limiar_bgr, (track_center - (lane_width // 2), reference_line_y), (track_center + (lane_width // 2), reference_line_y), (0, 0, 255), 2)
         cv2.line(limiar_bgr, (track_center, reference_line_y), (right_lane, reference_line_y), (100, 100, 100), 2)
 
     # ===== Caso 3 - Apenas a faixa da esquerda foi detectada =====
     elif left_valid and not right_valid:
         # O centro da pista é a soma da posição da faixa esquerda com metade do tamanho da pista
-        track_center = left_lane + (track_size // 2)
+        track_center = left_lane + (lane_width // 2)
         error = track_center - (roi_w // 2)
 
         # Desenha uma linha cinza do centro da pista para a faixa da esquerda e uma linha vermelha do centro da pista para onde a faixa da direita deveria estar
         cv2.line(limiar_bgr, (left_lane, reference_line_y), (track_center, reference_line_y), (100, 100, 100), 2)
-        cv2.line(limiar_bgr, (track_center, reference_line_y), (track_center + (track_size // 2), reference_line_y), (0, 0, 255), 2)
+        cv2.line(limiar_bgr, (track_center, reference_line_y), (track_center + (lane_width // 2), reference_line_y), (0, 0, 255), 2)
 
     # ===== Caso 4 - Nenhuma faixa foi detectada =====
     else:
@@ -316,11 +347,12 @@ def extract_bird_eye_view(frame, img, upper, lower, y_top, y_bot, roi_w, roi_h):
 
     return roi, img
 
+
 def reset_lane(start_time):
     global preference_lane, filtered_error
     elapsed = time.monotonic() - start_time
     if elapsed >= LANE_RESET_TIME:
-        print(f"[RESET] {elapsed:.2f}s")
+        #print(f"[RESET] {elapsed:.2f}s")
         preference_lane = "neutral"
         filtered_error = None
         return True
