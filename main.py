@@ -474,7 +474,7 @@ def mainLoop():
             if should_send:
                 last_send = now
                 if run and not remote_control_active:
-                    angle = pidHub(error, pid_straight, pid_curve, pid_close_curve, dt=0.2)
+                    angle = pidHub(error, pid_straight, pid_curve, pid_close_curve, dt=command_period_ms)
         else:
             should_send = last_run != False
 
