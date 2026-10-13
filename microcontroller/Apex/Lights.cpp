@@ -1,5 +1,4 @@
 #include "Lights.h"
-#include "Type.h"
 #include <Arduino.h>
 
 // Mapa dos LEDs (índices)
@@ -175,7 +174,7 @@ void Lights::updateLogo(CarCommand cmd) {
 
   if (logo_mode == LOGO_AUTO) {
     if (cmd.mission_state == 1) {
-      fill(34, 40, white);
+      fill(34, 40, orange);
 
     } else if (cmd.mission_state == 0) {
       fill(34, 40, blue);
@@ -266,14 +265,14 @@ void Lights::update(CarCommand cmd) {
   }
 
   // Setas
-  if (left && blink_state) {
-    fill(10, 14, turnColor);
-    fill(40, 42, turnColor);
+  if (right && blink_state) {
+    fill(10, 14, yellow);
+    fill(40, 42, yellow);
   }
 
-  if (right && blink_state) {
-    fill(26, 30, turnColor);
-    fill(32, 34, turnColor);
+  if (left && blink_state) {
+    fill(26, 30, yellow);
+    fill(32, 34, yellow);
   }
 
   // Parado

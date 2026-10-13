@@ -212,7 +212,7 @@ float calculate_side_pwm_ratio() {
       ? (clamped_angle > 0 ? outer_radius / radius : inner_radius / radius)
       : (clamped_angle > 0 ? inner_radius / radius : outer_radius / radius);
 
-  /return constrain(ratio, min_ratio, max_ratio);
+  return constrain(ratio, min_ratio, max_ratio);
   //return 1.0;
 }
 

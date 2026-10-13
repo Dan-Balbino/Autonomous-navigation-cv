@@ -89,7 +89,7 @@ void loop() {
   lights.handleCommand((uint8_t)cmd.lights, cmd.run && (cmd.stop || !cmd.vehicleState),
                        telemetry.battery_percentage, telemetry.battery_state);
 
-  lights.update();
+  lights.update(cmd);
 }
 
 // =====================================================

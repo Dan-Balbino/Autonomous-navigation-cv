@@ -4,6 +4,8 @@
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
 
+#include "Types.h"
+
 class Lights {
 public:
   enum LogoMode {
@@ -17,7 +19,7 @@ public:
   Lights(int pin, int numPixels);
 
   void begin();
-  void update();
+  void update(CarCommand cmd);
 
   void handleCommand(uint8_t command, bool stopped, int percentage, uint8_t state);
   void setLogo(LogoMode mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0);
@@ -49,9 +51,10 @@ private:
   const uint32_t yellow = pixels.Color(68, 0, 255);
   const uint32_t red = pixels.Color(0, 0, 255); 
   
-  const uint32_t white = pixels.Color(255, 255, 255); // Coleta
-  const uint32_t blue = pixels.Color(46, 255, 0);     // Entrega
+  const uint32_t white = pixels.Color(255, 255, 255);
+  const uint32_t blue = pixels.Color(33, 79, 13);     // Entrega
   const uint32_t green = pixels.Color(255, 0, 0); 
+  const uint32_t orange = pixels.Color(140, 66, 255); // Coleta
 
 
   const int PIN;
@@ -96,7 +99,7 @@ private:
 
   void fill(int from, int to, uint32_t color);
   void updateBlink(bool any_signal);
-  void updateLogo();
+  void updateLogo(CarCommand cmd);
   void updateBatteryPulse();
   uint32_t getBatteryColor();
 };
