@@ -189,8 +189,8 @@ void applyDifferentialPwm() {
   pwm_1 = round(target_pwm * ratio);
   pwm_2 = round(target_pwm * ratio);
 
-  //pwm_1 = constrain(pwm_1, -OUTPUT_LIMIT, OUTPUT_LIMIT);
-  //pwm_2 = constrain(pwm_2, -OUTPUT_LIMIT, OUTPUT_LIMIT);
+  pwm_1 = constrain(pwm_1, -OUTPUT_LIMIT, OUTPUT_LIMIT);
+  pwm_2 = constrain(pwm_2, -OUTPUT_LIMIT, OUTPUT_LIMIT);
 
   motor1.move(pwm_1);
   motor2.move(pwm_2);
@@ -212,8 +212,8 @@ float calculate_side_pwm_ratio() {
       ? (clamped_angle > 0 ? outer_radius / radius : inner_radius / radius)
       : (clamped_angle > 0 ? inner_radius / radius : outer_radius / radius);
 
-  //return constrain(ratio, min_ratio, max_ratio);
-  return 1.0;
+  /return constrain(ratio, min_ratio, max_ratio);
+  //return 1.0;
 }
 
 // ================= SMOOTH ACCEL (non-blocking) =================
@@ -233,11 +233,8 @@ void taskSmoothAccel() {
   float ramp_fraction = min(accel_step / 100.0, 1.0);
   int ramped_base = round(target_pwm * ramp_fraction);
 
-  //pwm_1 = constrain((int)round(ramped_base * ratio), -OUTPUT_LIMIT, OUTPUT_LIMIT);
-  //pwm_2 = constrain((int)round(ramped_base * ratio), -OUTPUT_LIMIT, OUTPUT_LIMIT);
-
-  pwm_1 = target_pwm;
-  pwm_2 = target_pwm;
+  pwm_1 = constrain((int)round(ramped_base * ratio), -OUTPUT_LIMIT, OUTPUT_LIMIT);
+  pwm_2 = constrain((int)round(ramped_base * ratio), -OUTPUT_LIMIT, OUTPUT_LIMIT);
 
   motor1.move(pwm_1);
   motor2.move(pwm_2);

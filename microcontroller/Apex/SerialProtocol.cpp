@@ -27,6 +27,7 @@ bool receiveCommand(CarCommand &cmd) {
         cmd.speed = 0;
       }
       cmd.reverse = doc["reverse"];
+      cdm.mission_state = doc["mission_state"];
 
       buffer = ""; // limpa depois de processar
       return true;

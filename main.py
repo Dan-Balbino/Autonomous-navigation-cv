@@ -413,7 +413,7 @@ def mainLoop():
         # limiar_bgr = cv2.cvtColor(limiar, cv2.COLOR_GRAY2BGR)
 
 
-        # ── Detecção de Desvio ──────────────────────────────────────────────
+        # ── Detecção de Faixa e Desvio ──────────────────────────────────────────────
         if flag_right_detour and not right_detour:    
             lane = nav.on_sign_detected()
             set_lane_preference(lane)
@@ -451,6 +451,11 @@ def mainLoop():
         if effective_pwm < MIN_MOVING_PWM:
             effective_pwm = 0
         
+        if len(nav.mission_state) != 0:
+            car.command.mission_state = nav.mission_state[0]
+        else:
+            car.command.mission_state = -1
+          
         # ── Digital Twin ──────────────────────────────────────────────
         update_state(
             effective_pwm, run,
@@ -478,12 +483,14 @@ def mainLoop():
         else:
             should_send = last_run != False
 
+
         if should_send:
             if remote_control_active and remote_inputs is not None:
                 # Ajuste do ângulo com base no joystick esquerdo
                 angle = left_joystick_x * steering_limit
                 angle = max(-steering_limit, min(steering_limit, angle))  # Limita o ângulo
 
+                car.command.stop = False
                 if left_trigger_active and right_trigger_active or not left_trigger_active and not right_trigger_active:
                     effective_pwm = 0  # Ambos os gatilhos pressionados: velocidade zero
                     reverse = False
@@ -496,6 +503,7 @@ def mainLoop():
                     reverse = False
                     effective_pwm = pwm_value if pwm_value >= MIN_MOVING_PWM else 0
                     car.command.lights &= ~0b100000
+                car.command.mission_state = -1
             else:
                 reverse = False
                 car.command.lights &= ~0b100000
@@ -508,7 +516,6 @@ def mainLoop():
                 car.command.lights = (car.command.lights | 0b1000) if effective_pwm == 0 else (car.command.lights & ~0b1000)
                 car.command.lights = (car.command.lights | 0b10000) if True else (car.command.lights & ~0b10000)
                 
-                    
             car.command.servo = int(angle + 90)
             car.command.stop = flag_person_detected or (
                 car.command.stop and not remote_control_active
@@ -579,6 +586,7 @@ def mainLoop():
             "right_detour_active": flag_right_detour,
             "route": route_text,
         }
+        
         panel.update_vehicle_info({"hud": hud, "raw_rx": last_rx})
         dashboard_update_vehicle_info({
             "hud": hud,
@@ -603,10 +611,6 @@ def mainLoop():
                 "can": car.telemetry.can,
             },
         })
-
-        # sign_det.draw(frame_1)
-        # panel.update_frames(img, limiar_bgr, frame_1)
-        # dashboard_update_frames(img, limiar_bgr, frame_1)
 
         sign_det.draw(sign_view)
         panel.update_frames(img, limiar_bgr, sign_view)
@@ -648,7 +652,7 @@ def sign_thread():
         traffic_light = sign_det.get_light_state()
         if point_detected:
             nav.confirm_current_point(current_route_point)
-
+            
         with sign_lock:
             flag_stop = stop
             flag_tl = traffic_light

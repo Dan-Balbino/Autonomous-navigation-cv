@@ -9,7 +9,7 @@ lane_guide_map = {
 # Tempo (s) sem ver a placa pra considerar que ela "acabou" e a próxima detecção é outra placa.
 # Tem que ser MAIOR que o maior buraco de detecção da mesma placa
 # e MENOR que o tempo entre duas placas diferentes.
-SIGN_RELEASE_TIME = 12.0
+SIGN_RELEASE_TIME = 2.5
 
 
 class Navigation:
@@ -17,6 +17,7 @@ class Navigation:
         self.route = []
         self.current_route = ""
         self.action_counter = 0
+        self.mission_state = []
 
         # Trava da placa: enquanto ativa, novas detecções da mesma placa não avançam a ação
         self.current_lane = "left"
@@ -26,11 +27,14 @@ class Navigation:
     def add_point(self, point):
         self.route.append(point)
 
+        self.mission_state.append(0 if self.mission_state and self.mission_state[-1] == 1 else 1)
+            
         if self.current_route == "":
             self.current_route = point
 
     def _next_point(self):
         self.route.pop(0)
+        self.mission_state.pop(0)
         self.action_counter = 0
         self.sign_latched = False  # novo ponto: a próxima placa é sempre nova
         self.current_route = self.route[0] if self.route else ""

@@ -53,7 +53,7 @@ int angle_target = 90;
 int angle = 90;
 
 unsigned long last_servo_update = 0;
-const unsigned long SERVO_STEP_INTERVAL_MS = 2;
+const unsigned long SERVO_STEP_INTERVAL_MS = 1;
 
 // ================= SMOOTH ACCEL STATE (non-blocking) =================
 
@@ -209,8 +209,8 @@ float calculate_side_pwm_ratio() {
       ? (clamped_angle > 0 ? outer_radius / radius : inner_radius / radius)
       : (clamped_angle > 0 ? inner_radius / radius : outer_radius / radius);
 
-  //return constrain(ratio, min_ratio, max_ratio);
-  return 1.0;
+  return constrain(ratio, min_ratio, max_ratio);
+  //return 1.0;
 }
 
 void applyTargetPwm() {
@@ -219,11 +219,8 @@ void applyTargetPwm() {
   int side_pwm = round(target_pwm * ratio);
   side_pwm = constrain(side_pwm, 0, OUTPUT_LIMIT);
 
-  //pwm_1 = side_pwm;
-  //pwm_2 = side_pwm;
-
-  pwm_1 = target_pwm;
-  pwm_2 = target_pwm;
+  pwm_1 = side_pwm;
+  pwm_2 = side_pwm;
 
   motor1.move(side_pwm);
   motor2.move(side_pwm);
@@ -248,11 +245,8 @@ void taskSmoothAccel() {
 
   int side_pwm = constrain((int)round(ramped_base * ratio), 0, OUTPUT_LIMIT);
 
-  //pwm_1 = side_pwm;
-  //pwm_2 = side_pwm;
-
-  pwm_1 = target_pwm;
-  pwm_2 = target_pwm;
+  pwm_1 = side_pwm;
+  pwm_2 = side_pwm;
 
   motor1.move(side_pwm);
   motor2.move(side_pwm);

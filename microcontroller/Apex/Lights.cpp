@@ -1,4 +1,5 @@
 #include "Lights.h"
+#include "Type.h"
 #include <Arduino.h>
 
 // Mapa dos LEDs (índices)
@@ -125,14 +126,14 @@ void Lights::updateBatteryPulse() {
   fill(34, 40, pixels.Color(r, g, b));
 }
 
-void Lights::updateLogo() {
+void Lights::updateLogo(CarCommand cmd) {
   if (battery_state == 1) {
     updateBatteryPulse();
     return;
   }
 
   if (stopped_state) {
-    fill(34, 40, brakeColor);
+    fill(34, 40, red);
     return;
   }
 
@@ -171,6 +172,25 @@ void Lights::updateLogo() {
   } else {
     fill(34, 40, pixels.Color(logo_r, logo_g, logo_b));
   }
+
+  if (logo_mode == LOGO_AUTO) {
+    if (cmd.mission_state == 1) {
+      fill(34, 40, white);
+
+    } else if (cmd.mission_state == 0) {
+      fill(34, 40, blue);
+
+    } else if (cmd.mission_state == -1) {
+      if (now - last_logo_update >= logo_interval) {
+        last_logo_update = now;
+        logo_hue += 256;
+      }
+
+      fill(34, 40, pixels.ColorHSV(logo_hue));
+    }
+
+    return;
+  }
 }
 
 // ==================================================
@@ -196,7 +216,7 @@ void Lights::updateBlink(bool any_signal) {
 // UPDATE
 // ==================================================
 
-void Lights::update() {
+void Lights::update(CarCommand cmd) {
   static uint32_t lastFrame[42];
   static unsigned long lastShow = 0;
   bool changed = false;
@@ -233,16 +253,16 @@ void Lights::update() {
 
   // Ré
   if (reverse_lights_on) {
-    fill(14, 16, brakeColor);
-    fill(30, 32, brakeColor);
+    fill(14, 16, red);
+    fill(30, 32, red);
   }
 
   if (brake_lights_on) {
-    fill(14, 16, brakeColor);
-    fill(30, 32, brakeColor);
+    fill(14, 16, red);
+    fill(30, 32, red);
 
-    fill(0, 10, brakeColor);
-    fill(16, 26, brakeColor);
+    fill(0, 10, red);
+    fill(16, 26, red);
   }
 
   // Setas
@@ -258,12 +278,12 @@ void Lights::update() {
 
   // Parado
   if (stopped_state) {
-    fill(0, 10, brakeColor);
-    fill(16, 26, brakeColor);
+    fill(0, 10, red);
+    fill(16, 26, red);
   }
 
   // Logo
-  updateLogo();
+  updateLogo(cmd);
 
   // Só envia pra fita se mudou, com intervalo mínimo
   for (int i = 0; i < 42; i++) {

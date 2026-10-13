@@ -10,7 +10,8 @@ public:
     LOGO_OFF,
     LOGO_FIXED,
     LOGO_RANDOM,
-    LOGO_RAINBOW
+    LOGO_RAINBOW,
+    LOGO_AUTO
   };
 
   Lights(int pin, int numPixels);
@@ -42,10 +43,16 @@ public:
     logo_random_interval = interval;
   }
 
-private: // G B R
-  const uint32_t turnColor = pixels.Color(68, 0, 255);
-  const uint32_t whiteColor = pixels.Color(255, 255, 255);
-  const uint32_t brakeColor = pixels.Color(0, 0, 255); 
+private: 
+  // Colors  
+  // G B R 
+  const uint32_t yellow = pixels.Color(68, 0, 255);
+  const uint32_t red = pixels.Color(0, 0, 255); 
+  
+  const uint32_t white = pixels.Color(255, 255, 255); // Coleta
+  const uint32_t blue = pixels.Color(46, 255, 0);     // Entrega
+  const uint32_t green = pixels.Color(255, 0, 0); 
+
 
   const int PIN;
   const int NUMPIXELS;
@@ -72,7 +79,7 @@ private: // G B R
   unsigned long last_blink_update;
   unsigned long blink_interval = 500;
 
-  LogoMode logo_mode = LOGO_RAINBOW;
+  LogoMode logo_mode = LOGO_AUTO;
   uint8_t logo_r = 0;
   uint8_t logo_g = 0;
   uint8_t logo_b = 0;

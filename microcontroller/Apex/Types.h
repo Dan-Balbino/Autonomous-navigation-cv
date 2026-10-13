@@ -30,6 +30,7 @@ struct CarCommand {
   int servo;
   int16_t speed;
   bool reverse;
+  int8_t mission_state;
 };
 
 struct CanModule {

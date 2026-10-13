@@ -8,6 +8,7 @@ class CarCommand:
     servo: int = 90
     speed: int = 0
     reverse: bool = False
+    mission_state: int = -1
     
     def to_dict(self):
         return {
@@ -16,5 +17,6 @@ class CarCommand:
             "stop": self.stop,
             "servo": self.servo,
             "speed": self.speed,
-            "reverse": self.reverse
+            "reverse": self.reverse,
+            "mission_state": self.mission_state
         }
