@@ -498,7 +498,7 @@ class ObjectDetector:
             return False
         return True
 
-    def get_state(self, current_route_point=None):
+    def get_state(self):
         now = time.time()
         if self.stop_active and now >= self._stop_until:
             self.stop_active = False
@@ -511,8 +511,6 @@ class ObjectDetector:
                 if self._is_valid_stop(x1, y1, x2, y2, conf):
                     raw_stop = True
                     break
-        if not raw_stop and self.has_valid_stop_point(current_route_point):
-            raw_stop = True
 
         # ATIVA STOP
         if raw_stop and not self.stop_active and now >= self._cooldown_until:

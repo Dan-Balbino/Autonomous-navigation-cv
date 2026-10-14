@@ -43,6 +43,7 @@ struct Telemetry {
   uint8_t battery_current;
   uint8_t battery_percentage;
   uint8_t battery_state;
+  bool run_button;
 
   float speed1, speed2, speed3, speed4;
 

@@ -48,7 +48,8 @@ flag_person_detected = False
 right_detour = False
 lane_reset_standby = False
 reset_request = None
-
+flag_point_detected = False
+route_stop_requested = threading.Event()
 
 _project_dir = os.path.dirname(os.path.abspath(__file__))
 # Configure image testing here; leave disabled to use the camera.
@@ -222,20 +223,22 @@ def pidHub(erro, pid_straight, pid_curve, pid_close_curve, dt=0.2):
 # ── Loop principal ───────────────
 def mainLoop():
     global camera, camera_idx
-    global shared_frame, shared_frame_id, right_detour, flag_person_detected, lane_reset_standby, reset_request
+    global shared_frame, shared_frame_id, right_detour, flag_person_detected, flag_point_detected, lane_reset_standby, reset_request
 
     error = 0
     angle = 0
     last_send = 0
     last_rx   = "Stand by..."
     last_run  = None
+    last_telemetry_run_button = False
     last_right_button = False
     last_left_button = False
     last_start_button = False
     remote_control_active = False
     right_trigger_active = False
     left_trigger_active = False
-    flag_point_detected = False
+    point_stop_latched = False
+    point_stop_saw_stopped = False
 
     while True:
         # ── Reconexão dinâmica (solicitada pelo painel) ───────────────
@@ -337,7 +340,6 @@ def mainLoop():
         pid_close_curve.output_limit = steering_limit
         
         run = panel._IsRunning()
-
         # O controle deve ser lido mesmo com o carro parado, pois o botao
         # START troca o modo de controle independentemente de run.
         remote_inputs = None
@@ -383,6 +385,23 @@ def mainLoop():
             last_right_button = False
             last_left_button = False
         
+        if route_stop_requested.is_set():
+            route_stop_requested.clear()
+            if not remote_control_active:
+                point_stop_latched = True
+                point_stop_saw_stopped = not run
+                panel.request_stop()
+
+        if remote_control_active:
+            point_stop_latched = False
+            point_stop_saw_stopped = False
+        elif point_stop_latched:
+            if not run:
+                point_stop_saw_stopped = True
+            elif point_stop_saw_stopped:
+                point_stop_latched = False
+                point_stop_saw_stopped = False
+
         # ── Extração do ROI e imagem com a área de interesse ─────────────────────────────
         roi, img = extract_bird_eye_view(frame_1, img, upper, lower, y_top, y_bot, ROI_W, ROI_H)
 
@@ -433,7 +452,7 @@ def mainLoop():
         
         # ── Dtecções da IA ──────────────────────────────────────────────
         if (not run or flag_stop or flag_tl == 0 or pwm_value < MIN_MOVING_PWM
-            or flag_point_detected or flag_person_detected):
+                or flag_person_detected or point_stop_latched):
             effective_pwm = 0
         elif flag_tl == 1:
             effective_pwm = yellow_pwm
@@ -517,8 +536,8 @@ def mainLoop():
                 car.command.lights = (car.command.lights | 0b10000) if True else (car.command.lights & ~0b10000)
                 
             car.command.servo = int(angle + 90)
-            car.command.stop = flag_person_detected or (
-                car.command.stop and not remote_control_active
+            car.command.stop = (
+                False if remote_control_active else flag_person_detected
             )
             car.command.speed = effective_pwm if (run or remote_control_active) else 0
             car.command.reverse = reverse if (run or remote_control_active) else False
@@ -544,6 +563,10 @@ def mainLoop():
                 decoded = json.loads(data)
                 if isinstance(decoded, dict):
                     car.telemetry = CarTelemetry.from_dict(decoded)
+                    run_button = car.telemetry.run_button
+                    if run_button and not last_telemetry_run_button:
+                        panel.request_start()
+                    last_telemetry_run_button = run_button
                 else:
                     log(f"[SERIAL] Telemetria ignorada: JSON não é objeto: {data}", "warn")
             except (TypeError, ValueError, json.JSONDecodeError):
@@ -626,7 +649,6 @@ def mainLoop():
 
 
 def sign_thread():
-
     global flag_stop, flag_tl, flag_right_detour, flag_point_detected, flag_person_detected
     last_frame_id = -1
 
@@ -648,9 +670,10 @@ def sign_thread():
         current_route_point = nav.current_route
         point_detected = sign_det.has_valid_stop_point(current_route_point)
         person_detected = sign_det.has_valid_person()
-        stop, right_detour = sign_det.get_state(current_route_point)
+        stop, right_detour = sign_det.get_state()
         traffic_light = sign_det.get_light_state()
         if point_detected:
+            route_stop_requested.set()
             nav.confirm_current_point(current_route_point)
             
         with sign_lock:

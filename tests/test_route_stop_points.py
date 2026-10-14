@@ -28,8 +28,22 @@ class RouteStopPointTest(unittest.TestCase):
         self.detector.configure(stop_point_confidence=0.5)
         self.detector._boxes = [(0, 0, 40, 40, "ponto_A", 0.9)]
 
-        self.assertFalse(self.detector.get_state("B")[0])
-        self.assertTrue(self.detector.get_state("A")[0])
+        self.assertFalse(self.detector.has_valid_stop_point("B"))
+        self.assertTrue(self.detector.has_valid_stop_point("A"))
+
+    def test_route_stop_point_does_not_use_timed_stop_state(self):
+        self.detector.configure(
+            stop_point_confidence=0.5,
+            stop_wait_seconds=3,
+            cooldown_seconds=10,
+        )
+        self.detector._boxes = [(0, 0, 40, 40, "ponto_A", 0.9)]
+        self.detector._cooldown_until = float("inf")
+
+        stop_active, _ = self.detector.get_state()
+
+        self.assertFalse(stop_active)
+        self.assertFalse(self.detector.stop_active)
 
     def test_person_detection_requires_confidence_and_minimum_diagonal(self):
         self.detector.configure(

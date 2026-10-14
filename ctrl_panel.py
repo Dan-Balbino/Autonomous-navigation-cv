@@ -253,6 +253,8 @@ class _ServerBridge(QObject):
     log_received = Signal(str, str)
     camera_id_received = Signal(int)
     speed_adjust_requested = Signal(float)
+    start_requested = Signal()
+    stop_requested = Signal()
 
 
 class ControlPanel:
@@ -301,6 +303,8 @@ class ControlPanel:
         self._bridge.log_received.connect(self._append_log)
         self._bridge.camera_id_received.connect(self._apply_camera_id)
         self._bridge.speed_adjust_requested.connect(self._adjust_speed)
+        self._bridge.start_requested.connect(self._iniciar)
+        self._bridge.stop_requested.connect(self._parar)
 
         self.window = QMainWindow()
         self.window.setWindowTitle("Controles")
@@ -333,11 +337,19 @@ class ControlPanel:
         if self._dashboard_url and not self._applying_server:
             self._push_key("running", True)
 
+    def request_start(self):
+        """Solicita o início pelo loop Qt, inclusive quando chamada por outra thread."""
+        self._bridge.start_requested.emit()
+
     def _parar(self):
         self.running = False
-        self.log("[CONTROLE MANUAL] veículo parado pela interface de controle", "warn")
+        self.log("[CONTROLE MANUAL] veículo parado", "warn")
         if self._dashboard_url and not self._applying_server:
             self._push_key("running", False)
+
+    def request_stop(self):
+        """Solicita a parada pelo loop Qt, inclusive quando chamada por outra thread."""
+        self._bridge.stop_requested.emit()
 
     def _salvar(self):
         os.makedirs(os.path.dirname(self.config_path) or ".", exist_ok=True)

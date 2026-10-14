@@ -6,6 +6,7 @@
 #define CAN_CS_PIN 53
 #define CAN_INTERRUPT_PIN 2
 #define LED_PIN 12
+#define BUTTON_PIN 5
 
 Lights lights(LED_PIN, 42);
 
@@ -41,6 +42,8 @@ void setup() {
   beginCAN(CAN_CS_PIN, CAN_INTERRUPT_PIN);
 
   initCAN(cmd, telemetry);
+
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   cmd.speed = 0.0;
   cmd.vehicleState = true;
@@ -79,6 +82,7 @@ void loop() {
   readSerial1(telemetry.battery, telemetry.battery_current, telemetry.battery_percentage, telemetry.battery_state);
 
   testBlock();
+  readButton();
 
   if (millis() - lastTelemetry >= 100) {
     lastTelemetry = millis();
@@ -102,5 +106,25 @@ void testBlock() {
     last = millis();
 
     digitalWrite( LED_BUILTIN, !digitalRead(LED_BUILTIN));
+  }
+}
+
+void readButton() {
+  bool button_pressed = !digitalRead(BUTTON_PIN);
+  unsigned long now = millis();
+
+  if (button_pressed) {
+    if (!button_was_pressed) {
+      button_press_time = now;
+    }
+
+    button_was_pressed = true;
+    telemetry.run_button = true;
+  } else {
+    button_was_pressed = false;
+
+    if (now - button_press_time >= 100) {
+      telemetry.run_button = false;
+    }
   }
 }

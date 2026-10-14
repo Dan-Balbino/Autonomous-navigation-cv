@@ -58,6 +58,7 @@ void sendTelemetry(const Telemetry& telemetry) {
 
   doc["bat"] = telemetry.battery_percentage;
   doc["bat_state"] = telemetry.battery_state;
+  doc["run_btn"] = telemetry.run_button;
 
   JsonObject speed = doc.createNestedObject("speed");
   speed["speed1"] = telemetry.speed1;

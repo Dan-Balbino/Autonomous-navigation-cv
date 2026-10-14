@@ -15,7 +15,9 @@ class CarTelemetry:
     f_left: int = 0
     f_right: int = 0
     right: int = 0
-
+    
+    run_button: bool = False
+    
     can: dict = field(default_factory=dict)
 
     @classmethod
@@ -50,6 +52,7 @@ class CarTelemetry:
             speed2=wheel_speeds[1],
             speed3=wheel_speeds[2],
             speed4=wheel_speeds[3],
+            run_button=bool(data.get("run_btn", data.get("run_button", False))),
             left=int(ultrasonic.get("f_left", 0)),
             f_left=int(ultrasonic.get("left", 0)),
             f_right=int(ultrasonic.get("f_right", 0)),
