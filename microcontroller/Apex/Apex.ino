@@ -17,6 +17,9 @@ unsigned long last = 0;
 unsigned long lastTelemetry = 0;
 bool lastVehicleState = true;
 
+
+bool button_was_pressed;
+unsigned long button_press_time = 0;
 // =====================================================
 // SERIAL1
 // =====================================================

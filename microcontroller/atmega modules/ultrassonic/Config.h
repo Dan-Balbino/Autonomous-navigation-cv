@@ -52,17 +52,17 @@
 // ------------------------------------------------------------
 
 #define FRONTAL_MAX_DISTANCE 150
-#define FRONTAL_SAFE_DISTANCE 90
-#define FRONTAL_MID_DISTANCE 70
-#define FRONTAL_CRITICAL_DISTANCE 50
+#define FRONTAL_SAFE_DISTANCE 130
+#define FRONTAL_MID_DISTANCE 110
+#define FRONTAL_CRITICAL_DISTANCE 90
 
 // ------------------------------------------------------------
 // LIMITES LATERAIS
 // ------------------------------------------------------------
 #define SIDE_MAX_DISTANCE 100
-#define SIDE_SAFE_DISTANCE 75
-#define SIDE_MID_DISTANCE 55
-#define SIDE_CRITICAL_DISTANCE 35
+#define SIDE_SAFE_DISTANCE 95
+#define SIDE_MID_DISTANCE 75
+#define SIDE_CRITICAL_DISTANCE 65
 
 
 // ============================================================

@@ -105,7 +105,6 @@ void setup() {
 }
 
 // ================= LOOP =================
-
 void loop() {
   bool new_command = receiveCANData();
   if (new_command) {
@@ -114,6 +113,15 @@ void loop() {
 
   encoder1.update();
   encoder2.update();
+
+  sendTelemetryIfDue();
+
+  if (stop_car) {
+    target_pwm = 0;
+    reverse = false;
+    emergencyStop();
+    return;
+  }
 
   bool command_timeout = last_command_received != 0 &&
                          millis() - last_command_received > COMMAND_TIMEOUT_MS;
@@ -127,8 +135,6 @@ void loop() {
       beginSmoothStop();
     }
   }
-
-  sendTelemetryIfDue();
 
   if (reverse) {
     motor_enabled = true;
@@ -186,14 +192,13 @@ void startMotors() {
 void applyDifferentialPwm() {
   float ratio = calculate_side_pwm_ratio();
 
-  pwm_1 = round(target_pwm * ratio);
-  pwm_2 = round(target_pwm * ratio);
+  int side_pwm = constrain((int)round(target_pwm * ratio), 0, OUTPUT_LIMIT);
 
-  pwm_1 = constrain(pwm_1, -OUTPUT_LIMIT, OUTPUT_LIMIT);
-  pwm_2 = constrain(pwm_2, -OUTPUT_LIMIT, OUTPUT_LIMIT);
+  pwm_1 = side_pwm;
+  pwm_2 = side_pwm;
 
-  motor1.move(pwm_1);
-  motor2.move(pwm_2);
+  motor1.move(side_pwm);
+  motor2.move(side_pwm);
 }
 
 float calculate_side_pwm_ratio() {
@@ -287,6 +292,18 @@ void taskSmoothStop() {
   stop_step--;
 }
 
+void emergencyStop() {
+  pwm_1 = 0;
+  pwm_2 = 0;
+  motor1.move(0);
+  motor2.move(0);
+
+  motor_enabled = false;
+  accelerating_active = false;
+  stopping_active = false;
+  accel_step = 0;
+}
+
 // ================= CAN =================
 
 bool receiveCANData() {
@@ -326,9 +343,7 @@ bool receiveCANData() {
     target_pwm = 0;
     reverse = false;
     stop_counter = 0;
-    if (motor_enabled && !stopping_active) {
-      beginSmoothStop();
-    }
+
   } else if (received_pwm == 0) {
     stop_counter++;
 

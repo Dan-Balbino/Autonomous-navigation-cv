@@ -100,22 +100,16 @@ void setup() {
 }
 
 // ================= LOOP =================
-
 void loop() {
+  unsigned long last_cmd;
+
   noInterrupts();
   target_pwm = received_target_pwm;
   steering_angle = received_steering_angle;
   reverse = received_reverse;
   bool stop_car = received_stop_car;
+  last_cmd = last_command_received;
   interrupts();
-
-  if (stop_car) {
-    target_pwm = 0;
-    reverse = false;
-    if (motor_enabled && !stopping_active) {
-      beginSmoothStop();
-    }
-  }
 
   angle_target = steering_angle + 90;
 
@@ -124,12 +118,17 @@ void loop() {
   encoder1.update();
   encoder2.update();
 
-  unsigned long command_age;
-  noInterrupts();
-  command_age = millis() - last_command_received;
-  interrupts();
+  if (stop_car) {
+    target_pwm = 0;
+    reverse = false;
+    emergencyStop();
+    return;
+  }
 
-  if (last_command_received != 0 && command_age > COMMAND_TIMEOUT_MS) {
+  bool command_timeout = last_cmd != 0 &&
+                         millis() - last_cmd > COMMAND_TIMEOUT_MS;
+
+  if (command_timeout) {
     noInterrupts();
     received_target_pwm = 0;
     received_steering_angle = 0;
@@ -141,7 +140,7 @@ void loop() {
     reverse = false;
   }
 
-  if (reverse && !stop_car) {
+  if (reverse) {
     motor_enabled = true;
 
     motor1.move(REVERSE_PWM);
@@ -178,7 +177,7 @@ void loop() {
     return;
   }
 
-  applyTargetPwm();
+  applyDifferentialPwm();
 }
 
 // ================= ACCEL START HELPER =================
@@ -213,11 +212,10 @@ float calculate_side_pwm_ratio() {
   //return 1.0;
 }
 
-void applyTargetPwm() {
+void applyDifferentialPwm() {
   float ratio = calculate_side_pwm_ratio();
 
-  int side_pwm = round(target_pwm * ratio);
-  side_pwm = constrain(side_pwm, 0, OUTPUT_LIMIT);
+  int side_pwm = constrain((int)round(target_pwm * ratio), 0, OUTPUT_LIMIT);
 
   pwm_1 = side_pwm;
   pwm_2 = side_pwm;
@@ -300,6 +298,18 @@ void taskSmoothStop() {
   }
 
   stop_step--;
+}
+
+void emergencyStop() {
+  pwm_1 = 0;
+  pwm_2 = 0;
+  motor1.move(0);
+  motor2.move(0);
+
+  motor_enabled = false;
+  accelerating_active = false;
+  stopping_active = false;
+  accel_step = 0;
 }
 
 // ================= I2C =================
