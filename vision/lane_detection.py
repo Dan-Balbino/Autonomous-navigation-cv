@@ -15,7 +15,7 @@ DIRECTION_DEADZONE = 15
 TRACK_MARGIN = 60
 # Distância máxima (px) de uma faixa até o centro de referência do carro.
 # Faixa mais longe que isso é descartada (metade da largura nominal da pista)
-MAX_LANE_DISTANCE = 110
+MAX_LANE_DISTANCE = 130
 # Liga o log por frame pra debugar as saídas de A/B
 DEBUG = False
 # Filtro EMA no erro: 1.0 = sem filtro, menor = mais suave (e mais atraso)

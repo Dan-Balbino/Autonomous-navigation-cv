@@ -391,12 +391,13 @@ def mainLoop():
                 point_stop_latched = True
                 point_stop_saw_stopped = not run
                 panel.request_stop()
+                set_lane_preference("right")
 
         if remote_control_active:
             point_stop_latched = False
             point_stop_saw_stopped = False
         elif point_stop_latched:
-            if not run:
+            if not run:  
                 point_stop_saw_stopped = True
             elif point_stop_saw_stopped:
                 point_stop_latched = False
