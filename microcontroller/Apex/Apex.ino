@@ -6,7 +6,7 @@
 #define CAN_CS_PIN 53
 #define CAN_INTERRUPT_PIN 2
 #define LED_PIN 12
-#define BUTTON_PIN 5
+#define BUTTON_PIN 6
 
 Lights lights(LED_PIN, 42);
 
@@ -18,8 +18,8 @@ unsigned long lastTelemetry = 0;
 bool lastVehicleState = true;
 
 
-bool button_was_pressed;
-unsigned long button_press_time = 0;
+bool button_was_pressed = false;
+unsigned long button_release_time = 0;
 // =====================================================
 // SERIAL1
 // =====================================================
@@ -39,14 +39,14 @@ void setup() {
   Serial1.begin(115200);
 
   pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+
   randomSeed(analogRead(A0));
   lights.begin();
 
   beginCAN(CAN_CS_PIN, CAN_INTERRUPT_PIN);
 
   initCAN(cmd, telemetry);
-
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   cmd.speed = 0.0;
   cmd.vehicleState = true;
@@ -112,21 +112,20 @@ void testBlock() {
   }
 }
 
+
 void readButton() {
   bool button_pressed = !digitalRead(BUTTON_PIN);
   unsigned long now = millis();
 
   if (button_pressed) {
-    if (!button_was_pressed) {
-      button_press_time = now;
-    }
-
     button_was_pressed = true;
     telemetry.run_button = true;
   } else {
-    button_was_pressed = false;
-
-    if (now - button_press_time >= 100) {
+    if (button_was_pressed) {          // acabou de soltar
+      button_was_pressed = false;
+      button_release_time = now;
+    }
+    if (telemetry.run_button && now - button_release_time >= 100) {
       telemetry.run_button = false;
     }
   }
