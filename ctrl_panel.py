@@ -15,26 +15,37 @@ código externo que já depende dela:
 
 import json
 import os
-import time
 import threading
+import time
 import urllib.request
 import webbrowser
 from io import BytesIO
 
 import qrcode
-
-from core.remote_control import RemoteControl
-
-from PySide6.QtCore import Qt, QTimer, Signal, QObject
-from PySide6.QtGui import QPixmap, QColor, QImage, QTextCursor
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QImage, QPixmap, QTextCursor
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QMainWindow, QLabel, QPushButton, QSlider,
-    QVBoxLayout, QHBoxLayout, QGridLayout, QFrame, QScrollArea,
-    QComboBox, QSpinBox, QCheckBox, QTextEdit, QDialog, QSizePolicy,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
     QProgressBar,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QSlider,
     QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
+from core.remote_control import RemoteControl
 
 # ─────────────────────────────────────────────────────────────────────────
 # PALETA (Catppuccin Mocha)
@@ -543,9 +554,12 @@ class ControlPanel:
             ("▶  Iniciar", "iniciar", GREEN),
             ("■  Parar", "parar", RED),
             ("↻  Resetar", "resetar", ORANGE),
+            ("↺  Resetar faixa", "resetar_faixa", TEAL),
             ("Salvar", "salvar", PURPLE),
         ):
             button = _btn(label, color)
+            if key == "resetar_faixa":
+                button.setToolTip("Limpar a preferência de faixa atual")
             button.clicked.connect(lambda _, action=key: self._fire(action))
             header.addWidget(button)
         close_button = _btn("✕  Fechar", BORDER, flat_dark=True)
@@ -762,9 +776,13 @@ class ControlPanel:
         selector_row.addWidget(add_btn)
         card_layout.addLayout(selector_row)
         
-        add_btn = _btn("Resetar Rota", RED)
-        add_btn.clicked.connect(self.nav._reset_route)
-        selector_row.addWidget(add_btn)
+        reset_route_btn = _btn("Resetar Rota", RED)
+        reset_route_btn.setEnabled(self.nav is not None)
+        if self.nav is not None:
+            reset_route_btn.clicked.connect(self._reset_route)
+        else:
+            reset_route_btn.setToolTip("Navegação não configurada")
+        selector_row.addWidget(reset_route_btn)
         card_layout.addLayout(selector_row)
         
 
@@ -795,6 +813,12 @@ class ControlPanel:
                 self.nav.add_point(point)
             except Exception:
                 pass
+        self._update_route_display()
+
+    def _reset_route(self):
+        if self.nav is None:
+            return
+        self.nav._reset_route()
         self._update_route_display()
 
     def _update_route_display(self):

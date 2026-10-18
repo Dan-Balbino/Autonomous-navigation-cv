@@ -1,33 +1,58 @@
-import time
-import threading
+import json
 import logging
 import os
-import json
+import sys
+import threading
+import time
 
 import cv2
 import serial
 
-from core.pid import PID
-from ctrl_panel import ControlPanel
-from vision.lane_detection import lane_detection_pipeline, get_frame_dimensions, extract_bird_eye_view, set_lane_preference, reset_lane
-import vision.lane_detection as lane_detection
-from vision.object_detector import ObjectDetector
-from messaging.messaging_core import (
-    app as dashboard_app, get_local_ip, update_state, load_config_from_file,
-    update_frames as dashboard_update_frames,
-    update_vehicle_info as dashboard_update_vehicle_info,
-    push_log as dashboard_push_log,
-    register_action as dashboard_register_action,
-    pop_reconnect_request as dashboard_pop_reconnect_request,
-)
-from vision.calibration import FisheyeCorrector
 from config.setup import (
-    select_com, scan_usb_devices, open_camera, allow_dashboard_firewall_rule
+    allow_dashboard_firewall_rule,
+    open_camera,
+    scan_usb_devices,
+    select_com,
 )
 from core.car import Car
-from core.telemetry import CarTelemetry
-from core.remote_control import RemoteControl
 from core.navigation import Navigation
+from core.pid import PID
+from core.remote_control import RemoteControl
+from core.telemetry import CarTelemetry
+from ctrl_panel import ControlPanel
+from messaging.messaging_core import (
+    app as dashboard_app,
+)
+from messaging.messaging_core import (
+    get_local_ip,
+    load_config_from_file,
+    update_state,
+)
+from messaging.messaging_core import (
+    pop_reconnect_request as dashboard_pop_reconnect_request,
+)
+from messaging.messaging_core import (
+    push_log as dashboard_push_log,
+)
+from messaging.messaging_core import (
+    register_action as dashboard_register_action,
+)
+from messaging.messaging_core import (
+    update_frames as dashboard_update_frames,
+)
+from messaging.messaging_core import (
+    update_vehicle_info as dashboard_update_vehicle_info,
+)
+from vision import lane_detection
+from vision.calibration import FisheyeCorrector
+from vision.lane_detection import (
+    extract_bird_eye_view,
+    get_frame_dimensions,
+    lane_detection_pipeline,
+    reset_lane,
+    set_lane_preference,
+)
+from vision.object_detector import ObjectDetector
 
 # ── Inicialização de variáveis ────────────────────────────
 ROI_W = 320
@@ -131,7 +156,7 @@ else:
 
 if not ret_1:
     print("[ERRO] Falha ao ler o primeiro frame.")
-    exit()
+    sys.exit()
 
 height, width = get_frame_dimensions(frame_1, 1)
 
@@ -174,6 +199,14 @@ def log(msg, tag="info"):
     dashboard_push_log(msg, tag)
 
 
+def _reset_lane_preference():
+    set_lane_preference("neutral")
+    log("[FAIXA] Preferência de faixa resetada para neutra", "info")
+
+
+panel.on("resetar_faixa", _reset_lane_preference)
+
+
 # ── Ações do painel web (mesmas funções dos botões do painel Python) ────────
 def _web_add_route_point(point):
     nav.add_point(point)
@@ -193,7 +226,8 @@ def _web_remote(op):
 def _web_close():
     # Mesmo efeito do "Fechar" do painel Python: para o carro e encerra o painel
     # (e o programa). O close é enfileirado no thread do Qt para ser seguro.
-    from PySide6.QtCore import QMetaObject, Qt as _Qt
+    from PySide6.QtCore import QMetaObject
+    from PySide6.QtCore import Qt as _Qt
     panel.running = False
     log("[PAINEL WEB] Encerrando o sistema pelo botão Fechar", "warn")
     threading.Timer(
@@ -223,7 +257,7 @@ def pidHub(erro, pid_straight, pid_curve, pid_close_curve, dt=0.2):
 # ── Loop principal ───────────────
 def mainLoop():
     global camera, camera_idx
-    global shared_frame, shared_frame_id, right_detour, flag_person_detected, flag_point_detected, lane_reset_standby, reset_request
+    global shared_frame, shared_frame_id, right_detour, flag_person_detected, flag_point_detected, lane_reset_standby, reset_request  # noqa: PLW0602
 
     error = 0
     angle = 0
@@ -279,12 +313,12 @@ def mainLoop():
         with frame_lock:
             shared_frame = frame_1.copy()
             shared_frame_id += 1
-
-        sign_view = frame_1.copy()
+        
         if not _image_test_mode:
             frame_1 = corrector.correct(frame_1)
-            pass
+            
         img = frame_1.copy()
+        sign_view = frame_1.copy()
         frame_scale_x = frame_1.shape[1] / width
         frame_scale_y = frame_1.shape[0] / height
 
@@ -467,7 +501,7 @@ def mainLoop():
         else:
             car.command.stop = False
 
-        effective_pwm = int(round(max(0, min(MAX_PWM, effective_pwm))))
+        effective_pwm = round(max(0, min(MAX_PWM, effective_pwm)))
         if effective_pwm < MIN_MOVING_PWM:
             effective_pwm = 0
         
@@ -514,16 +548,14 @@ def mainLoop():
                 if left_trigger_active and right_trigger_active or not left_trigger_active and not right_trigger_active:
                     effective_pwm = 0  # Ambos os gatilhos pressionados: velocidade zero
                     reverse = False
-                    car.command.lights &= ~0b100000
                 elif left_trigger_active:
                     effective_pwm = 0
                     reverse = True
-                    car.command.lights = (car.command.lights | 0b100000) if True else (car.command.lights & ~0b100000)
                 elif right_trigger_active:
                     reverse = False
                     effective_pwm = pwm_value if pwm_value >= MIN_MOVING_PWM else 0
-                    car.command.lights &= ~0b100000
                 car.command.mission_state = -1
+                car.command.lights = (car.command.lights | 0b100000) if True else (car.command.lights & ~0b100000)
             else:
                 reverse = False
                 car.command.lights &= ~0b100000
