@@ -1,5 +1,5 @@
-from pathlib import Path
 import time
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -15,6 +15,7 @@ class ObjectDetector:
     PERSON_CONF_THRESHOLD = 0.5
     PERSON_INFERENCE_CONF_THRESHOLD = 0.01
     PERSON_CLASS_ID = 0  # Classe person no modelo COCO
+    PERSON_CENTER_RATIO = 0.5  # fração central da largura onde pessoas valem (0.5 = 50% do meio)
     DETECT_INTERVAL = 5
     STOP_WAIT_SECONDS = 3.0
     COOLDOWN_SECONDS = 3.0
@@ -24,8 +25,8 @@ class ObjectDetector:
     MIN_STOP_AREA = 1500
 
     # CORES DOS SEMÁFOROS
-    LIGHT_TO_CODE = {"Vermelho": 0, "Amarelo": 1, "Verde": 2}
-    LIGHT_TO_BGR = {
+    LIGHT_TO_CODE = {"Vermelho": 0, "Amarelo": 1, "Verde": 2}  # noqa: RUF012
+    LIGHT_TO_BGR = {  # noqa: RUF012
         "Vermelho": (0, 0, 255),
         "Amarelo": (0, 255, 255),
         "Verde": (0, 255, 0),
@@ -36,7 +37,7 @@ class ObjectDetector:
     PERSON_VALID_COLOR = (255, 0, 0)            # Azul
     PERSON_INVALID_COLOR = INVALID_COLOR
     RIGHT_DETOUR_VALID_COLOR = (255, 0, 180)  # Magenta
-    STOP_POINT_COLORS = {
+    STOP_POINT_COLORS = {  # noqa: RUF012
         "ponto_a": (255, 128, 0),
         "ponto_b": (0, 200, 255),
         "ponto_c": (255, 0, 180),
@@ -55,7 +56,7 @@ class ObjectDetector:
 
     MIN_STOP_POINT_CONF = 0.1
 
-    def __init__(self, model_path: str, conf_threshold: float = None):
+    def __init__(self, model_path: str, conf_threshold: float | None = None):
         self._traffic_signs_model = None                # Modelo customizado para sinais de trânsito
         self._standard_model_path = Path(__file__).resolve().parents[1] / "model" / "yolov8n.pt"
         self._yolo_standard_model = None
@@ -81,6 +82,9 @@ class ObjectDetector:
         self._min_light_diagonal = 0
         self._min_light_confidence = 0.0
         self._min_person_diagonal = 0
+        self._min_person_height = 0
+        self._min_person_bottom_ratio = 0.5  # 0.0 = desligado; 0.6 = pés precisam estar nos 40% de baixo
+        self._frame_h = 0
         self._min_right_detour_diagonal = 0
         self._right_detour_frames_seen = 0
         self._right_detour_is_valid = False
@@ -105,6 +109,9 @@ class ObjectDetector:
                   light_timeout_seconds=None, detect_interval=None,
                   min_light_diagonal=None, light_confidence=None,
                   person_confidence=None, min_person_diagonal=None,
+                  person_center_ratio=None,
+                  min_person_height=None,
+                  min_person_bottom_ratio=None,
                   right_detour_confidence=None,
                   min_right_detour_diagonal=None,
                   right_detour_required_frames=None,
@@ -141,6 +148,12 @@ class ObjectDetector:
             self.PERSON_CONF_THRESHOLD = max(0.0, min(1.0, float(person_confidence)))
         if min_person_diagonal is not None:
             self._min_person_diagonal = max(0, int(min_person_diagonal))
+        if person_center_ratio is not None:
+            self.PERSON_CENTER_RATIO = max(0.1, min(1.0, float(person_center_ratio)))
+        if min_person_height is not None:
+            self._min_person_height = max(0, int(min_person_height))
+        if min_person_bottom_ratio is not None:
+            self._min_person_bottom_ratio = max(0.0, min(1.0, float(min_person_bottom_ratio)))
         if right_detour_confidence is not None:
             self.MIN_RIGHT_DETOUR_CONF = max(0.0, min(1.0, float(right_detour_confidence)))
         if min_right_detour_diagonal is not None:
@@ -169,6 +182,7 @@ class ObjectDetector:
 
     def update(self, frame) -> list:
         """Atualiza as detecções; a inferência ocorre a cada N frames."""
+        self._frame_h = frame.shape[0]
         self._counter += 1
         if self._counter < self.DETECT_INTERVAL:
             return self._boxes
@@ -216,16 +230,41 @@ class ObjectDetector:
 
     @staticmethod
     def _draw_box(img, x1, y1, x2, y2, label, confidence, color) -> None:
-        cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
-        cv2.putText(
-            img,
-            f"{label} {confidence:.2f}",
-            (x1, max(y1 - 6, 10)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            color,
-            1,
-        )
+        h, w = img.shape[:2]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w - 1, x2), min(h - 1, y2)
+        if x2 <= x1 or y2 <= y1:
+            return
+
+        # fundo translúcido
+        roi = img[y1:y2, x1:x2]
+        tint = np.full_like(roi, color)
+        cv2.addWeighted(tint, 0.15, roi, 0.85, 0, dst=roi)
+
+        # borda fina
+        cv2.rectangle(img, (x1, y1), (x2, y2), color, 1, cv2.LINE_AA)
+
+        # cantos reforçados
+        length = max(8, int(min(x2 - x1, y2 - y1) * 0.2))
+        for px, py, dx, dy in ((x1, y1, 1, 1), (x2, y1, -1, 1),
+                               (x1, y2, 1, -1), (x2, y2, -1, -1)):
+            cv2.line(img, (px, py), (px + dx * length, py), color, 3, cv2.LINE_AA)
+            cv2.line(img, (px, py), (px, py + dy * length), color, 3, cv2.LINE_AA)
+
+        # etiqueta
+        text = f"{label} {confidence:.0%}"
+        font, scale, thickness, pad = cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1, 4
+        (tw, th), _ = cv2.getTextSize(text, font, scale, thickness)
+        top = y1 - th - 2 * pad
+        if top < 0:  # sem espaço em cima, põe dentro da caixa
+            top = y1
+        bottom = top + th + 2 * pad
+        cv2.rectangle(img, (x1, top), (x1 + tw + 2 * pad, bottom), color, -1)
+
+        luminance = 0.114 * color[0] + 0.587 * color[1] + 0.299 * color[2]
+        text_color = (0, 0, 0) if luminance > 150 else (255, 255, 255)
+        cv2.putText(img, text, (x1 + pad, top + pad + th),
+                    font, scale, text_color, thickness, cv2.LINE_AA)
 
     def _get_traffic_signs_model(self):
         if self._traffic_signs_model is not None:
@@ -286,10 +325,14 @@ class ObjectDetector:
         return list(best_by_label.values())
 
     def _predict_people(self, frame) -> list:
-        """Detecta somente pessoas usando o modelo YOLO padrão."""
+        """Detecta somente pessoas na faixa central da imagem."""
         model = self._get_standard_model()
         if model is None:
             return []
+
+        width = frame.shape[1]
+        margin = width * (1 - self.PERSON_CENTER_RATIO) / 2
+        left, right = margin, width - margin
 
         people = []
         for result in model.predict(
@@ -302,16 +345,25 @@ class ObjectDetector:
                 if int(box.cls[0]) != self.PERSON_CLASS_ID:
                     continue
                 x1, y1, x2, y2 = (int(value) for value in box.xyxy[0])
+                center_x = (x1 + x2) / 2
+                if not left <= center_x <= right:
+                    continue  # fora da faixa central
                 conf = float(box.conf[0])
                 people.append((x1, y1, x2, y2, conf))
         return people
 
     def _is_valid_person(self, x1, y1, x2, y2, conf) -> bool:
-        """Verifica confiança e tamanho mínimo da caixa de uma pessoa."""
+        """Verifica confiança, tamanho e proximidade (pés na imagem) de uma pessoa."""
         if conf < self.PERSON_CONF_THRESHOLD:
             return False
-        diagonal = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
-        return diagonal >= self._min_person_diagonal
+        width, height = x2 - x1, y2 - y1
+        if (width ** 2 + height ** 2) ** 0.5 < self._min_person_diagonal:
+            return False
+        if height < self._min_person_height:
+            return False
+        if self._frame_h and y2 < self._frame_h * self._min_person_bottom_ratio:
+            return False
+        return True
 
     def get_person_boxes(self) -> list:
         """Retorna as caixas de pessoas da última inferência."""
@@ -461,9 +513,7 @@ class ObjectDetector:
         diagonal = (width ** 2 + height ** 2) ** 0.5
         if conf < self.MIN_RIGHT_DETOUR_CONF:
             return False
-        if diagonal < self._min_right_detour_diagonal:
-            return False
-        return True
+        return not diagonal < self._min_right_detour_diagonal
 
     def _update_right_detour_state(self):
         found = False
@@ -494,9 +544,7 @@ class ObjectDetector:
         # Verifica tamanho
         if area < self.MIN_STOP_AREA:
             return False
-        if (width ** 2 + height ** 2) ** 0.5 < self._min_stop_diagonal:
-            return False
-        return True
+        return not (width ** 2 + height ** 2) ** 0.5 < self._min_stop_diagonal
 
     def get_state(self):
         now = time.time()
@@ -506,7 +554,7 @@ class ObjectDetector:
 
         raw_stop = False
         for x1, y1, x2, y2, label, conf in self._boxes:
-            if self._is_stop_label(label.lower()):
+            if self._is_stop_label(label.lower()):  # noqa: SIM102
                 # Verifica confiança + tamanho
                 if self._is_valid_stop(x1, y1, x2, y2, conf):
                     raw_stop = True
