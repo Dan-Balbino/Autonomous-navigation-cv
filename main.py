@@ -310,15 +310,16 @@ def mainLoop():
         if not ret_1:
             break
         
-        with frame_lock:
-            shared_frame = frame_1.copy()
-            shared_frame_id += 1
-        
         if not _image_test_mode:
             frame_1 = corrector.correct(frame_1)
-            
-        img = frame_1.copy()
+        
         sign_view = frame_1.copy()
+        
+        with frame_lock:
+            shared_frame = sign_view.copy()
+            shared_frame_id += 1
+        
+        img = frame_1.copy()
         frame_scale_x = frame_1.shape[1] / width
         frame_scale_y = frame_1.shape[0] / height
 
