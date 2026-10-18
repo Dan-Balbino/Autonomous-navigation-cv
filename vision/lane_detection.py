@@ -1,6 +1,7 @@
+import time
+
 import cv2
 import numpy as np
-import time
 
 # Largura nominal da pista na bird's eye (em pixels). MEÇA com a pista real.
 TRACK_NOMINAL = 170
@@ -42,7 +43,7 @@ preference_lane = "neutral"  # "left", "right", "neutral"
 
 
 def lane_detection_pipeline(roi_h, roi_w, limiar, limiar_bgr, last_error=0):
-    global track_size, preference_lane
+    global track_size, preference_lane  # noqa: PLW0602
 
     # Remove manchas de luz antes de procurar as faixas
     if GLARE_FILTER:
@@ -183,7 +184,7 @@ def apply_ema(raw_error):
         filtered_error = raw_error
     else:
         filtered_error = EMA_ALPHA * raw_error + (1 - EMA_ALPHA) * filtered_error
-    return int(round(filtered_error))
+    return round(filtered_error)
 
 
 def sliding_window_search(limiar, height, width, limit, num_windows=1):
@@ -249,7 +250,7 @@ def find_lane_candidates(hist, limit, min_width):
             continue
         seg = hist[s:e]
         # Centro ponderado pela quantidade de pixels brancos
-        center = int(round(np.sum(np.arange(s, e) * seg) / np.sum(seg)))
+        center = round(np.sum(np.arange(s, e) * seg) / np.sum(seg))
         candidates.append((center, int(seg.max())))
     return candidates
 
@@ -309,7 +310,7 @@ def process_lanes(left_lane, right_lane, left_valid, right_valid, roi_w, referen
 
     # Largura usada quando só uma faixa guia o carro: com preferência, a calibrada daquele lado;
     # sem preferência, a medida em tempo real
-    lane_width = TRACK_WIDTH[preference_lane] if preference_lane in TRACK_WIDTH else track_size
+    lane_width = TRACK_WIDTH.get(preference_lane, track_size)
     y = reference_line_y
 
     # ===== Caso 1 - Duas faixas foram detectadas =====
@@ -320,7 +321,7 @@ def process_lanes(left_lane, right_lane, left_valid, right_valid, roi_w, referen
 
         # Atualiza o tamanho da pista SÓ com a medição da janela mais próxima do carro
         # e SÓ se estiver perto do valor nominal. Fora disso, ignora (leitura suspeita).
-        if near_width is not None:
+        if near_width is not None:  # noqa: SIM102
             if (1 - TRACK_TOLERANCE) * TRACK_NOMINAL < near_width < (1 + TRACK_TOLERANCE) * TRACK_NOMINAL:
                 track_size = near_width
 
@@ -377,7 +378,7 @@ def get_frame_dimensions(frame, prop):
 
 
 def extract_bird_eye_view(frame, img, upper, lower, y_top, y_bot, roi_w, roi_h):
-    height, width = frame.shape[:2]
+    _height, width = frame.shape[:2]
     cx = width // 2
 
     # ── Definição dos pontos de perspectiva ─────────────────────────────

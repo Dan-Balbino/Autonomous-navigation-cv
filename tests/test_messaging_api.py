@@ -30,21 +30,24 @@ def test_get_config_has_panel_keys(client):
         "ROI_Linha superior", "IMAGEM_Limiar",
         "RETA_Kp", "CURVA_Kp", "PID DE CURVA FECHADA_Kp",
         "PARÂMETROS DO CARRO_PWM", "PARÂMETROS DO CARRO_Ângulo máximo",
-        "PARE_Confiança (%)", "SEMÁFORO_Confiança (%)", "PESSOAS_Confiança (%)",
+        "PARADAS_Distância máxima de parada (cm)",
+        "PARADAS_Foco da câmera (px)", "PARADAS_Confiança PARE (%)",
+        "PARADAS_Confiança Ponto A (%)", "PARADAS_Confiança Ponto B (%)",
+        "PARADAS_Confiança Ponto C (%)", "SEMÁFORO_Confiança (%)",
+        "PESSOAS_Confiança (%)",
         "DESVIO DIREITA_Confiança (%)", "DESVIO DIREITA_Frames seguidos",
-        "PONTO A_Confiança (%)", "PONTO B_Confiança (%)", "PONTO C_Confiança (%)",
         "running",
     ):
         assert key in cfg, f"Chave ausente: {key}"
 
 
 def test_post_config_updates_and_flags_change(client):
-    r = client.post("/api/config", json={"PARE_Confiança (%)": 75})
+    r = client.post("/api/config", json={"PARADAS_Confiança PARE (%)": 75})
     assert r.status_code == 200 and r.get_json()["ok"] is True
-    assert client.get("/api/config").get_json()["PARE_Confiança (%)"] == 75
+    assert client.get("/api/config").get_json()["PARADAS_Confiança PARE (%)"] == 75
 
     updated = mc.pop_config_update()
-    assert updated is not None and updated["PARE_Confiança (%)"] == 75
+    assert updated is not None and updated["PARADAS_Confiança PARE (%)"] == 75
     assert mc.pop_config_update() is None, "flag deveria ter sido limpo"
 
 

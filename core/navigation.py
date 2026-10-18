@@ -9,7 +9,8 @@ lane_guide_map = {
 # Tempo (s) sem ver a placa pra considerar que ela "acabou" e a próxima detecção é outra placa.
 # Tem que ser MAIOR que o maior buraco de detecção da mesma placa
 # e MENOR que o tempo entre duas placas diferentes.
-SIGN_RELEASE_TIME = 2.5
+SIGN_RELEASE_TIME = 1.5
+STOP_POINT_DETECTION_TIMEOUT_SECONDS = 1.5
 
 
 class Navigation:
@@ -23,6 +24,8 @@ class Navigation:
         self.current_lane = "left"
         self.sign_latched = False
         self.last_sign_seen = 0.0
+        self._pending_stop_point = None
+        self._pending_stop_point_detected_at = None
 
     def add_point(self, point):
         self.route.append(point)
@@ -37,9 +40,44 @@ class Navigation:
         self.mission_state.pop(0)
         self.action_counter = 0
         self.sign_latched = False  # novo ponto: a próxima placa é sempre nova
+        self._pending_stop_point = None
+        self._pending_stop_point_detected_at = None
         self.current_route = self.route[0] if self.route else ""
         if self.current_route:
             print(f"Current route updated to: {self.current_route}")
+
+    @property
+    def pending_stop_point(self):
+        return self._pending_stop_point
+
+    def request_stop_at_current_point(self, point, now=None):
+        """Registra quando a placa do ponto atual foi detectada."""
+        if not self.route or str(self.route[0]).casefold() != str(point).casefold():
+            return False
+        if self._pending_stop_point is not None:
+            return False
+        self._pending_stop_point = self.route[0]
+        self._pending_stop_point_detected_at = (
+            time.monotonic() if now is None else now
+        )
+        return True
+
+    def should_stop_at_current_point(self, distance_m, max_stop_distance_m, now=None):
+        """Indica parada pelo limite de distância ou 1,5 s após detectar a placa."""
+        if self._pending_stop_point is None:
+            return False
+
+        now = time.monotonic() if now is None else now
+        distance_triggered = (
+            distance_m is not None
+            and 0.0 < distance_m < max_stop_distance_m
+        )
+        timeout_triggered = (
+            self._pending_stop_point_detected_at is not None
+            and now - self._pending_stop_point_detected_at
+            >= STOP_POINT_DETECTION_TIMEOUT_SECONDS
+        )
+        return distance_triggered or timeout_triggered
 
     def confirm_current_point(self, point):
         """Avança a rota somente quando a placa do destino atual foi detectada."""

@@ -70,25 +70,22 @@ _config: dict = {
     "PARÂMETROS DO CARRO_Velocidade no amarelo (%)": 50,
     "PARÂMETROS DO CARRO_Ângulo máximo":             90,
     "PARÂMETROS DO CARRO_Intervalo comando (ms)":   200,
-    "PARE_Confiança (%)":                            40,
-    "PARE_Diagonal mínima da caixa (px)":             0,
-    "PARE_Tempo de parada (s)":                       3,
-    "PARE_Cooldown (s)":                              3,
+    "PARADAS_Distância de detecção (cm)":            50,
+    "PARADAS_Distância máxima de parada (cm)":       200,
+    "PARADAS_Foco da câmera (px)":                   206,
+    "PARADAS_Confiança PARE (%)":                     40,
+    "PARADAS_Confiança Ponto A (%)":                  40,
+    "PARADAS_Confiança Ponto B (%)":                  40,
+    "PARADAS_Confiança Ponto C (%)":                  40,
+    "PARADAS_Tempo de parada (s)":                     3,
+    "PARADAS_Cooldown (s)":                            3,
     "SEMÁFORO_Confiança (%)":                        80,
-    "SEMÁFORO_Diagonal mínima da caixa (px)":         0,
     "SEMÁFORO_Timeout (ms)":                       2000,
     "SEMÁFORO_Intervalo IA (frames)":                 5,
     "DESVIO DIREITA_Confiança (%)":                  80,
-    "DESVIO DIREITA_Diagonal mínima da caixa (px)":   0,
     "DESVIO DIREITA_Frames seguidos":                 3,
     "PESSOAS_Confiança (%)":                         50,
     "PESSOAS_Diagonal mínima da caixa (px)":          0,
-    "PONTO A_Confiança (%)":                         40,
-    "PONTO A_Diagonal mínima da caixa (px)":          0,
-    "PONTO B_Confiança (%)":                         40,
-    "PONTO B_Diagonal mínima da caixa (px)":          0,
-    "PONTO C_Confiança (%)":                         40,
-    "PONTO C_Diagonal mínima da caixa (px)":          0,
     "running":                                    False,
 }
 _config_updated = False
@@ -111,6 +108,21 @@ def load_config_from_file() -> None:
                 if legacy_key in data:
                     data[close_curve_error_key] = data[legacy_key]
                     break
+        legacy_stop_keys = {
+            "PARADAS_Confiança PARE (%)": "PARE_Confiança (%)",
+            "PARADAS_Tempo de parada (s)": "PARE_Tempo de parada (s)",
+            "PARADAS_Cooldown (s)": "PARE_Cooldown (s)",
+            "PARADAS_Confiança Ponto A (%)": "PONTO A_Confiança (%)",
+            "PARADAS_Confiança Ponto B (%)": "PONTO B_Confiança (%)",
+            "PARADAS_Confiança Ponto C (%)": "PONTO C_Confiança (%)",
+        }
+        for key, legacy_key in legacy_stop_keys.items():
+            if key not in data and legacy_key in data:
+                data[key] = data[legacy_key]
+        detection_distance_key = "PARADAS_Distância de detecção (cm)"
+        legacy_detection_distance_key = "PARADAS_Distância para PWM zero (cm)"
+        if detection_distance_key not in data and legacy_detection_distance_key in data:
+            data[detection_distance_key] = data[legacy_detection_distance_key]
         with _lock:
             _config.update(data)
     except Exception:
@@ -1039,38 +1051,29 @@ const SIGNAL_SECTIONS=[
     {key:"PARÂMETROS DO CARRO_Ângulo máximo",label:"Ângulo máximo",min:20,max:90,default:90},
     {key:"PARÂMETROS DO CARRO_Intervalo comando (ms)",label:"Intervalo comando (ms)",min:50,max:1000,default:200},
   ]},
-  {title:"PARE",controls:[
-    {key:"PARE_Confiança (%)",label:"Confiança (%)",min:0,max:100,default:40},
-    {key:"PARE_Diagonal mínima da caixa (px)",label:"Diagonal mínima da caixa (px)",min:0,max:1000,default:0},
-    {key:"PARE_Tempo de parada (s)",label:"Tempo de parada (s)",min:0,max:15,default:3},
-    {key:"PARE_Cooldown (s)",label:"Cooldown (s)",min:0,max:15,default:3},
+  {title:"PARADAS",controls:[
+    {key:"PARADAS_Distância de detecção (cm)",label:"Distância de detecção (cm)",min:0,max:1000,default:50},
+    {key:"PARADAS_Distância máxima de parada (cm)",label:"Distância para stop total (cm)",min:0,max:1000,default:200},
+    {key:"PARADAS_Foco da câmera (px)",label:"Foco da câmera (px)",min:1,max:1000,default:206},
+    {key:"PARADAS_Confiança PARE (%)",label:"Confiança PARE (%)",min:0,max:100,default:40},
+    {key:"PARADAS_Confiança Ponto A (%)",label:"Confiança Ponto A (%)",min:0,max:100,default:40},
+    {key:"PARADAS_Confiança Ponto B (%)",label:"Confiança Ponto B (%)",min:0,max:100,default:40},
+    {key:"PARADAS_Confiança Ponto C (%)",label:"Confiança Ponto C (%)",min:0,max:100,default:40},
+    {key:"PARADAS_Tempo de parada (s)",label:"Tempo de parada (s)",min:0,max:15,default:3},
+    {key:"PARADAS_Cooldown (s)",label:"Cooldown (s)",min:0,max:15,default:3},
   ]},
   {title:"SEMÁFORO",controls:[
     {key:"SEMÁFORO_Confiança (%)",label:"Confiança (%)",min:0,max:100,default:80},
-    {key:"SEMÁFORO_Diagonal mínima da caixa (px)",label:"Diagonal mínima da caixa (px)",min:0,max:1000,default:0},
     {key:"SEMÁFORO_Timeout (ms)",label:"Timeout (ms)",min:250,max:10000,default:2000},
     {key:"SEMÁFORO_Intervalo IA (frames)",label:"Intervalo IA (frames)",min:1,max:30,default:5},
   ]},
   {title:"DESVIO DIREITA",controls:[
     {key:"DESVIO DIREITA_Confiança (%)",label:"Confiança (%)",min:0,max:100,default:80},
-    {key:"DESVIO DIREITA_Diagonal mínima da caixa (px)",label:"Diagonal mínima da caixa (px)",min:0,max:1000,default:0},
     {key:"DESVIO DIREITA_Frames seguidos",label:"Frames seguidos",min:1,max:30,default:3},
   ]},
   {title:"PESSOAS",controls:[
     {key:"PESSOAS_Confiança (%)",label:"Confiança (%)",min:0,max:100,default:50},
     {key:"PESSOAS_Diagonal mínima da caixa (px)",label:"Diagonal mínima da caixa (px)",min:0,max:1000,default:0},
-  ]},
-  {title:"PONTO A",controls:[
-    {key:"PONTO A_Confiança (%)",label:"Confiança (%)",min:0,max:100,default:40},
-    {key:"PONTO A_Diagonal mínima da caixa (px)",label:"Diagonal mínima da caixa (px)",min:0,max:1000,default:0},
-  ]},
-  {title:"PONTO B",controls:[
-    {key:"PONTO B_Confiança (%)",label:"Confiança (%)",min:0,max:100,default:40},
-    {key:"PONTO B_Diagonal mínima da caixa (px)",label:"Diagonal mínima da caixa (px)",min:0,max:1000,default:0},
-  ]},
-  {title:"PONTO C",controls:[
-    {key:"PONTO C_Confiança (%)",label:"Confiança (%)",min:0,max:100,default:40},
-    {key:"PONTO C_Diagonal mínima da caixa (px)",label:"Diagonal mínima da caixa (px)",min:0,max:1000,default:0},
   ]},
 ];
 
@@ -1121,7 +1124,12 @@ function toggleEdit(){
 function isSpeedKey(key){ return key==="PARÂMETROS DO CARRO_PWM" || key==="PARÂMETROS DO CARRO_Velocidade na curva (PWM)"; }
 function sliderValue(key,val){ return isSpeedKey(key) ? Math.max(0,Math.min(255,Math.round(parseFloat(val)))) : parseInt(val); }
 function controlValue(key,sliderVal){ return isSpeedKey(key) ? Math.round(parseInt(sliderVal)) : parseInt(sliderVal); }
-function formatValue(key,val){ return isSpeedKey(key) ? Math.round(parseFloat(val))+' PWM' : String(val); }
+function formatValue(key,val){
+  if(isSpeedKey(key)) return Math.round(parseFloat(val))+' PWM';
+  if(key==="PARADAS_Distância de detecção (cm)" || key==="PARADAS_Distância máxima de parada (cm)") return (parseInt(val)/100).toFixed(2)+' m';
+  if(key==="PARADAS_Foco da câmera (px)") return Math.round(parseFloat(val))+' px';
+  return String(val);
+}
 
 function buildSections(containerId, sections){
   const grid=document.getElementById(containerId);

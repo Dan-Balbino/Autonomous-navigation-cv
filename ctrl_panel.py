@@ -443,10 +443,16 @@ class ControlPanel:
             legacy_speed = config.get("PARÂMETROS DO CARRO_Velocidade (m/s)")
             saved_pwm = round(float(legacy_speed) * 10) if legacy_speed is not None else 40
         saved_pwm = max(0, min(255, int(saved_pwm)))
-        stop_wait_seconds = config.get("PARE_Tempo de parada (s)")
+        stop_wait_seconds = config.get(
+            "PARADAS_Tempo de parada (s)",
+            config.get("PARE_Tempo de parada (s)"),
+        )
         if stop_wait_seconds is None:
             stop_wait_seconds = round(float(config.get("PARE_Tempo de parada (ms)", 3000)) / 1000)
-        cooldown_seconds = config.get("PARE_Cooldown (s)")
+        cooldown_seconds = config.get(
+            "PARADAS_Cooldown (s)",
+            config.get("PARE_Cooldown (s)"),
+        )
         if cooldown_seconds is None:
             cooldown_seconds = round(float(config.get("PARE_Cooldown (ms)", 3000)) / 1000)
         close_curve_pid_error = config.get(
@@ -494,38 +500,91 @@ class ControlPanel:
                 ("Ângulo máximo", config.get("PARÂMETROS DO CARRO_Ângulo máximo", 90), 20, 90),
                 ("Intervalo comando (ms)", config.get("PARÂMETROS DO CARRO_Intervalo comando (ms)", 200), 50, 1000),
             ]),
-            ("PARE", [
-                ("Confiança (%)", config.get("PARE_Confiança (%)", config.get("DETECTOR_Confiança (%)", 40)), 0, 100),
-                ("Diagonal mínima da caixa (px)", config.get("PARE_Diagonal mínima da caixa (px)", config.get("PARE_Box diagonal", config.get("DETECTOR_Box diagonal", 0))), 0, 1000),
+            ("PARADAS", [
+                (
+                    "Distância de detecção (cm)",
+                    config.get(
+                        "PARADAS_Distância de detecção (cm)",
+                        config.get("PARADAS_Distância para PWM zero (cm)", 50),
+                    ),
+                    0,
+                    1000,
+                ),
+                (
+                    "Distância máxima de parada (cm)",
+                    config.get("PARADAS_Distância máxima de parada (cm)", 200),
+                    0,
+                    1000,
+                ),
+                (
+                    "Foco da câmera (px)",
+                    config.get("PARADAS_Foco da câmera (px)", 206),
+                    1,
+                    1000,
+                ),
+                (
+                    "Confiança PARE (%)",
+                    config.get(
+                        "PARADAS_Confiança PARE (%)",
+                        config.get(
+                            "PARE_Confiança (%)",
+                            config.get("DETECTOR_Confiança (%)", 40),
+                        ),
+                    ),
+                    0,
+                    100,
+                ),
+                (
+                    "Confiança Ponto A (%)",
+                    config.get(
+                        "PARADAS_Confiança Ponto A (%)",
+                        config.get(
+                            "PONTO A_Confiança (%)",
+                            config.get("PONTOS A/B/C_Confiança (%)", 40),
+                        ),
+                    ),
+                    0,
+                    100,
+                ),
+                (
+                    "Confiança Ponto B (%)",
+                    config.get(
+                        "PARADAS_Confiança Ponto B (%)",
+                        config.get(
+                            "PONTO B_Confiança (%)",
+                            config.get("PONTOS A/B/C_Confiança (%)", 40),
+                        ),
+                    ),
+                    0,
+                    100,
+                ),
+                (
+                    "Confiança Ponto C (%)",
+                    config.get(
+                        "PARADAS_Confiança Ponto C (%)",
+                        config.get(
+                            "PONTO C_Confiança (%)",
+                            config.get("PONTOS A/B/C_Confiança (%)", 40),
+                        ),
+                    ),
+                    0,
+                    100,
+                ),
                 ("Tempo de parada (s)", stop_wait_seconds, 0, 15),
                 ("Cooldown (s)", cooldown_seconds, 0, 15),
             ]),
             ("SEMÁFORO", [
                 ("Confiança (%)", config.get("SEMÁFORO_Confiança (%)", 80), 0, 100),
-                ("Diagonal mínima da caixa (px)", config.get("SEMÁFORO_Diagonal mínima da caixa (px)", config.get("SEMÁFORO_Box diagonal", 0)), 0, 1000),
                 ("Timeout (ms)", config.get("SEMÁFORO_Timeout (ms)", 2000), 250, 10000),
                 ("Intervalo IA (frames)", config.get("SEMÁFORO_Intervalo IA (frames)", 5), 1, 30),
             ]),
             ("DESVIO DIREITA", [
                 ("Confiança (%)", config.get("DESVIO DIREITA_Confiança (%)", 80), 0, 100),
-                ("Diagonal mínima da caixa (px)", config.get("DESVIO DIREITA_Diagonal mínima da caixa (px)", config.get("DESVIO DIREITA_Box diagonal", 0)), 0, 1000),
                 ("Frames seguidos", config.get("DESVIO DIREITA_Frames seguidos", 3), 1, 30),
             ]),
             ("PESSOAS", [
                 ("Confiança (%)", config.get("PESSOAS_Confiança (%)", 50), 0, 100),
                 ("Diagonal mínima da caixa (px)", config.get("PESSOAS_Diagonal mínima da caixa (px)", config.get("PESSOAS_Box diagonal", 0)), 0, 1000),
-            ]),
-            ("PONTO A", [
-                ("Confiança (%)", config.get("PONTO A_Confiança (%)", config.get("PONTOS A/B/C_Confiança (%)", 40)), 0, 100),
-                ("Diagonal mínima da caixa (px)", config.get("PONTO A_Diagonal mínima da caixa (px)", config.get("PONTOS A/B/C_Diagonal mínima da caixa (px)", 0)), 0, 1000),
-            ]),
-            ("PONTO B", [
-                ("Confiança (%)", config.get("PONTO B_Confiança (%)", config.get("PONTOS A/B/C_Confiança (%)", 40)), 0, 100),
-                ("Diagonal mínima da caixa (px)", config.get("PONTO B_Diagonal mínima da caixa (px)", config.get("PONTOS A/B/C_Diagonal mínima da caixa (px)", 0)), 0, 1000),
-            ]),
-            ("PONTO C", [
-                ("Confiança (%)", config.get("PONTO C_Confiança (%)", config.get("PONTOS A/B/C_Confiança (%)", 40)), 0, 100),
-                ("Diagonal mínima da caixa (px)", config.get("PONTO C_Diagonal mínima da caixa (px)", config.get("PONTOS A/B/C_Diagonal mínima da caixa (px)", 0)), 0, 1000),
             ]),
         ]
 
@@ -1116,6 +1175,13 @@ class ControlPanel:
     def _format_control_value(self, key, value):
         if self._is_speed_key(key):
             return f"{int(value)} PWM"
+        if key in (
+            "PARADAS_Distância de detecção (cm)",
+            "PARADAS_Distância máxima de parada (cm)",
+        ):
+            return f"{int(value) / 100:.2f} m"
+        if key == "PARADAS_Foco da câmera (px)":
+            return f"{int(value)} px"
         return str(value)
 
     def _build_connection_box(self):

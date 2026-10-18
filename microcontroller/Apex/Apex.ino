@@ -37,7 +37,7 @@ void setup() {
 
   // Serial1 do Arduino Mega
   Serial1.begin(115200);
-
+  
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
