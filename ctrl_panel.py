@@ -667,10 +667,11 @@ class ControlPanel:
 
         wheel_names = (
             ("speed1", "Roda frontal esquerda"),
+            ("speed4", "Roda frontal direita"),
             ("speed2", "Roda traseira esquerda"),
-            ("speed3", "Roda frontal direita"),
-            ("speed4", "Roda traseira direita"),
+            ("speed3", "Roda traseira direita"),
         )
+        
         grid = QGridLayout()
         grid.setHorizontalSpacing(16)
         grid.setVerticalSpacing(8)
@@ -1244,7 +1245,7 @@ class ControlPanel:
             if hasattr(self, "_remote_status_label") and self._remote_status_label is not None:
                 self._remote_status_label.setText(msg)
             self.log(f"[REMOTE] {msg}", "info")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             msg = f"Erro ao desconectar do controle remoto: {exc}"
             if hasattr(self, "_remote_status_label") and self._remote_status_label is not None:
                 self._remote_status_label.setText(msg)
