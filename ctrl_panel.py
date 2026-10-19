@@ -525,6 +525,12 @@ class ControlPanel:
             ("PESSOAS", [
                 ("Confiança (%)", config.get("PESSOAS_Confiança (%)", 50), 0, 100),
                 ("Diagonal mínima da caixa (px)", config.get("PESSOAS_Diagonal mínima da caixa (px)", config.get("PESSOAS_Box diagonal", 0)), 0, 1000),
+                ("Topo esquerda (px)", config.get("PESSOAS_Topo esquerda (px)", round(self.frame_width * 0.30)), 0, self.frame_width),
+                ("Topo direita (px)", config.get("PESSOAS_Topo direita (px)", round(self.frame_width * 0.70)), 0, self.frame_width),
+                ("Altura superior (px)", config.get("PESSOAS_Altura superior (px)", round(self.frame_height * 0.45)), 0, self.frame_height),
+                ("Base esquerda (px)", config.get("PESSOAS_Base esquerda (px)", round(self.frame_width * 0.05)), 0, self.frame_width),
+                ("Base direita (px)", config.get("PESSOAS_Base direita (px)", round(self.frame_width * 0.95)), 0, self.frame_width),
+                ("Altura inferior (px)", config.get("PESSOAS_Altura inferior (px)", self.frame_height), 0, self.frame_height),
             ]),
             ("PONTO A", [
                 ("Confiança (%)", config.get("PONTO A_Confiança (%)", config.get("PONTOS A/B/C_Confiança (%)", 40)), 0, 100),

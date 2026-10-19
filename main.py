@@ -345,6 +345,24 @@ def mainLoop():
             light_confidence=panel.get("SEMÁFORO", "Confiança (%)") / 100.0,
             person_confidence=panel.get("PESSOAS", "Confiança (%)") / 100.0,
             min_person_diagonal=panel.get("PESSOAS", "Diagonal mínima da caixa (px)"),
+            person_roi=[
+                (
+                    panel.get("PESSOAS", "Topo esquerda (px)") / width,
+                    panel.get("PESSOAS", "Altura superior (px)") / height,
+                ),
+                (
+                    panel.get("PESSOAS", "Topo direita (px)") / width,
+                    panel.get("PESSOAS", "Altura superior (px)") / height,
+                ),
+                (
+                    panel.get("PESSOAS", "Base direita (px)") / width,
+                    panel.get("PESSOAS", "Altura inferior (px)") / height,
+                ),
+                (
+                    panel.get("PESSOAS", "Base esquerda (px)") / width,
+                    panel.get("PESSOAS", "Altura inferior (px)") / height,
+                ),
+            ],
             right_detour_confidence=panel.get("DESVIO DIREITA", "Confiança (%)") / 100.0,
             min_right_detour_diagonal=panel.get("DESVIO DIREITA", "Diagonal mínima da caixa (px)"),
             right_detour_required_frames=panel.get("DESVIO DIREITA", "Frames seguidos"),
