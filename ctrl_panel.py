@@ -812,7 +812,7 @@ class ControlPanel:
         if self.nav is not None:
             try:
                 self.nav.add_point(point)
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass
         self._update_route_display()
 
@@ -1231,7 +1231,7 @@ class ControlPanel:
             if hasattr(self, "_remote_status_label") and self._remote_status_label is not None:
                 self._remote_status_label.setText(msg)
             self.log(f"[REMOTE] {msg}", "info" if self.remote_control.connected else "warn")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             msg = f"Erro ao conectar ao controle remoto: {exc}"
             if hasattr(self, "_remote_status_label") and self._remote_status_label is not None:
                 self._remote_status_label.setText(msg)
@@ -1544,7 +1544,7 @@ class ControlPanel:
                 with urllib.request.urlopen(f"{self._dashboard_url}/api/config", timeout=1) as r:
                     cfg = json.loads(r.read())
                 self._bridge.config_received.emit(cfg)
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass
         threading.Thread(target=_fetch, daemon=True).start()
 
@@ -1566,7 +1566,7 @@ class ControlPanel:
                     method="POST",
                 )
                 urllib.request.urlopen(req, timeout=1)
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass
         threading.Thread(target=_post, daemon=True).start()
 

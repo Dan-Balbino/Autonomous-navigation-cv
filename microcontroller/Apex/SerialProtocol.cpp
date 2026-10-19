@@ -1,11 +1,11 @@
-#include <Arduino.h>
-#include <ArduinoJson.h>
 #include "SerialProtocol.h"
 #include "CANProtocol.h"
 
 String buffer = "";
-char serial1_buffer[32];
+
+char serial1_buffer[48];
 uint8_t serial1_index = 0;
+bool serial1_overflow = false;
 
 bool receiveCommand(CarCommand &cmd) {
   while (Serial.available() > 0) {
@@ -48,7 +48,8 @@ void processCommand(CarCommand &cmd) {
   } else {
     parar = false;
   }
-  
+
+  // Mantive cmd.stop como estava. Se a intenção for usar o `parar`, troque aqui.
   sendMotorCommand(MOTOR_COMMAND, (int16_t)(cmd.servo - 90), cmd.speed, cmd.reverse, cmd.stop, cmd.vehicleState);
 }
 
@@ -86,21 +87,29 @@ void readSerial1(uint8_t &battery, uint8_t &current, uint8_t &percentage, uint8_
   while (Serial1.available()) {
     char c = Serial1.read();
 
-    if (c == '\n') {
-      serial1_buffer[serial1_index] = '\0';
-      serial1_index = 0;
+    if (c == '\r') continue;
 
-      sscanf(
-        serial1_buffer,
-        "%d;%d;%d;%hhu",
-        &battery,
-        &current,
-        &percentage,
-        &battery_state
-      );
+    if (c == '\n') {
+      // só processa se a linha chegou inteira
+      if (!serial1_overflow && serial1_index > 0) {
+        serial1_buffer[serial1_index] = '\0';
+
+        int b, cur, pct, st;
+        if (sscanf(serial1_buffer, "%d;%d;%d;%d", &b, &cur, &pct, &st) == 4) {
+          battery       = constrain(b, 0, 255);
+          current       = constrain(cur, 0, 255);
+          percentage    = constrain(pct, 0, 100);
+          battery_state = constrain(st, 0, 255);
+        }
+      }
+      serial1_index = 0;
+      serial1_overflow = false;
     }
-    else if (c != '\r' && serial1_index < sizeof(serial1_buffer) - 1) {
+    else if (serial1_index < sizeof(serial1_buffer) - 1) {
       serial1_buffer[serial1_index++] = c;
+    }
+    else {
+      serial1_overflow = true;   // linha grande demais — descarta até o próximo '\n'
     }
   }
 }
