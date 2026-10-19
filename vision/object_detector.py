@@ -13,9 +13,9 @@ class ObjectDetector:
     CONF_THRESHOLD = 0.1
     DISPLAY_CONF_THRESHOLD = 0.1
     PERSON_CONF_THRESHOLD = 0.5
-    PERSON_INFERENCE_CONF_THRESHOLD = 0.01
+    PERSON_INFERENCE_CONF_THRESHOLD = 0.25  # antes 0.01; menos lixo pro filtro limpar
     PERSON_CLASS_ID = 0  # Classe person no modelo COCO
-    PERSON_CENTER_RATIO = 0.5  # fração central da largura onde pessoas valem (0.5 = 50% do meio)
+    PERSON_CENTER_RATIO = 0.5  # LEGADO: não é mais usado (substituído por PERSON_ROI), mantido p/ compatibilidade
     DETECT_INTERVAL = 5
     STOP_WAIT_SECONDS = 3.0
     COOLDOWN_SECONDS = 3.0
@@ -23,6 +23,25 @@ class ObjectDetector:
 
     MIN_STOP_CONF = 0.8
     MIN_STOP_AREA = 1500
+
+    # PESSOA: confirmação temporal (conta inferências, não frames de câmera)
+    PERSON_REQUIRED_FRAMES = 2  # detecções válidas seguidas pra confirmar
+    PERSON_LOST_FRAMES = 3      # perdas seguidas pra desconfirmar (histerese)
+
+    # PESSOA: filtro de proporção altura/largura da caixa
+    PERSON_MIN_ASPECT = 0.8
+    PERSON_MAX_ASPECT = 4.0
+
+    # PLACAS (pare, desvio, pontos A/B/C): ignora as que estiverem na faixa central da imagem
+    # fração da largura, centrada. 0.0 = desligado; 0.3 = ignora os 30% do meio.
+    PLATE_IGNORE_CENTER_RATIO = 0.4
+
+    # PESSOA: região do chão à frente do carro (trapézio, coordenadas normalizadas x, y)
+    # Ordem: topo-esq, topo-dir, base-dir, base-esq. Ajuste olhando o vídeo da câmera.
+    PERSON_ROI = np.array(
+        [[0.30, 0.45], [0.70, 0.45], [0.95, 1.00], [0.05, 1.00]],
+        dtype=np.float32,
+    )
 
     # CORES DOS SEMÁFOROS
     LIGHT_TO_CODE = {"Vermelho": 0, "Amarelo": 1, "Verde": 2}  # noqa: RUF012
@@ -83,11 +102,20 @@ class ObjectDetector:
         self._min_light_confidence = 0.0
         self._min_person_diagonal = 0
         self._min_person_height = 0
-        self._min_person_bottom_ratio = 0.5  # 0.0 = desligado; 0.6 = pés precisam estar nos 40% de baixo
+        self._min_person_bottom_ratio = 0.0  # 0.0 = desligado; o ROI já cobre a posição dos pés
         self._frame_h = 0
+        self._frame_w = 0
         self._min_right_detour_diagonal = 0
         self._right_detour_frames_seen = 0
         self._right_detour_is_valid = False
+
+        # Estado da pessoa (confirmação temporal)
+        self._person_roi = np.array(self.PERSON_ROI, dtype=np.float32)
+        self._person_roi_px = None            # polígono em pixels (cache)
+        self._person_roi_px_size = (0, 0)     # (w, h) usado no cache
+        self._person_hits = 0
+        self._person_misses = 0
+        self._person_confirmed = False
 
         # Estado da placa STOP
         self._stop_until = 0.0
@@ -112,6 +140,12 @@ class ObjectDetector:
                   person_center_ratio=None,
                   min_person_height=None,
                   min_person_bottom_ratio=None,
+                  person_required_frames=None,
+                  person_lost_frames=None,
+                  person_min_aspect=None,
+                  person_max_aspect=None,
+                  person_roi=None,
+                  plate_ignore_center_ratio=None,
                   right_detour_confidence=None,
                   min_right_detour_diagonal=None,
                   right_detour_required_frames=None,
@@ -149,11 +183,27 @@ class ObjectDetector:
         if min_person_diagonal is not None:
             self._min_person_diagonal = max(0, int(min_person_diagonal))
         if person_center_ratio is not None:
+            # Legado: aceito só pra não quebrar quem já chama, mas não tem mais efeito.
             self.PERSON_CENTER_RATIO = max(0.1, min(1.0, float(person_center_ratio)))
         if min_person_height is not None:
             self._min_person_height = max(0, int(min_person_height))
         if min_person_bottom_ratio is not None:
             self._min_person_bottom_ratio = max(0.0, min(1.0, float(min_person_bottom_ratio)))
+        if person_required_frames is not None:
+            self.PERSON_REQUIRED_FRAMES = max(1, int(person_required_frames))
+        if person_lost_frames is not None:
+            self.PERSON_LOST_FRAMES = max(1, int(person_lost_frames))
+        if person_min_aspect is not None:
+            self.PERSON_MIN_ASPECT = max(0.0, float(person_min_aspect))
+        if person_max_aspect is not None:
+            self.PERSON_MAX_ASPECT = max(0.0, float(person_max_aspect))
+        if person_roi is not None:
+            roi = np.asarray(person_roi, dtype=np.float32)
+            if roi.ndim == 2 and roi.shape[1] == 2 and len(roi) >= 3:
+                self._person_roi = np.clip(roi, 0.0, 1.0)
+                self._person_roi_px = None  # força recalcular o cache
+        if plate_ignore_center_ratio is not None:
+            self.PLATE_IGNORE_CENTER_RATIO = max(0.0, min(1.0, float(plate_ignore_center_ratio)))
         if right_detour_confidence is not None:
             self.MIN_RIGHT_DETOUR_CONF = max(0.0, min(1.0, float(right_detour_confidence)))
         if min_right_detour_diagonal is not None:
@@ -182,7 +232,7 @@ class ObjectDetector:
 
     def update(self, frame) -> list:
         """Atualiza as detecções; a inferência ocorre a cada N frames."""
-        self._frame_h = frame.shape[0]
+        self._frame_h, self._frame_w = frame.shape[:2]
         self._counter += 1
         if self._counter < self.DETECT_INTERVAL:
             return self._boxes
@@ -190,12 +240,15 @@ class ObjectDetector:
         self._counter = 0
         self._boxes = self._predict(frame)
         self._person_boxes = self._predict_people(frame)
+        self._update_person_state()
         self._update_traffic_light(frame)
         self._update_right_detour_state()
 
         return self._boxes
 
     def draw(self, img) -> None:
+        self._draw_person_roi(img)
+
         for x1, y1, x2, y2, conf in self._person_boxes:
             if conf < self.DISPLAY_CONF_THRESHOLD:
                 continue
@@ -227,6 +280,14 @@ class ObjectDetector:
             else:
                 continue
             self._draw_box(img, x1, y1, x2, y2, label, conf, color)
+
+    def _draw_person_roi(self, img) -> None:
+        """Desenha o contorno do trapézio de pessoas (azul quando confirmada, cinza se não)."""
+        poly = self._get_person_roi_px(img.shape[1], img.shape[0])
+        if poly is None:
+            return
+        color = self.PERSON_VALID_COLOR if self._person_confirmed else self.INVALID_COLOR
+        cv2.polylines(img, [poly], True, color, 1, cv2.LINE_AA)
 
     @staticmethod
     def _draw_box(img, x1, y1, x2, y2, label, confidence, color) -> None:
@@ -305,6 +366,7 @@ class ObjectDetector:
         if model is None:
             return []
 
+        frame_w = frame.shape[1]
         best_by_label = {}
         for r in model.predict(frame, verbose=False, conf=self._conf):
             for box in r.boxes:
@@ -312,6 +374,8 @@ class ObjectDetector:
                 label = r.names[int(box.cls[0])]
                 conf = float(box.conf[0])
                 normalized = label.lower().strip().replace("-", "_").replace(" ", "_")
+                if self._is_plate_label(normalized) and self._is_in_center_band(x1, x2, frame_w):
+                    continue  # placa no meio da imagem: ignora
                 if (self._is_traffic_light_label(normalized)
                         or self._is_stop_label(normalized)
                         or self._is_right_detour_label(normalized)
@@ -324,15 +388,27 @@ class ObjectDetector:
                     print(f"[Sinais] Label detectado mas ignorado: '{label}'")
         return list(best_by_label.values())
 
+    @classmethod
+    def _is_plate_label(cls, label: str) -> bool:
+        """Placas: pare, desvio à direita e pontos A/B/C (semáforo não entra)."""
+        return (cls._is_stop_label(label)
+                or cls._is_right_detour_label(label)
+                or cls._is_stop_point_label(label))
+
+    def _is_in_center_band(self, x1, x2, frame_w) -> bool:
+        """O centro horizontal da caixa cai na faixa central ignorada?"""
+        ratio = self.PLATE_IGNORE_CENTER_RATIO
+        if ratio <= 0.0 or frame_w <= 0:
+            return False
+        center_x = (x1 + x2) / 2
+        half_band = frame_w * ratio / 2
+        return abs(center_x - frame_w / 2) < half_band
+
     def _predict_people(self, frame) -> list:
-        """Detecta somente pessoas na faixa central da imagem."""
+        """Detecta pessoas no frame inteiro; o filtro espacial (ROI) fica na validação."""
         model = self._get_standard_model()
         if model is None:
             return []
-
-        width = frame.shape[1]
-        margin = width * (1 - self.PERSON_CENTER_RATIO) / 2
-        left, right = margin, width - margin
 
         people = []
         for result in model.predict(
@@ -345,36 +421,80 @@ class ObjectDetector:
                 if int(box.cls[0]) != self.PERSON_CLASS_ID:
                     continue
                 x1, y1, x2, y2 = (int(value) for value in box.xyxy[0])
-                center_x = (x1 + x2) / 2
-                if not left <= center_x <= right:
-                    continue  # fora da faixa central
                 conf = float(box.conf[0])
                 people.append((x1, y1, x2, y2, conf))
         return people
 
+    # ── PESSOA ────────────────────────────────────────────────────────────────
+    def _get_person_roi_px(self, width: int, height: int):
+        """Polígono do ROI em pixels, com cache por tamanho de frame."""
+        if width <= 0 or height <= 0:
+            return None
+        if self._person_roi_px is None or self._person_roi_px_size != (width, height):
+            self._person_roi_px = (self._person_roi * (width, height)).astype(np.int32)
+            self._person_roi_px_size = (width, height)
+        return self._person_roi_px
+
+    def _foot_in_roi(self, x1, x2, y2) -> bool:
+        """Ponto dos pés (centro da base da caixa) dentro do trapézio do chão?"""
+        poly = self._get_person_roi_px(self._frame_w, self._frame_h)
+        if poly is None:
+            return False
+        point = (float((x1 + x2) / 2), float(y2))
+        return cv2.pointPolygonTest(poly, point, False) >= 0
+
     def _is_valid_person(self, x1, y1, x2, y2, conf) -> bool:
-        """Verifica confiança, tamanho e proximidade (pés na imagem) de uma pessoa."""
+        """Valida uma pessoa: confiança, pés no ROI, proporção e pisos mínimos de tamanho."""
         if conf < self.PERSON_CONF_THRESHOLD:
             return False
+        if not self._foot_in_roi(x1, x2, y2):
+            return False
+
         width, height = x2 - x1, y2 - y1
+        aspect = height / max(width, 1)
+        if not self.PERSON_MIN_ASPECT <= aspect <= self.PERSON_MAX_ASPECT:
+            return False
+
+        # tamanho agora é só um piso mínimo (0 = desligado)
         if (width ** 2 + height ** 2) ** 0.5 < self._min_person_diagonal:
             return False
         if height < self._min_person_height:
             return False
-        if self._frame_h and y2 < self._frame_h * self._min_person_bottom_ratio:
-            return False
-        return True
+        return not (self._frame_h and y2 < self._frame_h * self._min_person_bottom_ratio)
+
+    def _update_person_state(self) -> None:
+        """Confirmação temporal com histerese.
+
+        Liga após PERSON_REQUIRED_FRAMES detecções válidas seguidas.
+        Desliga após PERSON_LOST_FRAMES inferências seguidas sem detecção válida.
+        """
+        raw = any(
+            self._is_valid_person(x1, y1, x2, y2, conf)
+            for x1, y1, x2, y2, conf in self._person_boxes
+        )
+
+        if raw:
+            self._person_hits += 1
+            self._person_misses = 0
+            if self._person_hits >= self.PERSON_REQUIRED_FRAMES:
+                self._person_confirmed = True
+            return
+
+        self._person_misses += 1
+        if not self._person_confirmed:
+            # ainda não confirmou: exige detecções realmente seguidas
+            self._person_hits = 0
+        elif self._person_misses >= self.PERSON_LOST_FRAMES:
+            self._person_hits = 0
+            self._person_confirmed = False
 
     def get_person_boxes(self) -> list:
         """Retorna as caixas de pessoas da última inferência."""
         return list(self._person_boxes)
 
     def has_valid_person(self) -> bool:
-        """Verifica se há alguma pessoa que atende aos limites configurados."""
-        return any(
-            self._is_valid_person(x1, y1, x2, y2, conf)
-            for x1, y1, x2, y2, conf in self._person_boxes
-        )
+        """True quando há pessoa válida confirmada ao longo de vários frames."""
+        return self._person_confirmed
 
     # ── PONTOS A/B/C ──────────────────────────────────────────────────────────
     def get_stop_points(self) -> list:

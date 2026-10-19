@@ -1,5 +1,6 @@
 #pragma once
-
+#include <Arduino.h>
+#include <ArduinoJson.h>
 #include "./Types.h"
 
 bool receiveCommand(CarCommand& cmd);

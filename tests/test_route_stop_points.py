@@ -46,23 +46,37 @@ class RouteStopPointTest(unittest.TestCase):
         self.assertFalse(self.detector.stop_active)
 
     def test_person_detection_requires_confidence_and_minimum_diagonal(self):
+        self.detector._frame_w = 100
+        self.detector._frame_h = 100
         self.detector.configure(
             person_confidence=0.8,
             min_person_diagonal=50,
+            person_roi=[
+                (0.0, 0.0),
+                (1.0, 0.0),
+                (1.0, 1.0),
+                (0.0, 1.0),
+            ],
         )
-        self.detector._person_boxes = [
-            (0, 0, 30, 40, 0.9),
-            (0, 0, 30, 40, 0.79),
-        ]
-
-        self.assertTrue(self.detector.has_valid_person())
-
-        self.detector._person_boxes = [(0, 0, 30, 40, 0.79)]
-        self.assertFalse(self.detector.has_valid_person())
-
-        self.detector._person_boxes = [(0, 0, 30, 40, 0.9)]
+        self.assertTrue(self.detector._is_valid_person(0, 0, 30, 40, 0.9))
+        self.assertFalse(self.detector._is_valid_person(0, 0, 30, 40, 0.79))
         self.detector.configure(min_person_diagonal=51)
-        self.assertFalse(self.detector.has_valid_person())
+        self.assertFalse(self.detector._is_valid_person(0, 0, 30, 40, 0.9))
+
+    def test_person_roi_can_be_adjusted(self):
+        self.detector.configure(
+            person_roi=[
+                (0.2, 0.3),
+                (0.8, 0.3),
+                (0.9, 0.9),
+                (0.1, 0.9),
+            ],
+        )
+
+        self.assertEqual(
+            self.detector._get_person_roi_px(100, 100).tolist(),
+            [[20, 30], [80, 30], [89, 89], [10, 89]],
+        )
 
     def test_navigation_waits_for_matching_point_confirmation(self):
         navigation = Navigation()

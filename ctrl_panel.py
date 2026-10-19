@@ -525,6 +525,12 @@ class ControlPanel:
             ("PESSOAS", [
                 ("Confiança (%)", config.get("PESSOAS_Confiança (%)", 50), 0, 100),
                 ("Diagonal mínima da caixa (px)", config.get("PESSOAS_Diagonal mínima da caixa (px)", config.get("PESSOAS_Box diagonal", 0)), 0, 1000),
+                ("Topo esquerda (px)", config.get("PESSOAS_Topo esquerda (px)", round(self.frame_width * 0.30)), 0, self.frame_width),
+                ("Topo direita (px)", config.get("PESSOAS_Topo direita (px)", round(self.frame_width * 0.70)), 0, self.frame_width),
+                ("Altura superior (px)", config.get("PESSOAS_Altura superior (px)", round(self.frame_height * 0.45)), 0, self.frame_height),
+                ("Base esquerda (px)", config.get("PESSOAS_Base esquerda (px)", round(self.frame_width * 0.05)), 0, self.frame_width),
+                ("Base direita (px)", config.get("PESSOAS_Base direita (px)", round(self.frame_width * 0.95)), 0, self.frame_width),
+                ("Altura inferior (px)", config.get("PESSOAS_Altura inferior (px)", self.frame_height), 0, self.frame_height),
             ]),
             ("PONTO A", [
                 ("Confiança (%)", config.get("PONTO A_Confiança (%)", config.get("PONTOS A/B/C_Confiança (%)", 40)), 0, 100),
@@ -667,10 +673,11 @@ class ControlPanel:
 
         wheel_names = (
             ("speed1", "Roda frontal esquerda"),
+            ("speed4", "Roda frontal direita"),
             ("speed2", "Roda traseira esquerda"),
-            ("speed3", "Roda frontal direita"),
-            ("speed4", "Roda traseira direita"),
+            ("speed3", "Roda traseira direita"),
         )
+        
         grid = QGridLayout()
         grid.setHorizontalSpacing(16)
         grid.setVerticalSpacing(8)
@@ -811,7 +818,7 @@ class ControlPanel:
         if self.nav is not None:
             try:
                 self.nav.add_point(point)
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass
         self._update_route_display()
 
@@ -1230,7 +1237,7 @@ class ControlPanel:
             if hasattr(self, "_remote_status_label") and self._remote_status_label is not None:
                 self._remote_status_label.setText(msg)
             self.log(f"[REMOTE] {msg}", "info" if self.remote_control.connected else "warn")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             msg = f"Erro ao conectar ao controle remoto: {exc}"
             if hasattr(self, "_remote_status_label") and self._remote_status_label is not None:
                 self._remote_status_label.setText(msg)
@@ -1244,7 +1251,7 @@ class ControlPanel:
             if hasattr(self, "_remote_status_label") and self._remote_status_label is not None:
                 self._remote_status_label.setText(msg)
             self.log(f"[REMOTE] {msg}", "info")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             msg = f"Erro ao desconectar do controle remoto: {exc}"
             if hasattr(self, "_remote_status_label") and self._remote_status_label is not None:
                 self._remote_status_label.setText(msg)
@@ -1543,7 +1550,7 @@ class ControlPanel:
                 with urllib.request.urlopen(f"{self._dashboard_url}/api/config", timeout=1) as r:
                     cfg = json.loads(r.read())
                 self._bridge.config_received.emit(cfg)
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass
         threading.Thread(target=_fetch, daemon=True).start()
 
@@ -1565,7 +1572,7 @@ class ControlPanel:
                     method="POST",
                 )
                 urllib.request.urlopen(req, timeout=1)
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass
         threading.Thread(target=_post, daemon=True).start()
 

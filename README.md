@@ -187,7 +187,7 @@ A interface gráfica (`ctrl_panel.py`) permite ajuste em tempo real de todos os 
 | **PARÂMETROS DO CARRO** | Velocidade (m/s), velocidade no amarelo (%), ângulo máximo, período de comando |
 | **PARE**                 | Confiança STOP, diagonal mínima, tempo de parada, cooldown                      |
 | **SEMÁFORO**            | Confiança semáforo, diagonal mínima, timeout, intervalo de detecção          |
-| **PESSOAS**              | Confiança detecção de pessoas, diagonal mínima                                |
+| **PESSOAS**              | Confiança, diagonal mínima e trapézio de detecção (posições X e alturas ajustáveis) |
 
 ### Logs em Tempo Real
 
