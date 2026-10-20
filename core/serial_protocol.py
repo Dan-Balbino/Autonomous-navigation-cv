@@ -12,7 +12,9 @@ class SerialProtocol:
             return
 
         try:
-            self.ser = serial.Serial(port, baudrate, timeout=timeout)
+            self.ser = serial.Serial(
+                port, baudrate, timeout=timeout, write_timeout=0.1
+            )
             time.sleep(2)
             print(f"[SERIAL] Conectado à porta {port}")
         except serial.SerialException as e:

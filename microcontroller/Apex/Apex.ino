@@ -20,12 +20,6 @@ bool lastVehicleState = true;
 
 bool button_was_pressed = false;
 unsigned long button_release_time = 0;
-// =====================================================
-// SERIAL1
-// =====================================================
-
-String serial1Message = "";
-
 
 // =====================================================
 // SETUP
@@ -69,8 +63,6 @@ void setup() {
 // =====================================================
 
 void loop() {
-
-  pollCAN();
   updateCANStatus();
 
   bool vs = cmd.vehicleState;               // captura uma vez (a CAN pode mudar no meio)

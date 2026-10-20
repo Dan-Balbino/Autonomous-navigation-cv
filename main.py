@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import queue
 import sys
 import threading
 import time
@@ -75,6 +76,8 @@ lane_reset_standby = False
 reset_request = None
 flag_point_detected = False
 route_stop_requested = threading.Event()
+serial_reader_stop = threading.Event()
+serial_rx_queue = queue.Queue(maxsize=100)
 
 _project_dir = os.path.dirname(os.path.abspath(__file__))
 # Configure image testing here; leave disabled to use the camera.
@@ -195,8 +198,25 @@ pid_close_curve = PID(Kp=0, Ki=0, Kd=0, output_limit=90.0)
 
 def log(msg, tag="info"):
     """Registra no painel Python e replica para o painel web (mesmo console)."""
-    panel.log(msg, tag)
+    try:
+        panel.log(msg, tag)
+    except RuntimeError:
+        pass  # painel Qt já foi destruído (encerrando)
     dashboard_push_log(msg, tag)
+
+
+def serial_reader_thread():
+    while not serial_reader_stop.is_set():
+        data = car.receive()
+        if data:
+            while not serial_reader_stop.is_set():
+                try:
+                    serial_rx_queue.put(data, timeout=0.1)
+                    break
+                except queue.Full:
+                    continue
+        else:
+            serial_reader_stop.wait(0.01)
 
 
 def _reset_lane_preference():
@@ -605,12 +625,14 @@ def mainLoop():
 
         last_run = run
 
-        data = car.receive()
-        if data:
+        while True:
+            try:
+                data = serial_rx_queue.get_nowait()
+            except queue.Empty:
+                break
+
             last_rx = data
             log(f"RX ← {data}", "rx")
-
-        if data:
             try:
                 decoded = json.loads(data)
                 if isinstance(decoded, dict):
@@ -696,7 +718,9 @@ def mainLoop():
         
     if camera is not None:
         camera.release()
-    car.serial.close()
+    serial_reader_stop.set()
+    t_serial.join(timeout=1)
+    car.close()
     cv2.destroyAllWindows()
 
 
@@ -745,6 +769,9 @@ threading.Thread(
 
 t_sign = threading.Thread(target=sign_thread, daemon=True)
 t_sign.start()
+
+t_serial = threading.Thread(target=serial_reader_thread, daemon=True)
+t_serial.start()
 
 t = threading.Thread(target=mainLoop, daemon=True)
 t.start()
