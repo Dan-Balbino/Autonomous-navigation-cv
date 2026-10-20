@@ -444,19 +444,22 @@ class ObjectDetector:
         return cv2.pointPolygonTest(poly, point, False) >= 0
 
     def _is_valid_person(self, x1, y1, x2, y2, conf) -> bool:
-        """Valida uma pessoa: confiança, pés no ROI, proporção e pisos mínimos de tamanho."""
+        """Valida uma pessoa: confiança + pés no ROI + (diagonal mínima OU proporção/pisos)."""
         if conf < self.PERSON_CONF_THRESHOLD:
             return False
         if not self._foot_in_roi(x1, x2, y2):
             return False
 
         width, height = x2 - x1, y2 - y1
+        diagonal = (width ** 2 + height ** 2) ** 0.5
+
+        # Caminho B: dentro da área + diagonal mínima já basta (0 = desligado)
+        if self._min_person_diagonal > 0 and diagonal >= self._min_person_diagonal:
+            return True
+
+        # Caminho A: proporção + pisos
         aspect = height / max(width, 1)
         if not self.PERSON_MIN_ASPECT <= aspect <= self.PERSON_MAX_ASPECT:
-            return False
-
-        # tamanho agora é só um piso mínimo (0 = desligado)
-        if (width ** 2 + height ** 2) ** 0.5 < self._min_person_diagonal:
             return False
         if height < self._min_person_height:
             return False
