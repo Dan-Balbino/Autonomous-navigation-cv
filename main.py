@@ -64,6 +64,9 @@ MIN_MOVING_PWM = 30
 SERIAL_BAUDRATE = 115200
 TRAFFIC_LIGHT_LABELS = {-1: "Nenhum", 0: "Vermelho", 1: "Amarelo", 2: "Verde"}
 
+flag_stop_point = False
+
+
 shared_frame = None
 shared_frame_id = 0
 
@@ -277,7 +280,7 @@ def pidHub(erro, pid_straight, pid_curve, pid_close_curve, dt=0.2):
 # ── Loop principal ───────────────
 def mainLoop():
     global camera, camera_idx
-    global shared_frame, shared_frame_id, right_detour, flag_person_detected, flag_point_detected, lane_reset_standby, reset_request  # noqa: PLW0602
+    global shared_frame, shared_frame_id, right_detour, flag_person_detected, flag_point_detected, lane_reset_standby, reset_request, flag_stop_point  # noqa: PLW0602
 
     error = 0
     angle = 0
@@ -462,8 +465,7 @@ def mainLoop():
             route_stop_requested.clear()
             if not remote_control_active:
                 point_stop_latched = True
-                point_stop_saw_stopped = not run
-                panel.request_stop()
+                point_stop_saw_stopped = False
                 set_lane_preference("right")
 
         if remote_control_active:
@@ -533,8 +535,16 @@ def mainLoop():
         else:
             curve_speed_error = panel.get( "PARÂMETROS DO CARRO","Erro para iniciar velocidade na curva (px)")
             curve_pwm = panel.get("PARÂMETROS DO CARRO", "Velocidade na curva (PWM)")
-            effective_pwm = curve_pwm if abs(error) >= curve_speed_error else pwm_value
-
+            
+            
+            if lane_detection.preference_lane == "right":
+                effective_pwm = 100
+            elif abs(error) >= curve_speed_error:
+                effective_pwm = curve_pwm
+            else:
+                effective_pwm = pwm_value
+             
+                            
         if flag_person_detected:
             car.command.stop = True
         else:
@@ -639,7 +649,7 @@ def mainLoop():
                     car.telemetry = CarTelemetry.from_dict(decoded)
                     run_button = car.telemetry.run_button
                     if run_button and not last_telemetry_run_button:
-                        panel.request_start()
+                        point_stop_latched = False
                     last_telemetry_run_button = run_button
                 else:
                     log(f"[SERIAL] Telemetria ignorada: JSON não é objeto: {data}", "warn")

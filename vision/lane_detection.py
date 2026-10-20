@@ -1,14 +1,11 @@
-import cv2
-import numpy as np
 import time
 
+import cv2
+import numpy as np
+
 # Largura nominal da pista na bird's eye (em pixels). MEÇA com a pista real.
-TRACK_NOMINAL = 170
-# Tolerância ao redor do nominal para aceitar uma medição de largura (±20%)
-TRACK_TOLERANCE = 0.2
-# Largura da pista (px, na bird's eye) quando UMA faixa de preferência guia o carro.
-# Nesse modo a largura não é medida, então use a real de cada lado. MEÇA com a pista real.
-TRACK_WIDTH = {"left": TRACK_NOMINAL, "right": TRACK_NOMINAL}
+# Serve só como valor inicial: depois o track_size é medido quando as duas faixas aparecem.
+TRACK_NOMINAL = 150
 # Zona morta (px) do indicador de direção: abaixo disso mostra "RETO"
 DIRECTION_DEADZONE = 15
 # Distância máxima (px) que a faixa pode "andar" de uma janela pra próxima
@@ -16,6 +13,11 @@ TRACK_MARGIN = 60
 # Distância máxima (px) de uma faixa até o centro de referência do carro.
 # Faixa mais longe que isso é descartada (metade da largura nominal da pista)
 MAX_LANE_DISTANCE = 130
+# Faixa aceita pra uma medição de largura (px, bird's eye). Só descarta leitura absurda.
+TRACK_MIN_WIDTH = 80
+TRACK_MAX_WIDTH = 2 * MAX_LANE_DISTANCE  # duas faixas a ≤130 px do centro: no máx. 260
+# Suavização da largura: 1.0 = pega a medição direto, menor = mais estável
+TRACK_SIZE_ALPHA = 0.3
 # Liga o log por frame pra debugar as saídas de A/B
 DEBUG = False
 # Filtro EMA no erro: 1.0 = sem filtro, menor = mais suave (e mais atraso)
@@ -42,7 +44,7 @@ preference_lane = "neutral"  # "left", "right", "neutral"
 
 
 def lane_detection_pipeline(roi_h, roi_w, limiar, limiar_bgr, last_error=0):
-    global track_size, preference_lane
+    global track_size, preference_lane  # noqa: PLW0602
 
     # Remove manchas de luz antes de procurar as faixas
     if GLARE_FILTER:
@@ -183,7 +185,7 @@ def apply_ema(raw_error):
         filtered_error = raw_error
     else:
         filtered_error = EMA_ALPHA * raw_error + (1 - EMA_ALPHA) * filtered_error
-    return int(round(filtered_error))
+    return round(filtered_error)
 
 
 def sliding_window_search(limiar, height, width, limit, num_windows=1):
@@ -249,7 +251,7 @@ def find_lane_candidates(hist, limit, min_width):
             continue
         seg = hist[s:e]
         # Centro ponderado pela quantidade de pixels brancos
-        center = int(round(np.sum(np.arange(s, e) * seg) / np.sum(seg)))
+        center = round(np.sum(np.arange(s, e) * seg) / np.sum(seg))
         candidates.append((center, int(seg.max())))
     return candidates
 
@@ -300,16 +302,21 @@ def process_lanes(left_lane, right_lane, left_valid, right_valid, roi_w, referen
         lane_state = "left"
     else:
         lane_state = "both"
-
+    
     # Define a preferência de faixa com base na variável global preference_lane
     if preference_lane == "right":
         left_valid = False
     elif preference_lane == "left":
         right_valid = False
+    
+    # Atualiza o tamanho da pista sempre que as DUAS faixas foram detectadas e aceitas
+    if left_valid and right_valid and near_width is not None:  # noqa: SIM102
+        if TRACK_MIN_WIDTH < near_width < TRACK_MAX_WIDTH:
+            track_size = round(TRACK_SIZE_ALPHA * near_width
+                                   + (1 - TRACK_SIZE_ALPHA) * track_size)
 
-    # Largura usada quando só uma faixa guia o carro: com preferência, a calibrada daquele lado;
-    # sem preferência, a medida em tempo real
-    lane_width = TRACK_WIDTH[preference_lane] if preference_lane in TRACK_WIDTH else track_size
+    # Com uma faixa só, sempre usa o track_size
+    lane_width = track_size
     y = reference_line_y
 
     # ===== Caso 1 - Duas faixas foram detectadas =====
@@ -317,12 +324,6 @@ def process_lanes(left_lane, right_lane, left_valid, right_valid, roi_w, referen
         # O centro da pista é a média entre as duas faixas detectadas
         track_center = (left_lane + right_lane) // 2
         error = track_center - (roi_w // 2)
-
-        # Atualiza o tamanho da pista SÓ com a medição da janela mais próxima do carro
-        # e SÓ se estiver perto do valor nominal. Fora disso, ignora (leitura suspeita).
-        if near_width is not None:
-            if (1 - TRACK_TOLERANCE) * TRACK_NOMINAL < near_width < (1 + TRACK_TOLERANCE) * TRACK_NOMINAL:
-                track_size = near_width
 
         # Linha entre as faixas detectadas
         cv2.line(limiar_bgr, (left_lane, y), (right_lane, y), COLOR_GUIDE, 2, cv2.LINE_AA)
@@ -377,7 +378,7 @@ def get_frame_dimensions(frame, prop):
 
 
 def extract_bird_eye_view(frame, img, upper, lower, y_top, y_bot, roi_w, roi_h):
-    height, width = frame.shape[:2]
+    _height, width = frame.shape[:2]
     cx = width // 2
 
     # ── Definição dos pontos de perspectiva ─────────────────────────────

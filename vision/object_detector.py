@@ -30,11 +30,11 @@ class ObjectDetector:
 
     # PESSOA: filtro de proporção altura/largura da caixa
     PERSON_MIN_ASPECT = 0.8
-    PERSON_MAX_ASPECT = 4.0
+    PERSON_MAX_ASPECT = 5.0
 
     # PLACAS (pare, desvio, pontos A/B/C): ignora as que estiverem na faixa central da imagem
     # fração da largura, centrada. 0.0 = desligado; 0.3 = ignora os 30% do meio.
-    PLATE_IGNORE_CENTER_RATIO = 0.4
+    PLATE_IGNORE_CENTER_RATIO = 0.0
 
     # PESSOA: região do chão à frente do carro (trapézio, coordenadas normalizadas x, y)
     # Ordem: topo-esq, topo-dir, base-dir, base-esq. Ajuste olhando o vídeo da câmera.
