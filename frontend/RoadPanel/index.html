@@ -238,7 +238,9 @@
         <button type="button" class="text-button" id="resetPosition">Voltar à largada</button>
         <button type="button" class="text-button" id="skipEvent">Próximo evento</button>
         <button type="button" class="text-button" id="simPedestrian">Simular pedestre</button>
+        <button type="button" class="primary-button" id="simRunButton" disabled>Apertar botão RUN</button>
       </div>
+      <p class="debug-hint">No ponto de coleta ou entrega o carro espera a carga e o botão RUN: este botão faz o papel dele.</p>
       <label class="slider">
         <span>Velocidade <output id="simSpeedOut">0.40 m/s</output></span>
         <input type="range" id="simSpeed" min="0" max="3" step="0.05" value="0.4">
@@ -312,6 +314,41 @@
     </section>
   </aside>
 
+  <!-- Parado no ponto: tela inteira pedindo a carga e o botão vermelho (RUN) -->
+  <div class="cargo-takeover" id="cargoTakeover" data-role="pickup" role="alert" hidden>
+    <div class="ct-backdrop"></div>
+    <div class="ct-rings" aria-hidden="true"><span></span><span></span><span></span></div>
+    <div class="ct-content">
+      <div class="ct-stage" aria-hidden="true">
+        <div class="ct-scene">
+          <div class="ct-shadow"></div>
+          <div class="ct-bed"><span></span></div>
+          <div class="ct-cube">
+            <div class="ct-face ct-front"></div>
+            <div class="ct-face ct-back"></div>
+            <div class="ct-face ct-right"></div>
+            <div class="ct-face ct-left"></div>
+            <div class="ct-face ct-top"></div>
+            <div class="ct-face ct-bottom"></div>
+          </div>
+        </div>
+        <div class="ct-flow"><span></span><span></span><span></span></div>
+        <div class="ct-button">
+          <span class="ct-ripple"></span>
+          <span class="ct-ripple"></span>
+          <span class="ct-base"></span>
+          <span class="ct-cap"></span>
+          <span class="ct-tap"></span>
+        </div>
+      </div>
+      <p class="ct-kicker"><span class="ct-kicker-dot"></span><span id="ctKicker">Coleta · ponto A</span></p>
+      <h2 class="ct-title">
+        <span class="ct-line" id="ctTitle">Coloque a carga</span>
+        <span class="ct-line ct-line-sub">e aperte o botão <span class="ct-red-dot"></span> vermelho</span>
+      </h2>
+      <p class="ct-hint" id="ctHint" hidden>Simulação · <kbd>D</kbd> Debug · Apertar botão RUN</p>
+    </div>
+  </div>
   <script type="module" src="src/main.js"></script>
 </body>
 </html>

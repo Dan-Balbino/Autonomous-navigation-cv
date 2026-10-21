@@ -19,6 +19,16 @@ ordem recebida: **coleta** no primeiro e **entrega** no último (ex.: A → C, s
 Ao chegar em cada ponto, o mapa entra no **modo GPS** e traça a rota até o próximo ponto (ou
 até a linha de chegada depois da entrega).
 
+No ponto o carro fica parado e a tela inteira muda (sem voz): fundo desfocado azul (coleta) ou
+verde (entrega), uma caixa 3D caindo na caçamba ou saindo dela, um dedo apertando o botão
+vermelho e, em letras grandes no centro, **COLOQUE A CARGA** / **RETIRE A CARGA** + **E APERTE
+O BOTÃO VERMELHO**. Com movimento reduzido no sistema a cena fica parada. Ele só segue quando:
+
+- **Simulação:** o botão **Apertar botão RUN** do Debug (D) é tocado.
+- **Modo real e visão real:** a telemetria mostra o botão RUN apertado (contador novo de
+  `run_btn`). Como o `point_stop_latched` do `main.py`, também soltam: desligar e ligar o run,
+  o controle remoto assumir (modo manual) ou o carro voltar a andar com PWM > 0.
+
 ## Voz e avisos
 
 Sons em `sounds/` (cópia da pasta `sound/` do projeto; ao trocar um som lá, copie de novo).

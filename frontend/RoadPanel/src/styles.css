@@ -1305,3 +1305,449 @@ input[type='range'] { width: 100%; accent-color: var(--route-strong); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ── Tela da carga (parado no ponto esperando o botão RUN) ──────────── */
+/* Tela inteira, só visual, no idioma do painel: céu claro desfocado, malha de pontos, tinta
+   escura e o azul da rota como acento; o vermelho é só o botão. A caixa (linhas finas) cai
+   na caçamba (coleta) ou sai dela (entrega) e o toque aperta o botão, em loop de 4 s.
+   Não bloqueia cliques (o Debug fica por cima). */
+.cargo-takeover {
+  --ct-accent: var(--route-strong);
+  --ct-loop: 4s;
+  --ct-cube: clamp(70px, 10vh, 120px);
+  --ct-btn: clamp(104px, 14vh, 156px);
+  --ct-red: #e3193a;
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  color: var(--ink);
+  opacity: 0;
+  transition: opacity 0.26s var(--ease-out);
+}
+
+.cargo-takeover[hidden] { display: none; }
+.cargo-takeover[data-role='delivery'] { --ct-accent: var(--live); }
+.cargo-takeover[data-state='open'] { opacity: 1; }
+
+.debug { z-index: 30; }
+
+.ct-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(243, 245, 249, 0.8);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+/* Malha de pontos do mapa, mais forte no centro */
+.ct-backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(31, 95, 216, 0.32) 1.2px, transparent 1.6px);
+  background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(ellipse 60% 55% at center, #000, transparent 75%);
+  mask-image: radial-gradient(ellipse 60% 55% at center, #000, transparent 75%);
+}
+
+/* Anéis finos saindo do centro (como o anel do GPS) */
+.ct-rings {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.ct-rings span {
+  grid-area: 1 / 1;
+  width: min(64vw, 64vh);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1px solid var(--ct-accent);
+  opacity: 0;
+  animation: ct-ring 3.6s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+}
+
+.ct-rings span:nth-child(2) { animation-delay: 1.2s; }
+.ct-rings span:nth-child(3) { animation-delay: 2.4s; }
+
+@keyframes ct-ring {
+  from { opacity: 0.35; transform: scale(0.4); }
+  to { opacity: 0; transform: scale(1.45); }
+}
+
+.ct-content {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: clamp(14px, 2.6vh, 28px);
+  padding: 0 16px;
+  text-align: center;
+  transform: scale(0.97);
+  transition: transform 0.3s var(--ease-out);
+}
+
+.cargo-takeover[data-state='open'] .ct-content { transform: none; }
+
+/* Palco: caixa 3D, setas, botão vermelho */
+.ct-stage {
+  display: flex;
+  align-items: center;
+  gap: clamp(22px, 5vw, 80px);
+  margin-bottom: clamp(4px, 1.5vh, 16px);
+  perspective: 900px;
+}
+
+.ct-scene {
+  position: relative;
+  width: var(--ct-cube);
+  height: calc(var(--ct-cube) * 2.3);
+  transform-style: preserve-3d;
+  animation: ct-orbit 16s linear infinite;
+}
+
+@keyframes ct-orbit {
+  from { transform: rotateX(-24deg) rotateY(25deg); }
+  to { transform: rotateX(-24deg) rotateY(385deg); }
+}
+
+.ct-cube,
+.ct-bed,
+.ct-shadow {
+  position: absolute;
+  left: 0;
+  bottom: calc(var(--ct-cube) * 0.25);
+  width: var(--ct-cube);
+  height: var(--ct-cube);
+}
+
+.ct-cube { transform-style: preserve-3d; }
+
+/* Caçamba: área marcada como uma faixa da pista (linha da cor do papel, alvo tracejado) */
+.ct-bed {
+  transform: translateY(calc(var(--ct-cube) / 2)) rotateX(90deg) scale(1.8);
+  border-radius: 8px;
+  border: 1.5px solid var(--ct-accent);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.ct-bed span {
+  position: absolute;
+  inset: 16%;
+  border: 1.5px dashed var(--ct-accent);
+  border-radius: 4px;
+  opacity: 0.7;
+}
+
+.ct-shadow {
+  transform: translateY(calc(var(--ct-cube) / 2 - 1px)) rotateX(90deg);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(14, 23, 38, 0.22), transparent);
+  animation: ct-shadow-drop var(--ct-loop) linear infinite;
+}
+
+/* Caixa: faces brancas com contorno fino em tinta; topo com o acento do papel */
+.ct-face {
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid var(--ink);
+  border-radius: 3px;
+  background: #fff;
+  backface-visibility: hidden;
+}
+
+.ct-front { transform: translateZ(calc(var(--ct-cube) / 2)); }
+.ct-back { transform: rotateY(180deg) translateZ(calc(var(--ct-cube) / 2)); background: #f1f4f9; }
+.ct-right { transform: rotateY(90deg) translateZ(calc(var(--ct-cube) / 2)); background: #e8edf5; }
+.ct-left { transform: rotateY(-90deg) translateZ(calc(var(--ct-cube) / 2)); background: #dfe5ef; }
+.ct-top { transform: rotateX(90deg) translateZ(calc(var(--ct-cube) / 2)); }
+.ct-bottom { transform: rotateX(-90deg) translateZ(calc(var(--ct-cube) / 2)); background: #d5dce8; }
+
+/* Faixa no topo da caixa (uma linha só, na cor do papel) */
+.ct-top::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 44%;
+  width: 12%;
+  background: var(--ct-accent);
+}
+
+/* Coleta: a caixa cai na caçamba, amassa um pouco e assenta. A opacidade fica nas faces:
+   opacity animada no .ct-cube achataria o preserve-3d (vira uma face só). */
+.ct-cube { animation: ct-drop var(--ct-loop) infinite; }
+.ct-face { animation: ct-fade-drop var(--ct-loop) linear infinite; }
+
+@keyframes ct-drop {
+  0% { transform: translateY(-230%); animation-timing-function: cubic-bezier(0.77, 0, 0.175, 1); }
+  30% { transform: translateY(0); animation-timing-function: cubic-bezier(0.23, 1, 0.32, 1); }
+  35% { transform: translateY(5%) scale3d(1.05, 0.9, 1.05); }
+  44%, 100% { transform: translateY(0) scale3d(1, 1, 1); }
+}
+
+@keyframes ct-fade-drop {
+  0% { opacity: 0; }
+  8%, 88% { opacity: 1; }
+  97%, 100% { opacity: 0; }
+}
+
+@keyframes ct-shadow-drop {
+  0% { opacity: 0; transform: translateY(calc(var(--ct-cube) / 2 - 1px)) rotateX(90deg) scale(0.3); }
+  30%, 88% { opacity: 1; transform: translateY(calc(var(--ct-cube) / 2 - 1px)) rotateX(90deg) scale(1.25); }
+  97%, 100% { opacity: 0; transform: translateY(calc(var(--ct-cube) / 2 - 1px)) rotateX(90deg) scale(1.25); }
+}
+
+/* Entrega: a caixa sobe da caçamba e some */
+.cargo-takeover[data-role='delivery'] .ct-cube { animation-name: ct-lift; }
+.cargo-takeover[data-role='delivery'] .ct-face { animation-name: ct-fade-lift; }
+.cargo-takeover[data-role='delivery'] .ct-shadow { animation-name: ct-shadow-lift; }
+
+@keyframes ct-lift {
+  0%, 6% { transform: translateY(0) scale3d(1, 1, 1); }
+  14% { transform: translateY(-5%) scale3d(1.04, 0.94, 1.04); animation-timing-function: cubic-bezier(0.77, 0, 0.175, 1); }
+  40%, 100% { transform: translateY(-230%) scale3d(1, 1, 1); }
+}
+
+@keyframes ct-fade-lift {
+  0% { opacity: 0; }
+  6%, 40% { opacity: 1; }
+  46%, 100% { opacity: 0; }
+}
+
+@keyframes ct-shadow-lift {
+  0% { opacity: 0; transform: translateY(calc(var(--ct-cube) / 2 - 1px)) rotateX(90deg) scale(1.25); }
+  6%, 14% { opacity: 1; transform: translateY(calc(var(--ct-cube) / 2 - 1px)) rotateX(90deg) scale(1.25); }
+  40%, 100% { opacity: 0; transform: translateY(calc(var(--ct-cube) / 2 - 1px)) rotateX(90deg) scale(0.3); }
+}
+
+/* Setas finas correndo da carga para o botão */
+.ct-flow {
+  display: flex;
+  gap: 4px;
+}
+
+.ct-flow span {
+  width: clamp(12px, 1.4vw, 18px);
+  aspect-ratio: 1;
+  border-top: 2px solid var(--ink-3);
+  border-right: 2px solid var(--ink-3);
+  transform: rotate(45deg);
+  opacity: 0.25;
+  animation: ct-chevron 1.2s linear infinite;
+}
+
+.ct-flow span:nth-child(2) { animation-delay: 0.2s; }
+.ct-flow span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes ct-chevron {
+  0%, 100% { opacity: 0.25; transform: translateX(0) rotate(45deg); }
+  30% { opacity: 1; transform: translateX(4px) rotate(45deg); }
+}
+
+/* Botão vermelho 3D: tampa (elipse) sobre a parede e a base; o toque aperta aos 60% */
+.ct-button {
+  position: relative;
+  width: var(--ct-btn);
+  height: var(--ct-btn);
+}
+
+.ct-base {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8%;
+  height: 44%;
+  border-radius: 50%;
+  background: linear-gradient(#ffffff, #e3e8f0);
+  border: 1.5px solid var(--ink);
+  box-shadow: 0 14px 28px rgba(14, 23, 38, 0.14);
+}
+
+/* Parede vermelha escura (parada); a tampa desce sobre ela */
+.ct-base::after {
+  content: '';
+  position: absolute;
+  left: 16%;
+  right: 16%;
+  bottom: 30%;
+  height: 72%;
+  border-radius: 50%;
+  background: #9c0f27;
+}
+
+.ct-cap {
+  position: absolute;
+  left: 16%;
+  right: 16%;
+  bottom: calc(8% + 44% * 0.3 + 12px);
+  height: calc(44% * 0.72);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 40% 30%, #ff6f82, var(--ct-red) 60%);
+  animation: ct-press var(--ct-loop) infinite;
+}
+
+@keyframes ct-press {
+  0%, 54% { transform: translateY(0); }
+  60%, 64% { transform: translateY(10px); }
+  72%, 100% { transform: translateY(0); }
+}
+
+/* Indicador de toque: anel que desce, comprime no aperto e sobe */
+.ct-tap {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 30%;
+  aspect-ratio: 1;
+  margin-left: -15%;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 6px 16px rgba(14, 23, 38, 0.18);
+  opacity: 0;
+  animation: ct-tap var(--ct-loop) infinite;
+}
+
+@keyframes ct-tap {
+  0%, 40% { opacity: 0; transform: translateY(-50%) scale(1.15); }
+  50% { opacity: 1; transform: translateY(0) scale(1); animation-timing-function: cubic-bezier(0.77, 0, 0.175, 1); }
+  60%, 64% { opacity: 1; transform: translateY(30%) scale(0.8); }
+  72% { opacity: 1; transform: translateY(0) scale(1); }
+  82%, 100% { opacity: 0; transform: translateY(-50%) scale(1.15); }
+}
+
+.ct-ripple {
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  bottom: 22%;
+  height: 46%;
+  border-radius: 50%;
+  border: 1.5px solid var(--ct-red);
+  opacity: 0;
+  animation: ct-ripple var(--ct-loop) infinite;
+}
+
+.ct-ripple + .ct-ripple { animation-delay: 0.18s; }
+
+@keyframes ct-ripple {
+  0%, 59% { opacity: 0; transform: scale(0.8); }
+  61% { opacity: 0.8; transform: scale(0.85); }
+  90%, 100% { opacity: 0; transform: scale(1.6); }
+}
+
+/* Texto: rótulo pequeno como os do painel, título grande no centro */
+.ct-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: clamp(12px, 1.1vw, 14px);
+  font-weight: 600;
+  font-stretch: 85%;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ct-accent);
+}
+
+.ct-kicker-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ct-accent);
+  animation: bolt-pulse 1.6s ease-in-out infinite;
+}
+
+.ct-title {
+  display: grid;
+  justify-items: center;
+  gap: clamp(6px, 1.2vh, 14px);
+  margin: 0;
+  text-transform: uppercase;
+  line-height: 0.92;
+}
+
+.ct-line {
+  font-size: clamp(44px, 7.4vw, 120px);
+  font-weight: 700;
+  font-stretch: 85%;
+  letter-spacing: -0.015em;
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.3s var(--ease-out) 0.08s, transform 0.3s var(--ease-out) 0.08s;
+}
+
+.ct-line-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32em;
+  font-size: clamp(18px, 2.2vw, 34px);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  color: var(--ink-2);
+  transition-delay: 0.16s;
+}
+
+/* Bolinha vermelha no lugar da palavra "vermelho": acende junto com o aperto */
+.ct-red-dot {
+  width: 0.62em;
+  height: 0.62em;
+  border-radius: 50%;
+  background: var(--ct-red);
+  box-shadow: 0 0 0 0 rgba(227, 25, 58, 0.45);
+  animation: ct-dot var(--ct-loop) infinite;
+}
+
+@keyframes ct-dot {
+  0%, 56%, 82%, 100% { transform: scale(1); }
+  61% { transform: scale(1.25); }
+}
+
+.cargo-takeover[data-state='open'] .ct-line { opacity: 1; transform: none; }
+
+.ct-hint {
+  margin: clamp(6px, 1.5vh, 16px) 0 0;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-line);
+  background: var(--panel-solid);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.ct-hint kbd {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 5px;
+  border: 1px solid var(--panel-line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.ct-hint[hidden] { display: none; }
+
+@media (max-width: 760px) and (orientation: portrait) {
+  .cargo-takeover { --ct-cube: 54px; --ct-btn: 96px; }
+  .ct-stage { gap: 26px; padding-left: 20px; }
+  .ct-flow span { width: 10px; }
+  .ct-line-sub { font-size: 15px; letter-spacing: 0.1em; }
+}
+
+/* Movimento reduzido: cena parada (caixa no lugar, botão em pé), só as transições de opacidade */
+@media (prefers-reduced-motion: reduce) {
+  .ct-rings, .ct-flow, .ct-tap, .ct-ripple { display: none; }
+  .ct-scene, .ct-cube, .ct-face, .ct-shadow, .ct-cap, .ct-red-dot, .ct-kicker-dot { animation: none !important; }
+  .ct-scene { transform: rotateX(-24deg) rotateY(35deg); }
+  .ct-shadow { transform: translateY(calc(var(--ct-cube) / 2 - 1px)) rotateX(90deg) scale(1.25); }
+  .cargo-takeover[data-role='delivery'] .ct-face { opacity: 0.35; }
+  .ct-content, .ct-line { transform: none; }
+}

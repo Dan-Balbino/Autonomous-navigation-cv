@@ -88,6 +88,7 @@ export class DebugPanel {
     });
     document.getElementById('skipEvent').addEventListener('click', () => api.skipEvent());
     document.getElementById('simPedestrian').addEventListener('click', () => api.simulatePedestrian());
+    document.getElementById('simRunButton').addEventListener('click', () => api.simulateRunButton());
     document.getElementById('simCharge').addEventListener('click', () => api.simulateCharge());
 
     el.speed.addEventListener('input', () => {
