@@ -15,6 +15,9 @@ const CHASE_PORTRAIT = { back: 5.6, up: 5.2, ahead: 4.0, lookUp: 0.0 };
 // Prévia GPS afastada: a partir destes raios (mundo) a vista gira até a pista ficar deitada
 const WIDE_FROM = 3.5;
 const WIDE_TO = 8;
+// Área livre na prévia GPS (paisagem): entre o cartão da missão (topo à esquerda), o
+// cartão do GPS (embaixo à direita) e os botões laterais
+const GPS_SAFE = { w: 0.56, h: 0.6, x: 0.05, y: 0.04 };
 
 export class CameraRig {
   constructor(camera, domElement) {
@@ -44,7 +47,23 @@ export class CameraRig {
     return out.lengthSq() > 1e-6 ? out.normalize() : this.wideUp.clone();
   }
 
-  /** Enquadra { center, radius, dir } (ou null para voltar a seguir o carro). */
+  /**
+   * Câmera quase de cima (eixo x na horizontal da tela) com uma área `w` x `h` (mundo) em
+   * volta de `center` cabendo na fração `safe` da tela; `safe.x`/`safe.y` deslocam o centro.
+   */
+  fitFromAbove(center, w, h, safe) {
+    const aspect = this.camera.aspect || 1.6;
+    const tan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+    const dist = Math.max(h / (safe.h * 2 * tan), w / (safe.w * aspect * 2 * tan)) * 1.04;
+    const viewW = 2 * dist * tan * aspect;
+    const viewH = 2 * dist * tan;
+    const look = center.clone().add(new THREE.Vector3(-safe.x * viewW, 0, -safe.y * viewH));
+    const tilt = 0.18;   // leve inclinação, mantém a sensação de 3D
+    const target = new THREE.Vector3(look.x, dist * Math.cos(tilt), look.z + dist * Math.sin(tilt));
+    return { target, look };
+  }
+
+  /** Enquadra { center, radius, dir, box } (ou null para voltar a seguir o carro). */
   setFocus(focus) {
     this.focus = focus;
   }
@@ -66,23 +85,18 @@ export class CameraRig {
     }
     let target;
     let look;
+    const landscape = (this.camera.aspect || 1.6) >= 0.9;
     if (this.mode === 'top') {
-      // Distância calculada pelo campo de visão para a pista inteira caber na área livre
-      // da tela (fora do cartão da missão, da barra de cima e dos botões laterais)
-      const w = IMAGE_SIZE.w * PX_TO_WORLD;
-      const h = IMAGE_SIZE.h * PX_TO_WORLD;
-      const aspect = this.camera.aspect || 1.6;
-      const portrait = aspect < 0.9;
-      const safe = portrait ? { w: 0.9, h: 0.42, x: 0, y: -0.12 } : { w: 0.6, h: 0.66, x: 0.09, y: -0.02 };
-      const tan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
-      const dist = Math.max(h / (safe.h * 2 * tan), w / (safe.w * aspect * 2 * tan)) * 1.04;
-      const viewW = 2 * dist * tan * aspect;
-      const viewH = 2 * dist * tan;
-      // Desloca o centro para a pista ficar no meio da área livre
-      const center = this.trackCenter.clone().add(new THREE.Vector3(-safe.x * viewW, 0, -safe.y * viewH));
-      const tilt = 0.18;   // leve inclinação, mantém a sensação de 3D
-      target = new THREE.Vector3(center.x, dist * Math.cos(tilt), center.z + dist * Math.sin(tilt));
-      look = center;
+      // Pista inteira na área livre da tela (fora do cartão da missão, da barra de cima e
+      // dos botões laterais)
+      const safe = landscape ? { w: 0.6, h: 0.66, x: 0.09, y: -0.02 } : { w: 0.9, h: 0.42, x: 0, y: -0.12 };
+      ({ target, look } = this.fitFromAbove(this.trackCenter, IMAGE_SIZE.w * PX_TO_WORLD, IMAGE_SIZE.h * PX_TO_WORLD, safe));
+    } else if (this.focus && landscape && this.focus.box && this.focus.radius >= WIDE_FROM) {
+      // Prévia longa (ex.: coleta -> entrega): rota inteira de cima, com a pista na
+      // horizontal como na vista de topo, fora do cartão da missão e do cartão do GPS
+      const { minX, maxX, minZ, maxZ } = this.focus.box;
+      const margin = 1.2;   // folga para o alfinete, o carro e as bordas da pista
+      ({ target, look } = this.fitFromAbove(this.focus.center, maxX - minX + margin * 2, maxZ - minZ + margin * 2, GPS_SAFE));
     } else if (this.focus) {
       // Quase de cima, um pouco atrás do carro; o carro fica acima do cartão da prévia
       const { center, radius } = this.focus;

@@ -130,7 +130,15 @@ function collectEvents(network, edges, line, ranges, targets) {
     if (angle > NODE_TURN_EVENT_DEG) continue;
     const s = Math.max(0, ranges[i].s0 - 20);
     if (curves.some((curve) => Math.abs(curve.s - s) < 60)) continue;
-    events.push({ type: 'turn', turn: 'straight', node, s });
+    // Lado em que o carro se mantém: o oposto da outra saída (y para baixo: ângulo > 0 = direita)
+    const other = options.find((edge) => edge !== edges[i]);
+    let keep = null;
+    if (other) {
+      const o = other.line.pts;
+      const side = Math.atan2(o[1][1] - o[0][1], o[1][0] - o[0][0]) - Math.atan2(after[1], after[0]);
+      keep = Math.sin(side) > 0 ? 'left' : 'right';
+    }
+    events.push({ type: 'turn', turn: 'straight', keep, node, s });
   }
 
   return events.sort((x, y) => x.s - y.s);
