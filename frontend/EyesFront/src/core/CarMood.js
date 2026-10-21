@@ -256,7 +256,9 @@ export class CarMood {
     if (this.idleSince !== null) {
       sleepy = 0.85 * clamp((now - this.idleSince - cfg.sleepAfterIdleMs) / cfg.sleepRampMs, 0, 1);
     }
-    if (car.battery !== null && car.battery <= cfg.lowBatteryPercent) {
+    const charging = car.batteryState === 1 || car.batteryState === 2;
+    const lowBattery = car.batteryState === 4 || (car.battery !== null && car.battery <= cfg.lowBatteryPercent);
+    if (lowBattery && !charging) {
       sleepy = Math.max(sleepy, 0.45);
     }
 

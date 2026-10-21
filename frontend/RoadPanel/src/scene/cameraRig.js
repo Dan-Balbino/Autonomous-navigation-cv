@@ -12,6 +12,9 @@ import { IMAGE_SIZE, PX_TO_WORLD } from '../track/trackData.js';
 // Câmera mais alta e olhando para baixo: horizonte perto de 30% do topo, como no BYD
 const CHASE = { back: 4.8, up: 3.7, ahead: 4.6, lookUp: 0.0 };
 const CHASE_PORTRAIT = { back: 5.6, up: 5.2, ahead: 4.0, lookUp: 0.0 };
+// Prévia GPS afastada: a partir destes raios (mundo) a vista gira até a pista ficar deitada
+const WIDE_FROM = 3.5;
+const WIDE_TO = 8;
 
 export class CameraRig {
   constructor(camera, domElement) {
@@ -25,6 +28,20 @@ export class CameraRig {
     this.trackCenter = new THREE.Vector3(IMAGE_SIZE.w / 2 * PX_TO_WORLD, 0, IMAGE_SIZE.h / 2 * PX_TO_WORLD);
     this.initialized = false;
     this.focus = null;
+    this.wideUp = new THREE.Vector3(0, 0, -1);   // "para cima" da tela na vista afastada
+  }
+
+  /**
+   * Direção da prévia: perto segue o carro; afastada gira até o eixo comprido da pista
+   * (x) ficar na horizontal da tela, como na vista de topo. Escolhe entre ±z o lado mais
+   * próximo do carro (com folga, para não virar 180° no meio da prévia).
+   */
+  focusDir(dir, radius) {
+    if (dir.z < -0.2) this.wideUp.set(0, 0, -1);
+    else if (dir.z > 0.2) this.wideUp.set(0, 0, 1);
+    const wide = THREE.MathUtils.smoothstep(radius, WIDE_FROM, WIDE_TO);
+    const out = dir.clone().lerp(this.wideUp, wide);
+    return out.lengthSq() > 1e-6 ? out.normalize() : this.wideUp.clone();
   }
 
   /** Enquadra { center, radius, dir } (ou null para voltar a seguir o carro). */
@@ -68,8 +85,10 @@ export class CameraRig {
       look = center;
     } else if (this.focus) {
       // Quase de cima, um pouco atrás do carro; o carro fica acima do cartão da prévia
-      const { center, radius, dir } = this.focus;
+      const { center, radius } = this.focus;
       const portrait = (this.camera.aspect || 1.6) < 0.9;
+      // Em retrato a tela é alta: a pista deitada não cabe, segue a direção do carro
+      const dir = portrait ? this.focus.dir : this.focusDir(this.focus.dir, radius);
       // O topo da tela tem o HUD: o alvo mira um pouco além do meio para a placa descer
       const height = radius * (portrait ? 5.2 : 2.7) + 4;
       const back = radius * 0.55 + 1.5;

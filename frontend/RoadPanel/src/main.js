@@ -15,10 +15,11 @@ import * as THREE from 'three';
 import { TrackNetwork } from './track/network.js';
 import { buildPlan, sameRoute } from './track/planner.js';
 import { Localizer } from './track/localizer.js';
-import { roleName, roleAt, ROLE } from './track/mission.js';
+import { roleName, ROLE, alternateRoles, appendRoles, roleFromMissionState } from './track/mission.js';
 import { Voice } from './ui/voice.js';
 import { PX_TO_WORLD, DEFAULT_SIGNS, METERS_PER_PX, layoutTrack, TRACK_ID, TRACKS, switchTrack } from './track/trackData.js';
-import { buildTrack } from './scene/trackMeshes.js';
+import { buildTrack, CHARGE_WAVE_S } from './scene/trackMeshes.js';
+import { ChargeSmoke } from './ui/chargeSmoke.js';
 import { buildSigns } from './scene/signs.js';
 import { Car } from './scene/car.js';
 import { RouteRibbon } from './scene/routeRibbon.js';
@@ -65,6 +66,13 @@ const state = {
   simSpeed: 0.4,
   simRoute: ['A', 'C'],        // na prova vêm 2 dos 3 pontos: coleta no 1º, entrega no último
   pointHoldUntil: 0,           // parado no ponto (GPS até o próximo)
+  // Visão real na simulação: placas vistas pela câmera do carro comandam o carro virtual
+  cameraMode: false,
+  cameraArmed: false,          // câmera viu desvio: entra à direita na próxima bifurcação
+  cameraStop: false,           // câmera vendo PARE ou ponto (hud.stop_active)
+  // Espelho do point_stop_latched do main.py: parado no ponto até o botão RUN do carro
+  // { presses, sawStopped, at }
+  awaitButton: null,
   pointArrival: null,
   simDone: 0,
   simLight: 'none',
@@ -76,8 +84,10 @@ const state = {
   keys: new Set(),
   // Servidor
   serverRoute: [],
+  serverRoles: [],             // papel de cada ponto de serverRoute (nav.mission_state)
   serverRaw: '',
-  liveDone: [],
+  liveDone: [],                // paradas já consumidas (saíram de nav.route)
+  liveDoneRoles: [],
   localConsumed: 0,
   userPickedSource: false,
 };
@@ -182,12 +192,25 @@ function missionView() {
   if (state.source === 'live') {
     return {
       all: [...state.liveDone, ...state.serverRoute],
+      roles: [...state.liveDoneRoles, ...state.serverRoles],
       doneCount: state.liveDone.length + state.localConsumed,
       raw: state.serverRaw,
       source: 'servidor',
     };
   }
-  return { all: [...state.simRoute], doneCount: state.simDone, raw: state.simRoute.join(' → '), source: 'simulação' };
+  return {
+    all: [...state.simRoute],
+    roles: alternateRoles(state.simRoute.length),
+    doneCount: state.simDone,
+    raw: state.simRoute.join(' → '),
+    source: 'simulação',
+  };
+}
+
+/** Papel do próximo ponto `point` ainda não concluído da missão (null se não está nela). */
+function pendingRole(mission, point) {
+  const index = mission.all.indexOf(point, mission.doneCount);
+  return index >= 0 ? mission.roles[index] : null;
 }
 
 /** Onde o carro está, em termos de aresta da rede (para replanejar dali). */
@@ -204,8 +227,10 @@ function currentLocation() {
 function replan(reveal = true, from = null) {
   const queue = currentQueue();
   const start = from || currentLocation();
+  const useCamera = state.cameraMode && state.source === 'sim';
   state.plan = buildPlan(network, start, queue, {
-    mode: state.planMode,
+    mode: useCamera ? 'camera' : state.planMode,
+    armed: useCamera && state.cameraArmed,
     detoursDone: state.source === 'live' ? localizer.detours : 0,
   });
   state.planQueue = queue;
@@ -230,22 +255,30 @@ function consumePoint() {
   state.planConsumed += 1;
   if (state.source === 'live') state.localConsumed += 1;
   else {
-    const total = state.simRoute.length;
-    arrivedAtPoint(state.simRoute[state.simDone], roleName(state.simDone, total));
+    const role = alternateRoles(state.simRoute.length)[state.simDone];
+    // Visão real: como o main.py, o carro trava em todo ponto até o botão RUN
+    arrivedAtPoint(state.simRoute[state.simDone], role, state.cameraMode);
     state.simDone += 1;
-    if (state.simRoute.length > 1 && state.simDone === state.simRoute.length) voice.say('delivered');
   }
 }
 
 // ── Servidor ─────────────────────────────────────────────────────────────
 /**
  * Sincroniza com a lista que o servidor manda (nav.route). Quando ela encolhe, o carro
- * confirmou um ponto: a posição vai para a placa do ponto e a trajetória é refeita dali.
+ * consumiu uma parada: no main.py a mesma detecção que tira o ponto da rota liga
+ * point_stop_latched, então o carro está parado no ponto esperando o botão RUN. A posição
+ * vai para a placa do ponto e a trajetória é refeita dali.
+ *
+ * Os papéis (coleta/entrega) seguem Navigation.add_point: pontos novos alternam a partir
+ * do último da lista; `missionState` (command.mission_state) corrige o ponto atual.
  */
-function applyServerRoute(next, raw) {
+function applyServerRoute(next, raw, missionState = -1) {
   state.serverRaw = raw;
   const prev = state.serverRoute;
-  if (sameRoute(prev, next)) return;
+  if (sameRoute(prev, next)) {
+    syncRoles(missionState);
+    return;
+  }
   let confirmed = 0;
   for (let k = 1; k <= prev.length; k++) {
     if (sameRoute(prev.slice(k), next)) { confirmed = k; break; }
@@ -253,12 +286,15 @@ function applyServerRoute(next, raw) {
   state.serverRoute = next;
   if (confirmed > 0) {
     state.liveDone.push(...prev.slice(0, confirmed));
+    state.liveDoneRoles.push(...state.serverRoles.slice(0, confirmed));
+    state.serverRoles = state.serverRoles.slice(confirmed);
     if (state.source === 'live') {
       const index = state.liveDone.length - 1;
-      arrivedAtPoint(state.liveDone[index], roleName(index, state.liveDone.length + next.length));
+      const data = state.linkStatus === 'live' ? state.liveData : null;
+      // Em modo manual o main.py não liga o latch (route_stop_requested é ignorado)
+      const latched = !(data && data.controlMode === 'MANUAL');
+      arrivedAtPoint(state.liveDone[index], state.liveDoneRoles[index], latched);
     }
-    // Último ponto confirmado = encomenda entregue
-    if (next.length === 0 && state.liveDone.length > 1 && state.source === 'live') voice.say('delivered');
     const target = state.plan && state.source === 'live' ? planTargets()[confirmed - 1] : null;
     if (target) state.s = Math.max(0, Math.min(state.plan.length, target.s + 1));
     localizer.confirmPoint(performance.now());
@@ -266,19 +302,35 @@ function applyServerRoute(next, raw) {
     state.localConsumed = 0;
     if (state.source === 'live' && state.plan) replan(false);
   } else if (!(next.length > prev.length && sameRoute(next.slice(0, prev.length), prev))) {
+    // Rota trocada por fora (reset/nova missão): recomeça do zero, como uma lista nova
     state.liveDone = [];
+    state.liveDoneRoles = [];
+    state.serverRoles = alternateRoles(next.length);
     state.localConsumed = 0;
     state.missionDone = false;
   } else {
+    // add_point: alterna a partir do último ponto ainda na lista (lista vazia = coleta)
+    state.serverRoles.push(...appendRoles(state.serverRoles[state.serverRoles.length - 1], next.length - prev.length));
     state.missionDone = false;      // pontos novos depois de finalizar: novo percurso
   }
+}
+
+/**
+ * command.mission_state é o papel real do ponto atual: se divergir, realinha a alternância.
+ * Só com a rota estável: o main.py grava o comando antes de ler nav.route, então no quadro
+ * em que a rota muda o mission_state ainda pode ser o do ponto anterior.
+ */
+function syncRoles(missionState) {
+  const actual = roleFromMissionState(missionState);
+  if (!actual || !state.serverRoute.length || state.serverRoles[0] === actual) return;
+  state.serverRoles = alternateRoles(state.serverRoute.length, actual);
 }
 
 const link = new CarLink((status, data) => {
   state.linkStatus = status;
   state.liveData = data;
   if (!state.userPickedSource && status === 'live' && state.source !== 'live') setSource('live');
-  if (data && state.source === 'live') applyServerRoute(data.route, data.routeText);
+  if (data && state.source === 'live') applyServerRoute(data.route, data.routeText, data.missionState);
 });
 
 function setSource(source, byUser = false) {
@@ -286,13 +338,16 @@ function setSource(source, byUser = false) {
   if (state.source === source) return;
   state.source = source;
   state.freeDrive = false;
+  releaseButtonWait();             // a espera no ponto é de uma fonte só
   if (source === 'live') {
     // Modo real: o carro só anda com o que chega do servidor; começa na largada
     state.serverRoute = [];
+    state.serverRoles = [];
     state.liveDone = [];
+    state.liveDoneRoles = [];
     state.localConsumed = 0;
     localizer.restart();
-    if (state.liveData) applyServerRoute(state.liveData.route, state.liveData.routeText);
+    if (state.liveData) applyServerRoute(state.liveData.route, state.liveData.routeText, state.liveData.missionState);
     replan(true, carStart());
   } else {
     replan(true);
@@ -374,7 +429,90 @@ controls.mode.addEventListener('click', (event) => {
 // ── Simulação ────────────────────────────────────────────────────────────
 const nextEvent = (type, maxPx) => state.plan.events.find((e) => e.type === type && e.s - state.s >= -2 && e.s - state.s <= maxPx);
 
+// ── Visão real na simulação ──────────────────────────────────────────────
+// Só a câmera faz o carro virar (placa de desvio) e parar (PARE ou ponto A/B/C).
+// Pessoas e semáforo vermelho não param o carro neste modo.
+const CAMERA_POINT_PX = 200;   // ~4 m: PARE visto com um ponto da missão à frente = chegou no ponto
+const vision = { prevStop: false, prevDetour: false };
+
+function updateCamera() {
+  const data = state.linkStatus === 'live' ? state.liveData : null;
+  const stop = Boolean(data && data.stopActive);
+  const detour = Boolean(data && data.rightDetour);
+  if (detour && !vision.prevDetour) {
+    state.cameraArmed = true;
+    replan(false, currentLocation());
+  }
+  if (stop && !vision.prevStop) {
+    const target = planTargets()[state.planConsumed];
+    if (target && target.s - state.s < CAMERA_POINT_PX && target.s - state.s > -40) {
+      state.s = Math.max(state.s, target.s);
+      consumePoint();
+    }
+  }
+  // Passou da bifurcação em que ia entrar: o desvio já foi usado
+  const branch = state.plan.firstBranch >= 0 ? state.plan.ranges[state.plan.firstBranch] : null;
+  if (state.cameraArmed && (!branch || state.s > branch.s0)) state.cameraArmed = false;
+  vision.prevStop = stop;
+  vision.prevDetour = detour;
+  state.cameraStop = stop;
+  updateAwaitButton(data, performance.now());
+}
+
+// Logo depois de chegar, command.speed ainda pode ser o de antes do latch (o main.py trava
+// no laço seguinte ao que tirou o ponto da rota): PWM > 0 só conta como "saiu" depois disso
+const LATCH_PWM_GRACE_MS = 600;
+
+/**
+ * Parado no ponto: espelho do point_stop_latched do main.py, que solta quando
+ * 1. o botão RUN do carro é apertado (borda de subida de run_btn = contador novo);
+ * 2. o run é desligado e ligado de novo (point_stop_saw_stopped);
+ * 3. o controle remoto assume (modo manual).
+ * Como o latch força PWM 0, o carro andando sozinho com PWM > 0 também prova que soltou
+ * (cobre um aperto curto que o polling perdeu).
+ */
+function updateAwaitButton(data, now) {
+  const wait = state.awaitButton;
+  if (!wait || !data) return;
+  if (data.controlMode === 'MANUAL') return releaseButtonWait();
+  const presses = data.runPresses;
+  if (presses === null) {
+    // Servidor sem o contador: usa o próprio run_btn (pode perder um toque muito curto)
+    if (data.runButton) return releaseButtonWait();
+  } else if (wait.presses === null) {
+    wait.presses = presses;   // sem sinal ao chegar: conta a partir de agora
+  } else if (presses > wait.presses) {
+    return releaseButtonWait();
+  }
+  if (!data.running) wait.sawStopped = true;
+  else if (wait.sawStopped) return releaseButtonWait();
+  if (data.running && data.pwm > 0 && now - wait.at > LATCH_PWM_GRACE_MS) releaseButtonWait();
+}
+
+function releaseButtonWait() {
+  state.awaitButton = null;
+  state.pointHoldUntil = 0;
+}
+
+function setCameraMode(on) {
+  state.cameraMode = on;
+  state.cameraArmed = false;
+  releaseButtonWait();
+  vision.prevStop = false;
+  vision.prevDetour = false;
+  if (on && state.source !== 'sim') {
+    setSource('sim', true);              // a visão real é um modo da simulação
+    return;
+  }
+  if (on) state.userPickedSource = true;   // fica na simulação mesmo com o servidor no ar
+  if (state.source === 'sim') replan(true);
+}
+
 function simSpeedPx(now) {
+  if (state.cameraMode) {
+    const held = !state.playing || state.missionDone || state.cameraStop || now < state.pointHoldUntil;
+    return held ? 0 : state.simSpeed / state.metersPerPx;
+  }
   if (!state.playing || state.missionDone || now < state.stopHoldUntil || now < state.pointHoldUntil ||
     now < guide.simHazardUntil) return 0;
   const speedPx = state.simSpeed / state.metersPerPx;
@@ -459,15 +597,32 @@ const gpsState = { reason: null, since: 0, until: 0, target: null };
 function gpsReason(now) {
   if (state.freeDrive) return null;
   if (now < state.pointHoldUntil) return 'point';
-  if (state.source === 'sim') return now < state.stopHoldUntil ? 'stop' : null;
+  if (state.source === 'sim') {
+    if (state.cameraMode) return state.cameraStop ? 'stop' : null;
+    return now < state.stopHoldUntil ? 'stop' : null;
+  }
   const data = state.linkStatus === 'live' ? state.liveData : null;
   return data && data.stopActive ? 'stop' : null;
 }
 
-/** Chegou num ponto da missão: segura o carro (simulação) e abre o GPS. */
-function arrivedAtPoint(point, role) {
+/**
+ * Chegou num ponto da missão: segura o carro (simulação) e abre o GPS. Com `waitButton`
+ * fica parado até o botão RUN do carro real em vez de esperar POINT_HOLD_MS.
+ */
+function arrivedAtPoint(point, role, waitButton = false) {
+  state.pointArrival = { point, role: roleName(role) };
+  if (role === ROLE.delivery) voice.say('delivered');
+  if (waitButton) {
+    const data = state.linkStatus === 'live' ? state.liveData : null;
+    state.awaitButton = {
+      presses: data ? data.runPresses : null,
+      sawStopped: Boolean(data && !data.running),
+      at: performance.now(),
+    };
+    state.pointHoldUntil = Infinity;
+    return;
+  }
   state.pointHoldUntil = performance.now() + POINT_HOLD_MS;
-  state.pointArrival = { point, role };
 }
 
 function nextSign(reason) {
@@ -482,9 +637,8 @@ function nextSign(reason) {
 function signName(event) {
   if (event.type === 'start') return 'Linha de chegada';
   if (event.type === 'point') {
-    const mission = missionView();
-    const index = mission.all.indexOf(event.point, mission.doneCount);
-    if (event.target && index >= 0) return `${roleName(index, mission.all.length)} · ponto ${event.point}`;
+    const role = event.target ? pendingRole(missionView(), event.point) : null;
+    if (role) return `${roleName(role)} · ponto ${event.point}`;
     return `Ponto ${event.point}`;
   }
   return event.sign?.label || 'Placa';
@@ -509,11 +663,11 @@ function openGps(reason, now) {
     gpsEl.label.textContent = 'Próxima placa';
   }
   gpsEl.target.textContent = signName(gpsState.target);
-  // Saindo da coleta com o GPS mostrando o caminho até a entrega: "indo ao local de entrega"
+  // Saindo de um ponto com o GPS mostrando o próximo: "indo ao local de entrega/coleta"
   if (reason === 'point' && gpsState.target.type === 'point' && gpsState.target.target) {
-    const mission = missionView();
-    const index = mission.all.indexOf(gpsState.target.point, mission.doneCount);
-    if (index >= 0 && roleAt(index, mission.all.length) === ROLE.delivery) voice.say('delivery');
+    const next = pendingRole(missionView(), gpsState.target.point);
+    if (next === ROLE.delivery) voice.say('delivery');
+    else if (next === ROLE.pickup) voice.say('pickup');
   }
   gpsEl.card.hidden = false;
 }
@@ -537,7 +691,38 @@ function updateGps(now) {
   const where = gpsState.reason === 'point' ? 'No ponto' : 'Parado na placa';
   gpsEl.distance.textContent = formatMeters(meters);
   gpsEl.eta.textContent = speed > 0.02 ? `~${Math.max(1, Math.round(meters / speed))} s` : '--';
-  gpsEl.status.textContent = left > 0 && state.source === 'sim' ? `${where} · segue em ${left} s` : where;
+  gpsEl.status.textContent = state.awaitButton
+    ? `${where} · aperte o botão RUN`
+    : left > 0 && state.source === 'sim' ? `${where} · segue em ${left} s` : where;
+}
+
+// ── Onda de carga da bateria ─────────────────────────────────────────────
+// Bateria passou a carregar (battery_state 1): a malha de pontos fica verde e solta anéis
+// a partir do carro, em loop por CHARGE_WAVE_S. Abrir a página já carregando não dispara.
+const BATTERY_CHARGING = 1;
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+const charge = { prev: undefined, wave: null, pending: false };   // prev undefined = sem resposta ainda
+// Fumaça verde nas bordas da tela (2 s); reinicia se a carga recomeçar
+const chargeSmoke = new ChargeSmoke(document.getElementById('chargeSmoke'));
+const puffChargeSmoke = () => { if (!reducedMotion.matches) chargeSmoke.puff(); };
+
+function updateChargeWave(now, wx, wz) {
+  const time = now / 1000;
+  if (charge.pending) {
+    // Debug: mesma onda de um carregador conectado agora
+    charge.pending = false;
+    charge.wave = { start: time, x: wx, z: wz, motion: !reducedMotion.matches, simulated: true };
+    puffChargeSmoke();
+  }
+  if (state.linkStatus === 'live' && state.liveData) {
+    const current = state.liveData.batteryState;
+    if (current === BATTERY_CHARGING && charge.prev !== undefined && charge.prev !== BATTERY_CHARGING) {
+      charge.wave = { start: time, x: wx, z: wz, motion: !reducedMotion.matches };
+      puffChargeSmoke();
+    }
+    charge.prev = current;
+  }
+  if (charge.wave && time - charge.wave.start > CHARGE_WAVE_S) charge.wave = null;
 }
 
 // ── Voz e avisos ─────────────────────────────────────────────────────────
@@ -595,14 +780,8 @@ function updateGuide(now, speedMs) {
     const ahead = event.s - state.s;
     if (ahead < 0) continue;
     if (ahead > lead) break;
-    let cue = null;
-    if (event.type === 'turn') cue = event.turn;
-    else if (event.type === 'point' && event.target) {
-      const index = mission.all.indexOf(event.point, mission.doneCount);
-      const role = index >= 0 ? roleAt(index, mission.all.length) : null;
-      // Coleta e entrega são faladas no início do percurso e no GPS após a coleta, não aqui
-      cue = null;
-    }
+    // Coleta e entrega são faladas no início do percurso e no GPS ao sair de cada ponto, não aqui
+    const cue = event.type === 'turn' ? event.turn : null;
     const key = `${event.type}@${Math.round(event.s)}`;
     if (!cue || guide.announced.has(key)) continue;
     guide.announced.add(key);
@@ -656,7 +835,10 @@ function frame(now) {
       // Carro real: telemetria + marcos detectados (o ponto só conta quando o servidor confirma)
       const data = state.linkStatus === 'live' ? state.liveData : null;
       // Acompanha a velocidade real: freia e acelera junto (~0,25 s), sem dar saltos
-      const target = localizer.speed(data, state.pwmToMs);
+      updateAwaitButton(data, now);
+      // Travado no ponto o main.py força PWM 0: o mapa para junto, sem esperar a roda zerar
+      const measured = localizer.speed(data, state.pwmToMs);
+      const target = state.awaitButton ? 0 : measured;
       state.liveSpeed += (target - state.liveSpeed) * (1 - Math.exp(-dt * 8));
       if (target === 0 && state.liveSpeed < 0.01) state.liveSpeed = 0;
       speedMs = state.liveSpeed;
@@ -672,12 +854,14 @@ function frame(now) {
         if (state.serverRoute.length === 0 && state.liveDone.length > 0) finishMission();
       }
     } else {
+      if (state.cameraMode) updateCamera();
       speedPx = simSpeedPx(now);
       speedMs = speedPx * state.metersPerPx;
       if (speedPx > 0) {
         state.s += speedPx * dt;
         const targets = planTargets();
-        while (state.planConsumed < targets.length && state.s >= targets[state.planConsumed].s) consumePoint();
+        // No modo câmera o ponto só conta quando a câmera o vê (updateCamera)
+        while (!state.cameraMode && state.planConsumed < targets.length && state.s >= targets[state.planConsumed].s) consumePoint();
         if (state.s >= state.plan.length) {
           // Volta completa: missão cumprida para na largada; sem missão, segue em voltas
           const hadMission = state.planQueue.length > 0;
@@ -711,11 +895,14 @@ function frame(now) {
   updateHazard(now);
   gps.tick(now);
   proximity.update(state.source === 'live' && state.linkStatus === 'live' ? state.liveData?.proximity : null, dt);
-  track.tick(now / 1000);
+  updateChargeWave(now, wx, wz);
+  track.tick(now / 1000, charge.wave);
 
   const light = state.source === 'live'
     ? LIGHT_BY_CODE[state.liveData?.trafficLight] || null
-    : (state.simLight === 'none' ? null : state.simLight);
+    : state.cameraMode
+      ? LIGHT_BY_CODE[state.liveData?.trafficLight] || null
+      : (state.simLight === 'none' ? null : state.simLight);
   signs.setLight(light);
 
   const chase = rig.mode === 'chase';
@@ -741,9 +928,17 @@ function frame(now) {
     metersPerPx: state.metersPerPx,
     mission: missionView(),
     missionDone: state.missionDone,
+    waitingButton: Boolean(state.awaitButton),
     data: state.liveData,
+    simCharging: Boolean(charge.wave?.simulated),
     locator: state.source === 'live' ? localizer.describe(now) : '',
-    sim: { playing: state.playing, freeDrive: state.freeDrive, held: now < state.stopHoldUntil },
+    sim: {
+      camera: state.cameraMode,
+      cameraLink: state.linkStatus === 'live',
+      playing: state.playing,
+      freeDrive: state.freeDrive,
+      held: now < state.stopHoldUntil,
+    },
   });
   debug.readout({
     edge: currentLocation().edgeId,
@@ -806,10 +1001,12 @@ const debug = new DebugPanel({
   getCamera: () => rig.mode,
   setFreeDrive,
   routeChanged: () => { state.missionDone = false; },
+  setCameraMode,
   setPlanMode: (mode) => {
     state.planMode = mode;
     replan(true);
   },
+  simulateCharge: () => { charge.pending = true; },
   simulatePedestrian: () => {
     if (state.source === 'sim') guide.simHazardUntil = performance.now() + SIM_HAZARD_MS;
   },
@@ -820,7 +1017,7 @@ const debug = new DebugPanel({
     state.simDone = 0;
     state.stoppedAt = null;
     state.stopHoldUntil = 0;
-    state.pointHoldUntil = 0;
+    releaseButtonWait();
     replan(true, carStart());
   },
   skipEvent: () => {

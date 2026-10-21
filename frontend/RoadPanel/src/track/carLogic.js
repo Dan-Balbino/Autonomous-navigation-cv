@@ -114,3 +114,39 @@ export function walkCarLogic(network, start, queue, detoursDone = 0) {
   }
   return { edges, targets, unreachable: pending };
 }
+
+/**
+ * Modo câmera (simulação com a visão real): o carro não decide sozinho. Em cada bifurcação
+ * segue reto pela pista; só entra à direita na primeira bifurcação depois de a câmera ver
+ * uma placa de desvio (`armed`). Vai até a linha de chegada. Os pontos só contam quando a
+ * câmera os vê, então nada é marcado como inalcançável.
+ */
+export function walkCamera(network, start, queue, armed = false) {
+  const edges = [];
+  const targets = [];
+  const pending = [...queue];
+  let preference = armed ? 'right' : null;
+  let firstBranch = -1;
+  let edge = network.edge(start.edgeId);
+  let fromS = start.s;
+  while (edge && edges.length < MAX_EDGES) {
+    edges.push(edge);
+    const ahead = network.signs
+      .filter((sign) => sign.kind === 'point' && sign.base === edge.base && network.signS(sign, edge) > fromS + 1)
+      .sort((a, b) => network.signS(a, edge) - network.signS(b, edge));
+    for (const sign of ahead) {
+      if (pending.length && sign.point === pending[0]) targets.push({ point: pending.shift(), edgeIndex: edges.length - 1 });
+    }
+    if (edge.to === 'S') break;
+    const branching = network.successors(edge).length > 1;
+    const next = chooseNext(network, edge, preference);
+    if (branching) {
+      if (firstBranch < 0) firstBranch = edges.length;
+      preference = null;
+    }
+    edge = next;
+    fromS = -1;
+  }
+  return { edges, targets, unreachable: [], firstBranch };
+}
+

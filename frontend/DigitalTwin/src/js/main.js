@@ -167,6 +167,8 @@ function init() {
 
             const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
             const parseNumber = (value) => {
+                // Number(null) é 0: sem isso "sem telemetria" viraria bateria 0%
+                if (value === null || value === undefined || value === '') return null;
                 const parsed = Number(value);
                 return Number.isFinite(parsed) ? parsed : null;
             };
@@ -295,6 +297,7 @@ function init() {
                 const rpm = parseNumber(dashboardData?.tabDashboard_rpm ?? dashboardData?.tabdashboard_rpm);
                 const realSpeed = parseNumber(dashboardData?.tabDashboard_speed ?? dashboardData?.tabdashboard_speed);
                 const batteryLevel = parseNumber(dashboardData?.tabDashboard_battery ?? dashboardData?.tabdashboard_battery);
+                const batteryState = parseNumber(dashboardData?.tabDashboard_battery_state ?? dashboardData?.tabdashboard_battery_state);
                 const lightRaw = dashboardData?.tabDashboard_light ?? dashboardData?.tabdashboard_light;
                 const rotateRaw = dashboardData?.tabDashboard_rotate ?? dashboardData?.tabdashboard_rotate;
                 const light = Boolean(lightRaw);
@@ -316,7 +319,7 @@ function init() {
                 }
                 updateSpeedAndRpmUI();
 
-                deviceStatusManager.setLevel(batteryLevel);
+                deviceStatusManager.setLevel(batteryLevel, batteryState);
                 updateSignalChips(dashboardData);
                 wheelTelemetry.update(dashboardData);
 

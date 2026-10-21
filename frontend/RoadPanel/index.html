@@ -30,6 +30,11 @@
 
   <canvas id="scene" aria-label="Pista em 3D com o carro e a trajetória esperada"></canvas>
   <div class="vignette" aria-hidden="true"></div>
+  <!-- Fumaça verde nas bordas nos primeiros 2 s de carga da bateria -->
+  <div class="charge-smoke" id="chargeSmoke" aria-hidden="true">
+    <div class="charge-smoke-layer"></div>
+    <div class="charge-smoke-layer is-b"></div>
+  </div>
 
   <header class="topbar">
     <div class="clock" id="clock">--:--</div>
@@ -74,7 +79,14 @@
   <footer class="bottombar">
     <div class="metric"><span class="metric-label">PWM</span><span class="metric-value" id="pwmValue">0</span></div>
     <div class="metric"><span class="metric-label">Servo</span><span class="metric-value" id="servoValue">90°</span></div>
-    <div class="metric"><span class="metric-label">Bateria</span><span class="metric-value" id="batteryValue">--</span></div>
+    <div class="metric metric-battery" id="batteryMetric" data-state="none">
+      <span class="metric-label">Bateria</span>
+      <span class="metric-value">
+        <svg class="battery-bolt" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/></svg>
+        <span id="batteryValue">--</span>
+      </span>
+      <span class="metric-sub" id="batteryState"></span>
+    </div>
     <div class="metric"><span class="metric-label">Modo</span><span class="metric-value" id="modeValue">--</span></div>
     <div class="hazard" id="hazardBanner" role="alert" hidden>
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"/><path d="M12 8v6m0 0-3 6m3-6 3 6M8 11l4-2 4 2"/></svg>
@@ -227,6 +239,11 @@
         <input type="range" id="simSpeed" min="0" max="3" step="0.05" value="0.4">
       </label>
       <label class="check">
+        <input type="checkbox" id="cameraMode">
+        <span>Visão real: placas vistas pela câmera do carro</span>
+      </label>
+      <p class="debug-hint" id="cameraHint">Desligado: o carro simulado vira e para sozinho pelas placas do mapa.</p>
+      <label class="check">
         <input type="checkbox" id="respectSignals" checked>
         <span>Parar no vermelho e na placa PARE</span>
       </label>
@@ -253,6 +270,14 @@
         <button type="button" role="radio" data-value="top">De cima</button>
         <button type="button" role="radio" data-value="free">Livre</button>
       </div>
+    </section>
+
+    <section class="debug-section">
+      <h3>Bateria</h3>
+      <div class="row">
+        <button type="button" class="text-button" id="simCharge">Simular carregamento</button>
+      </div>
+      <p class="debug-hint">Toca a onda verde de 9 s (com a fumaça nas bordas nos 2 primeiros) como se o carregador fosse conectado agora.</p>
     </section>
 
     <section class="debug-section">

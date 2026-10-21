@@ -3,7 +3,7 @@
  * controla o movimento, o semáforo, a câmera, a escala e permite testar o .glb do carro.
  * Abre e fecha no botão "Debug" ou na tecla D.
  */
-import { roleName } from '../track/mission.js';
+import { roleName, alternateRoles } from '../track/mission.js';
 
 export class DebugPanel {
   constructor(api) {
@@ -20,6 +20,8 @@ export class DebugPanel {
       speedOut: $('simSpeedOut'),
       respect: $('respectSignals'),
       freeDrive: $('freeDrive'),
+      cameraMode: $('cameraMode'),
+      cameraHint: $('cameraHint'),
       scale: $('scale'),
       scaleOut: $('scaleOut'),
       modelFile: $('modelFile'),
@@ -86,9 +88,14 @@ export class DebugPanel {
     });
     document.getElementById('skipEvent').addEventListener('click', () => api.skipEvent());
     document.getElementById('simPedestrian').addEventListener('click', () => api.simulatePedestrian());
+    document.getElementById('simCharge').addEventListener('click', () => api.simulateCharge());
 
     el.speed.addEventListener('input', () => {
       state.simSpeed = Number(el.speed.value);
+      this.sync();
+    });
+    el.cameraMode.addEventListener('change', () => {
+      api.setCameraMode(el.cameraMode.checked);
       this.sync();
     });
     el.respect.addEventListener('change', () => { state.respectSignals = el.respect.checked; });
@@ -138,8 +145,8 @@ export class DebugPanel {
       ? state.simRoute.map((p, i) => (i < state.simDone ? `${p} (feito)` : p)).join('  ›  ')
       : 'Sem pontos: o carro faz a volta externa';
     if (state.simRoute.length) {
-      const total = state.simRoute.length;
-      el.simRouteText.textContent = state.simRoute.map((p, i) => `${roleName(i, total)} ${p}`).join(' · ') +
+      const roles = alternateRoles(state.simRoute.length);
+      el.simRouteText.textContent = state.simRoute.map((p, i) => `${roleName(roles[i])} ${p}`).join(' · ') +
         ` (feitos: ${state.simDone})`;
     }
     el.planModeHint.textContent = state.planMode === 'car'
@@ -151,6 +158,13 @@ export class DebugPanel {
     el.speed.value = String(state.simSpeed);
     el.speedOut.textContent = `${state.simSpeed.toFixed(2).replace('.', ',')} m/s`;
     el.respect.checked = state.respectSignals;
+    el.respect.disabled = state.cameraMode;
+    el.cameraMode.checked = state.cameraMode;
+    el.cameraHint.textContent = !state.cameraMode
+      ? 'Desligado: o carro simulado vira e para sozinho pelas placas do mapa.'
+      : state.linkStatus === 'live'
+        ? 'Ligado: só vira ao ver desvio e só para ao ver PARE ou A/B/C (pessoas e semáforo são ignorados). Coloque a mesma missão no painel web: a IA só reconhece o ponto atual da rota.'
+        : 'Ligado, mas sem sinal do servidor: o carro segue reto e não para. Rode o main.py.';
     el.freeDrive.checked = state.freeDrive;
     el.scale.value = String(state.metersPerPx);
     el.scaleOut.textContent = state.metersPerPx.toFixed(4).replace('.', ',');

@@ -35,6 +35,8 @@ _state: dict = {
     "tabDashboard_speed3":               0.0,
     "tabDashboard_speed4":               0.0,
     "tabDashboard_battery":              None,
+    # 0 sem corrente, 1 carregando, 2 carregada, 3 descarregando, 4 bateria baixa
+    "tabDashboard_battery_state":        None,
     "tabDashboard_running":              False,
     # Placa de PARE / semáforo / desvio à direita, para os indicadores do Digital Twin.
     "tabDashboard_stop_active":          False,
@@ -121,10 +123,52 @@ def load_config_from_file() -> None:
 _vehicle_lock = threading.Lock()
 _vehicle_info: dict = {}
 
+# Leitura da linha crua do Arduino (raw_rx), para os painéis web:
+# - até chegar a primeira telemetria JSON, car.telemetry só tem valores padrão
+#   (bateria 70%), então a bateria é publicada como None;
+# - run_btn é um pulso curto (~100 ms após soltar) que o polling do front perde,
+#   então cada aperto vira um contador (run_button_presses).
+_rx_state = {"seen": False, "run_button": False, "presses": 0, "fed": False}  # fed: main.py já publicou
+
+
+def _read_raw_rx(raw) -> dict | None:
+    if not isinstance(raw, str):
+        return None
+    try:
+        decoded = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    return decoded if isinstance(decoded, dict) else None
+
 
 def update_vehicle_info(info: dict) -> None:
     """Recebe o mesmo tipo de snapshot passado a ControlPanel.update_vehicle_info,
     incluindo telemetria e o estado dos sinais (placa de pare / semáforo)."""
+    info = dict(info)
+    rx = _read_raw_rx(info.get("raw_rx"))
+    if rx is not None:
+        _rx_state["seen"] = True
+        run_button = bool(rx.get("run_btn", rx.get("run_button", False)))
+        if run_button and not _rx_state["run_button"]:
+            _rx_state["presses"] += 1
+        _rx_state["run_button"] = run_button
+
+    telemetry = info.get("telemetry")
+    if isinstance(telemetry, dict):
+        telemetry = dict(telemetry)
+        if not _rx_state["seen"]:
+            telemetry["battery"] = None
+            telemetry["battery_state"] = None
+        telemetry["run_button"] = _rx_state["run_button"]
+        telemetry["run_button_presses"] = _rx_state["presses"]
+        info["telemetry"] = telemetry
+        _rx_state["fed"] = True
+        # O Digital Twin lê /api/dashboard: leva o estado do BMS para lá também
+        with _lock:
+            _state["tabDashboard_battery_state"] = telemetry.get("battery_state")
+            if not _rx_state["seen"]:
+                _state["tabDashboard_battery"] = None
+
     with _vehicle_lock:
         _vehicle_info.clear()
         _vehicle_info.update(info)
@@ -183,7 +227,7 @@ def _zone_to_cm(zone):
         return None
 
 
-def update_state(pwm, running, *, real_speed=None, battery=None,
+def update_state(pwm, running, *, real_speed=None, battery=None, battery_state=None,
                   stop_active=None, traffic_light_code=None,
                   traffic_light_label=None,
                   right_detour_active=None,
@@ -204,9 +248,15 @@ def update_state(pwm, running, *, real_speed=None, battery=None,
                 _state["tabDashboard_speed"] = round(float(real_speed), 2)
             except (TypeError, ValueError):
                 pass
-        if battery is not None:
+        # main.py rodando sem telemetria do Arduino: `battery` é só o padrão de CarTelemetry
+        if battery is not None and (_rx_state["seen"] or not _rx_state["fed"]):
             try:
                 _state["tabDashboard_battery"] = int(battery)
+            except (TypeError, ValueError):
+                pass
+        if battery_state is not None:
+            try:
+                _state["tabDashboard_battery_state"] = int(battery_state)
             except (TypeError, ValueError):
                 pass
         if stop_active is not None:

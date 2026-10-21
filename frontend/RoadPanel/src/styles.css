@@ -71,6 +71,58 @@ html, body {
     linear-gradient(to top, rgba(243, 245, 249, 0.8) 0%, rgba(243, 245, 249, 0) 16%);
 }
 
+/* ── Fumaça verde da carga (2 s ao começar a carregar) ──────────────
+   A imagem (ruído + bordas + desfoque) é gerada uma vez em src/ui/chargeSmoke.js.
+   Aqui só transform/opacity: o compositor anima sem repintar. Sem mask/filter/box-shadow.
+   Fica abaixo do HUD e não bloqueia cliques. */
+.charge-smoke {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  contain: strict;
+}
+
+.charge-smoke-layer {
+  position: absolute;
+  inset: -4%;
+  background: no-repeat center / 100% 100%;
+}
+
+.charge-smoke-layer.is-b { opacity: 0.7; }
+
+.charge-smoke.is-on {
+  visibility: visible;
+  will-change: opacity;
+  animation: smoke-life 2s cubic-bezier(0.33, 0, 0.2, 1) both;
+}
+
+.charge-smoke.is-on .charge-smoke-layer {
+  will-change: transform;
+  animation: smoke-drift-a 2s linear both;
+}
+
+.charge-smoke.is-on .charge-smoke-layer.is-b { animation-name: smoke-drift-b; }
+
+@keyframes smoke-life {
+  0% { opacity: 0; }
+  18% { opacity: 1; }
+  62% { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+
+@keyframes smoke-drift-a {
+  from { transform: translate3d(-1.5%, 1%, 0) scale(1); }
+  to { transform: translate3d(1.5%, -1%, 0) scale(1.04); }
+}
+
+@keyframes smoke-drift-b {
+  from { transform: translate3d(1.5%, -1%, 0) scale(1.04) scaleX(-1); }
+  to { transform: translate3d(-1.5%, 1%, 0) scale(1) scaleX(-1); }
+}
+
 /* ── Tela de carregamento ────────────────────────────────────────── */
 .loader {
   position: fixed;
@@ -388,6 +440,16 @@ html, body {
 
 .is-current .route-role { color: var(--route-strong); }
 
+/* Parada consumida com o carro ainda travado nela (point_stop_latched até o botão RUN) */
+.is-waiting .route-point {
+  background: var(--sim-dot);
+  border-color: var(--sim-dot);
+  color: var(--ink);
+  box-shadow: 0 0 0 3px rgba(255, 178, 26, 0.28);
+}
+
+.is-waiting .route-role { color: var(--sim); }
+
 .is-done .route-point { background: transparent; }
 
 .is-done .route-point svg {
@@ -440,6 +502,53 @@ html, body {
   font-size: clamp(16px, 1.3vw, 20px);
   font-weight: 600;
   color: var(--ink);
+}
+
+/* Bateria real: estado vindo de car.telemetry.battery_state */
+.metric-battery .metric-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: color 200ms var(--ease-out);
+}
+
+.metric-sub {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-3);
+  transition: color 200ms var(--ease-out);
+}
+
+.metric-sub:empty { display: none; }
+
+.battery-bolt {
+  width: 0;
+  height: 14px;
+  fill: currentColor;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: width 200ms var(--ease-out), opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
+}
+
+.metric-battery[data-state="charging"] .battery-bolt,
+.metric-battery[data-state="full"] .battery-bolt {
+  width: 14px;
+  opacity: 1;
+  transform: scale(1);
+}
+
+.metric-battery[data-state="charging"] .metric-value,
+.metric-battery[data-state="charging"] .metric-sub,
+.metric-battery[data-state="full"] .metric-value { color: var(--live); }
+
+.metric-battery[data-state="charging"] .battery-bolt { animation: bolt-pulse 1.4s var(--ease-out) infinite; }
+
+.metric-battery[data-state="low"] .metric-value,
+.metric-battery[data-state="low"] .metric-sub { color: var(--stop); }
+
+@keyframes bolt-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
 }
 
 /* ── Pedestre / obstáculo ────────────────────────────────────────── */
