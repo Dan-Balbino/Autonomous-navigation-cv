@@ -726,7 +726,7 @@ function updateGps(now) {
 
 /**
  * Parado no ponto esperando o botão RUN: a tela inteira pede para colocar (coleta) ou
- * retirar (entrega) a carga e apertar o botão vermelho. Na simulação o botão é o "Apertar
+ * retirar (entrega) a carga e apertar o botão azul. Na simulação o botão é o "Apertar
  * botão RUN" do debug; no modo real (e na visão real) vale o run_btn da telemetria.
  */
 function updateCargoPrompt() {
