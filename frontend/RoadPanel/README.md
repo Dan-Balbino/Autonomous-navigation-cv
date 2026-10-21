@@ -21,8 +21,8 @@ até a linha de chegada depois da entrega).
 
 No ponto o carro fica parado e a tela inteira muda (sem voz): fundo desfocado azul (coleta) ou
 verde (entrega), uma caixa 3D caindo na caçamba ou saindo dela, um dedo apertando o botão
-vermelho e, em letras grandes no centro, **COLOQUE A CARGA** / **RETIRE A CARGA** + **E APERTE
-O BOTÃO VERMELHO**. Com movimento reduzido no sistema a cena fica parada. Ele só segue quando:
+azul (o RUN do carro) e, em letras grandes no centro, **COLOQUE A CARGA** / **RETIRE A CARGA** +
+**E APERTE O BOTÃO AZUL**. Com movimento reduzido no sistema a cena fica parada. Ele só segue quando:
 
 - **Simulação:** o botão **Apertar botão RUN** do Debug (D) é tocado.
 - **Modo real e visão real:** a telemetria mostra o botão RUN apertado (contador novo de
