@@ -256,8 +256,8 @@ function consumePoint() {
   if (state.source === 'live') state.localConsumed += 1;
   else {
     const role = alternateRoles(state.simRoute.length)[state.simDone];
-    // Visão real: como o main.py, o carro trava em todo ponto até o botão RUN
-    arrivedAtPoint(state.simRoute[state.simDone], role, state.cameraMode);
+    // Como o main.py, o carro trava em todo ponto até o botão RUN (na simulação, o do debug)
+    arrivedAtPoint(state.simRoute[state.simDone], role, true);
     state.simDone += 1;
   }
 }
@@ -606,6 +606,16 @@ const gpsEl = {
   distance: document.getElementById('gpsDistance'),
   eta: document.getElementById('gpsEta'),
 };
+const cargoEl = {
+  box: document.getElementById('cargoTakeover'),
+  title: document.getElementById('ctTitle'),
+  kicker: document.getElementById('ctKicker'),
+  hint: document.getElementById('ctHint'),
+  simButton: document.getElementById('simRunButton'),
+  key: '',
+  closeTimer: 0,
+};
+const CARGO_EXIT_MS = 260;   // igual à transição de opacidade de .cargo-takeover
 const gpsState = { reason: null, since: 0, until: 0, target: null };
 
 /** 'stop' (parado na PARE), 'point' (acabou de chegar num ponto da missão) ou null. */
@@ -631,6 +641,7 @@ function arrivedAtPoint(point, role, waitButton = false) {
   if (waitButton) {
     const data = state.linkStatus === 'live' ? state.liveData : null;
     state.awaitButton = {
+      role,
       presses: data ? data.runPresses : null,
       sawStopped: Boolean(data && !data.running),
       at: performance.now(),
@@ -709,8 +720,41 @@ function updateGps(now) {
   gpsEl.distance.textContent = formatMeters(meters);
   gpsEl.eta.textContent = speed > 0.02 ? `~${Math.max(1, Math.round(meters / speed))} s` : '--';
   gpsEl.status.textContent = state.awaitButton
-    ? `${where} · aperte o botão RUN`
+    ? `${where} · aguardando o botão RUN`
     : left > 0 && state.source === 'sim' ? `${where} · segue em ${left} s` : where;
+}
+
+/**
+ * Parado no ponto esperando o botão RUN: a tela inteira pede para colocar (coleta) ou
+ * retirar (entrega) a carga e apertar o botão vermelho. Na simulação o botão é o "Apertar
+ * botão RUN" do debug; no modo real (e na visão real) vale o run_btn da telemetria.
+ */
+function updateCargoPrompt() {
+  const wait = gpsState.reason === 'point' ? state.awaitButton : null;
+  const role = wait && (wait.role === ROLE.delivery ? 'delivery' : 'pickup');
+  const simulated = state.source === 'sim' && !(state.cameraMode && state.linkStatus === 'live');
+  const point = state.pointArrival?.point || '';
+  const key = wait ? `${role}:${simulated}:${point}` : '';
+  cargoEl.simButton.disabled = !(state.source === 'sim' && state.awaitButton);
+  if (cargoEl.key === key) return;
+  cargoEl.key = key;
+  const box = cargoEl.box;
+  clearTimeout(cargoEl.closeTimer);
+  if (!wait) {
+    // Sai pelo mesmo caminho por onde entrou (opacidade + leve escala) e então some
+    box.dataset.state = 'closing';
+    cargoEl.closeTimer = setTimeout(() => { box.hidden = true; }, CARGO_EXIT_MS);
+    return;
+  }
+  box.dataset.role = role;
+  cargoEl.title.textContent = role === 'delivery' ? 'Retire a carga' : 'Coloque a carga';
+  cargoEl.kicker.textContent = `${role === 'delivery' ? 'Entrega' : 'Coleta'}${point ? ` · ponto ${point}` : ''}`;
+  cargoEl.hint.hidden = !simulated;
+  if (box.hidden) {
+    box.hidden = false;
+    void box.offsetWidth;   // aplica o estado inicial antes de abrir, para a transição rodar
+  }
+  box.dataset.state = 'open';
 }
 
 // ── Onda de carga da bateria ─────────────────────────────────────────────
@@ -1001,6 +1045,7 @@ function frame(now) {
   ribbon.tick(now, state.freeDrive ? 0 : state.s);
   if (state.source === 'live' && speedMs > 0.05) state.cruiseMs += (speedMs - state.cruiseMs) * Math.min(1, dt * 0.5);
   updateGps(now);
+  updateCargoPrompt();
   updateGuide(now, speedMs);
   updateHazard(now);
   gps.tick(now);
@@ -1119,6 +1164,10 @@ const debug = new DebugPanel({
   simulateCharge: () => { charge.pending = true; },
   simulatePedestrian: () => {
     if (state.source === 'sim') guide.simHazardUntil = performance.now() + SIM_HAZARD_MS;
+  },
+  // Carga colocada/retirada: o carro sai do ponto (só na simulação; no real vale o run_btn)
+  simulateRunButton: () => {
+    if (state.source === 'sim' && state.awaitButton) releaseButtonWait();
   },
   resetPosition: () => {
     guide.startedMission = null;

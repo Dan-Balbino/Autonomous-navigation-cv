@@ -16,8 +16,8 @@ const CHASE_PORTRAIT = { back: 5.6, up: 5.2, ahead: 4.0, lookUp: 0.0 };
 const WIDE_FROM = 3.5;
 const WIDE_TO = 8;
 // Área livre na prévia GPS (paisagem): entre o cartão da missão (topo à esquerda), o
-// cartão do GPS (embaixo à direita) e os botões laterais
-const GPS_SAFE = { w: 0.56, h: 0.6, x: 0.05, y: 0.04 };
+// cartão do GPS (embaixo à direita, mais alto com o aviso da carga) e os botões laterais
+const GPS_SAFE = { w: 0.5, h: 0.56, x: 0.03, y: 0.06 };
 
 export class CameraRig {
   constructor(camera, domElement) {
