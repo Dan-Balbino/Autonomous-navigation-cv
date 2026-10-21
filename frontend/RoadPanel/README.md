@@ -35,6 +35,30 @@ ponto de coleta e ponto de entrega à frente. Também toca:
 O navegador só libera som depois do primeiro toque, clique ou tecla na página. Botão **Som**
 (tecla M) liga e desliga. Na simulação, "Simular pedestre" no debug testa o aviso.
 
+### Voz do Dilera
+
+O botão **GPS / Dilera** (tecla G) troca as falas pelas de `sounds/dilera/`. A escolha fica
+salva no navegador.
+
+| Evento | Som |
+| --- | --- |
+| Carro começa a missão | `start_1` ou `start_2` (sorteado) |
+| Chegou no ponto de coleta | `recalculando` |
+| Entregou a carga | `cheguei` |
+| Parou na PARE | `policia_1` ou `policia_2` (sorteado) |
+| Parou no semáforo vermelho (vinha andando) | `radar_1` |
+| Pedestre ou obstáculo crítico | `perigo_1` |
+| Curva | `virar_dir` / `virar_esq`; logo depois da placa de desvio, `sair_dir` / `sair_esq` |
+| Bifurcação em que segue reto | `mantem_esq` / `mantem_dir` (lado oposto ao da outra saída) |
+
+Distâncias na escala da pista: **1 m de pista = 250 m de GPS** (1,5 km = 6 m, 400 m = 1,6 m,
+200 m = 0,8 m). Cada manobra é falada **uma vez só**, no aviso mais distante cuja frase inteira
+termina antes dela; se nenhum coube, fala só a manobra quase em cima dela. A voz nunca repete
+a fala anterior: depois de "mantém à esquerda", a próxima "mantém à esquerda" seguida fica em
+silêncio (o alerta de pedestre é a única exceção). Com a voz ocupada (ex.: "recalculando"), a frase seguinte entra emendada com `e_entao`,
+e duas manobras a menos de 400 m (1,6 m) uma da outra viram "vire à direita e então vire à
+esquerda".
+
 Circulação: a pista inteira é de mão única, no sentido horário (faixa de cima para a direita,
 corredores descendo, faixa de baixo para a esquerda, faixa da esquerda subindo). A trajetória
 vai pelo menor caminho até cada ponto nesse sentido (dando mais voltas quando precisa) e
@@ -88,6 +112,7 @@ o carro seguir. Quando ele volta a andar, a câmera retorna para trás do carro.
 | **Oficial / Teste** | Troca entre a pista oficial e a pista de teste (ilha grande + 1 ilha retangular); cada pista guarda as próprias placas, largada e partida. Também por `?pista=teste` |
 | **Topo / Carro** (V) | Alterna entre a vista de topo e a perseguição |
 | **Som / Mudo** (M) | Liga e desliga a voz e os avisos |
+| **GPS / Dilera** (G) | Troca a voz do GPS pela do Dilera |
 | **Tela cheia** (F) | Tela inteira (não aparece no iPhone, que não permite em páginas) |
 | **Placas** (E) | Editor 2D: arraste placas, semáforo, a **linha de largada/chegada** e a **partida do carro** (marcador azul; sai sempre no sentido da pista); salvar recarrega a cena 3D |
 | **Debug** (D) | Fonte (servidor/simulação), missão simulada, velocidade, semáforo, câmera, .glb do carro, escala |
@@ -99,7 +124,7 @@ ou do começo da faixa de cima, o trecho por onde toda volta passa; é onde a vo
 terminam. No `signs.json` exportado: `{ "id": "chegada", "at": [...] }`.
 
 A partida do carro é onde ele começa (simulação, "Voltar à largada" e ao entrar no modo
-real); por padrão ela fica ~70 cm depois da linha de largada. No `signs.json` exportado ela
+real); por padrão ela fica em cima da linha de largada. No `signs.json` exportado ela
 vem como `{ "id": "partida", "at": [...], "reverse": false }`. Atenção: o código do carro conta
 as placas de desvio a partir da largada, então partir depois de um desvio pode fazer o carro
 real (e o mapa) dar voltas sem chegar ao ponto; o mapa avisa os pontos inalcançáveis.

@@ -136,11 +136,16 @@ export class GpsPreview {
     const along = new Float32Array(count * 2);
     const side = new Float32Array(count * 2);
     const h = WIDTH / 2;
+    const box = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
     for (let i = 0; i < count; i++) {
       const t = i / (count - 1);
       const p = line.sample(fromS + span * t);
       const x = p.x * PX_TO_WORLD;
       const z = p.y * PX_TO_WORLD;
+      box.minX = Math.min(box.minX, x);
+      box.maxX = Math.max(box.maxX, x);
+      box.minZ = Math.min(box.minZ, z);
+      box.maxZ = Math.max(box.maxZ, z);
       const nx = -p.dir[1];
       const nz = p.dir[0];
       positions.set([x + nx * h, 0.03, z + nz * h, x - nx * h, 0.03, z - nz * h], i * 6);
@@ -171,6 +176,7 @@ export class GpsPreview {
 
     this.start = new THREE.Vector3(start.x * PX_TO_WORLD, 0, start.y * PX_TO_WORLD);
     this.end = this.pin.position.clone();
+    this.box = box;
     this.plan = plan;
     this.active = true;
     this.startedAt = now;
@@ -184,13 +190,22 @@ export class GpsPreview {
     this.endedAt = now;
   }
 
-  /** Enquadramento para a câmera: centro e raio do trecho carro → placa. */
+  /**
+   * Enquadramento para a câmera: centro e raio do trecho carro → placa, direção do carro
+   * até a placa e a caixa (mundo) que envolve a rota inteira, não só a reta entre os dois.
+   */
   focus() {
     if (!this.active) return null;
-    const center = this.start.clone().add(this.end).multiplyScalar(0.5);
+    const { minX, maxX, minZ, maxZ } = this.box;
+    const center = new THREE.Vector3((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
     const dir = this.end.clone().sub(this.start).setY(0);
-    const radius = Math.max(2.5, dir.length() / 2);
-    return { center, radius, dir: dir.lengthSq() > 1e-6 ? dir.normalize() : new THREE.Vector3(0, 0, -1) };
+    const radius = Math.max(2.5, Math.hypot(maxX - minX, maxZ - minZ) / 2);
+    return {
+      center,
+      radius,
+      box: this.box,
+      dir: dir.lengthSq() > 1e-6 ? dir.normalize() : new THREE.Vector3(0, 0, -1),
+    };
   }
 
   tick(now) {

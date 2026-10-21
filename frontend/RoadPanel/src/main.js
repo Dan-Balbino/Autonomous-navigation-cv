@@ -139,8 +139,8 @@ let layout = layoutTrack(finishAt);
 const network = new TrackNetwork(savedSigns, layout.segments);
 // Partida do carro (editor de placas); null = na linha de largada
 let startSpot = loadSavedStart(projectSigns);
-// Partida padrão: logo depois da linha (~70 cm), sem o marcador cobrir a linha no editor
-const DEFAULT_START = { edgeId: START.edgeId, s: 35 };
+// Partida padrão: em cima da linha de largada (acompanha a linha se ela for movida)
+const DEFAULT_START = { edgeId: START.edgeId, s: 0 };
 const carStart = () => (startSpot ? network.placeStart(startSpot.at, startSpot.reverse) : DEFAULT_START);
 let track = buildTrack(layout.finish);
 scene.add(track.group);
@@ -367,6 +367,8 @@ const controls = {
   trackLabel: document.getElementById('trackLabel'),
   sound: document.getElementById('soundToggle'),
   soundLabel: document.getElementById('soundLabel'),
+  voice: document.getElementById('voiceToggle'),
+  voiceLabel: document.getElementById('voiceLabel'),
 };
 const root = document.documentElement;
 const fullscreenElement = () => document.fullscreenElement || document.webkitFullscreenElement || null;
@@ -392,6 +394,14 @@ function toggleSound() {
   syncControls();
 }
 
+/** Troca as falas do GPS pelas do Dilera (e volta). */
+function toggleVoicePack() {
+  voice.setPack(voice.pack === 'dilera' ? 'gps' : 'dilera');
+  guide.lastCue = null;
+  guide.dileraLastClip = null;
+  syncControls();
+}
+
 function syncControls() {
   const top = rig.mode === 'top';
   controls.view.setAttribute('aria-pressed', String(top));
@@ -404,6 +414,10 @@ function syncControls() {
   controls.sound.setAttribute('aria-pressed', String(voice.enabled));
   controls.sound.title = voice.enabled ? 'Desligar voz e avisos (M)' : 'Ligar voz e avisos (M)';
   controls.soundLabel.textContent = voice.enabled ? 'Som' : 'Mudo';
+  const dilera = voice.pack === 'dilera';
+  controls.voice.setAttribute('aria-pressed', String(dilera));
+  controls.voice.title = dilera ? 'Voltar à voz do GPS (G)' : 'Trocar para a voz do Dilera (G)';
+  controls.voiceLabel.textContent = voice.packLabel;
   controls.mode.querySelectorAll('button').forEach((button) => {
     button.setAttribute('aria-checked', String(button.dataset.mode === state.source));
   });
@@ -411,6 +425,7 @@ function syncControls() {
 
 controls.view.addEventListener('click', () => setCamera(rig.mode === 'top' ? 'chase' : 'top'));
 controls.sound.addEventListener('click', toggleSound);
+controls.voice.addEventListener('click', toggleVoicePack);
 // Pista real <-> pista de teste (recarrega com a outra geometria e as placas dela)
 controls.track.addEventListener('click', () => switchTrack(TRACK_ID === 'teste' ? 'oficial' : 'teste'));
 controls.track.setAttribute('aria-pressed', String(TRACK_ID === 'teste'));
@@ -612,6 +627,7 @@ function gpsReason(now) {
 function arrivedAtPoint(point, role, waitButton = false) {
   state.pointArrival = { point, role: roleName(role) };
   if (role === ROLE.delivery) voice.say('delivered');
+  else if (role === ROLE.pickup) voice.say('recalc');   // Dilera: "recalculando" na coleta
   if (waitButton) {
     const data = state.linkStatus === 'live' ? state.liveData : null;
     state.awaitButton = {
@@ -680,7 +696,8 @@ function closeGps(now) {
 
 function updateGps(now) {
   const reason = gpsReason(now);
-  if (reason && (reason !== gpsState.reason || (gps.active && gps.plan !== state.plan))) openGps(reason, now);
+  if (reason === 'stop' && gpsState.reason !== 'stop') voice.say('stop-sign');   // Dilera: polícia na PARE
+  if (reason &&(reason !== gpsState.reason || (gps.active && gps.plan !== state.plan))) openGps(reason, now);
   else if (!reason && gpsState.reason) closeGps(now);
   rig.setFocus(gps.active ? gps.focus() : null);
   if (!gps.active) return;
@@ -735,6 +752,10 @@ const guide = {
   wasMoving: false,
   startedMission: null,
   lastCue: null,               // última manobra falada
+  dilera: new Map(),           // manobra -> já falada na voz do Dilera
+  dileraLastClip: null,        // última fala de manobra do Dilera (não repete seguida)
+  redStop: false,              // parado no semáforo vermelho (já avisou)
+  movingAt: -1e9,              // último instante em movimento
   hazard: false,
   hazardAt: -1e9,
   simHazardUntil: 0,
@@ -761,6 +782,7 @@ function updateGuide(now, speedMs) {
   if (guide.plan !== state.plan) {
     guide.plan = state.plan;
     guide.announced = new Set();
+    guide.dilera = new Map();
   }
   const mission = missionView();
   const moving = speedMs > 0.02 && !state.freeDrive;
@@ -773,9 +795,15 @@ function updateGuide(now, speedMs) {
     }
   }
   guide.wasMoving = moving;
+  if (moving) guide.movingAt = now;
+  updateRedLight(now, speedMs);
   if (!moving || state.missionDone) return;
 
   const lead = Math.min(CUE_MAX_PX, Math.max(CUE_MIN_PX, (speedMs / state.metersPerPx) * CUE_LEAD_S));
+  if (voice.pack === 'dilera') {
+    updateDileraGuide(speedMs, lead);
+    return;
+  }
   for (const event of state.plan.events) {
     const ahead = event.s - state.s;
     if (ahead < 0) continue;
@@ -790,6 +818,88 @@ function updateGuide(now, speedMs) {
     guide.lastCue = cue;
     voice.say(cue);
   }
+}
+
+// ── Voz do Dilera: distâncias na escala da pista ─────────────────────────
+// 1 m de pista vale 250 m de GPS: "1,5 km" a 6 m da manobra, "400 m" a 1,6 m e
+// "200 m" a 0,8 m. Cada aviso só sai se a frase inteira cabe antes da manobra.
+const DILERA_GPS_M_PER_M = 250;
+const DILERA_HEADS_M = 1500;
+const DILERA_CHAIN_M = 400;     // manobra seguinte até 400 m depois: "... e então vire à esquerda"
+const DILERA_EXIT_PX = 50;      // curva até 1 m depois da placa de desvio: "saia à direita"
+
+/** Fala da manobra no pacote do Dilera (null = não fala). */
+function dileraManeuver(event) {
+  if (event.turn === 'straight') return event.keep ? `keep-${event.keep}` : null;
+  const exit = state.plan.events.some((e) => e.type === 'detour' && event.s >= e.s && event.s - e.s < DILERA_EXIT_PX);
+  return exit ? `exit-${event.turn}` : event.turn;
+}
+
+const dileraKey = (event) => `turn@${Math.round(event.s)}`;
+
+/**
+ * Uma fala por manobra, no aviso mais distante que couber: "1,5 km", "400 m" ou "200 m" +
+ * manobra, ou só a manobra quase em cima. Nunca repete a manobra anterior: depois de
+ * "mantém à esquerda", outra "mantém à esquerda" seguida fica em silêncio. Com a voz ocupada
+ * a frase entra emendada com "e então" ("recalculando... e então, 400 m, vire à direita").
+ */
+function updateDileraGuide(speedMs, lead) {
+  const toGpsM = (px) => px * state.metersPerPx * DILERA_GPS_M_PER_M;
+  const maneuvers = state.plan.events.filter((e) => e.type === 'turn' && e.s >= state.s && dileraManeuver(e));
+  const next = maneuvers[0];
+  if (!next) return;
+  const key = dileraKey(next);
+  if (guide.dilera.get(key)) return;
+  const clip = dileraManeuver(next);
+  if (clip === guide.dileraLastClip) {
+    guide.dilera.set(key, true);   // mesma fala da manobra anterior: não repete
+    return;
+  }
+
+  const aheadPx = next.s - state.s;
+  const gpsM = toGpsM(aheadPx);
+  const seconds = (aheadPx * state.metersPerPx) / speedMs;
+  // Manobra seguinte logo depois (e diferente): "vire à direita e então vire à esquerda"
+  const after = maneuvers[1];
+  const afterClip = after && toGpsM(after.s - next.s) <= DILERA_CHAIN_M ? dileraManeuver(after) : null;
+  const turn = afterClip && afterClip !== clip ? [clip, 'then', afterClip] : [clip];
+
+  const done = (phrase) => {
+    voice.say(phrase);
+    guide.dilera.set(key, true);
+    if (turn.length > 1) guide.dilera.set(dileraKey(after), true);
+    guide.dileraLastClip = turn[turn.length - 1];
+  };
+
+  if (aheadPx <= lead) {
+    done(turn);   // quase em cima e nada coube antes: só a manobra
+    return;
+  }
+  const stage = gpsM <= 200 ? 'd200' : gpsM <= 400 ? 'd400' : gpsM <= DILERA_HEADS_M ? 'd1500' : null;
+  if (!stage) return;
+  const phrase = voice.busy ? ['then', stage, ...turn] : [stage, ...turn];
+  if (seconds >= voice.busyFor() + voice.duration(phrase)) done(phrase);
+}
+
+/** Parou no semáforo vermelho (Dilera: "radar"). Só conta se vinha andando. */
+function updateRedLight(now, speedMs) {
+  let red = false;
+  if (!state.freeDrive && speedMs <= 0.02 && now - guide.movingAt < 3000) {
+    if (state.source === 'sim' && !state.cameraMode) {
+      red = state.playing && state.respectSignals && state.simLight === 'red' && Boolean(nextEvent('traffic-light', 26));
+    } else {
+      const data = state.linkStatus === 'live' ? state.liveData : null;
+      red = Boolean(data && LIGHT_BY_CODE[data.trafficLight] === 'red' && !data.stopActive && !state.awaitButton);
+    }
+  }
+  if (red && !guide.redStop) voice.say('red-light');
+  // Continua "parado no vermelho" até o sinal abrir ou o carro andar
+  guide.redStop = red || (guide.redStop && speedMs <= 0.02 && redStillOn());
+}
+
+function redStillOn() {
+  if (state.source === 'sim' && !state.cameraMode) return state.simLight === 'red';
+  return LIGHT_BY_CODE[state.liveData?.trafficLight] === 'red';
 }
 
 /** Pedestre (o carro trava com command.stop) ou obstáculo crítico nos ultrassônicos da frente. */
@@ -1057,6 +1167,7 @@ window.addEventListener('keydown', (event) => {
   if (key === '3') setCamera('free');
   if (key === 'v') setCamera(rig.mode === 'top' ? 'chase' : 'top');
   if (key === 'm' && !event.ctrlKey && !event.metaKey) toggleSound();
+  if (key === 'g' && !event.ctrlKey && !event.metaKey) toggleVoicePack();
   if (key === 'f' && canFullscreen && !event.ctrlKey && !event.metaKey) toggleFullscreen();
 });
 window.addEventListener('keyup', (event) => state.keys.delete(event.key.toLowerCase()));

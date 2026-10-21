@@ -139,7 +139,7 @@ export class SignEditor {
       this.drafts = this.defaults.map((def) => ({ ...def, at: [...def.at] }));
       this.finish = null;
       const { finish } = layoutTrack(null);
-      this.start = { at: [finish.at[0] + finish.dir[0] * 35, finish.at[1] + finish.dir[1] * 35], reverse: false, isDefault: true };
+      this.start = { at: [...finish.at], reverse: false, isDefault: true };   // em cima da linha
       this.renderSigns();
       this.say('Posições padrão restauradas. Salve para aplicar.');
     });
@@ -302,7 +302,7 @@ export class SignEditor {
       // A partida padrão acompanha a linha
       if (this.start.isDefault) {
         const { finish } = layoutTrack(this.finish);
-        this.start.at = [finish.at[0] + finish.dir[0] * 35, finish.at[1] + finish.dir[1] * 35];
+        this.start.at = [...finish.at];
         this.placeStartMarker();
       }
     };
