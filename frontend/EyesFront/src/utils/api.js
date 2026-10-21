@@ -22,6 +22,8 @@ export const ZONE = { FREE: 0, FAR: 1, NEAR: 2, CRITICAL: 3 };
 const LIGHT_PERSON_BIT = 0b100;
 
 function toNumber(value, fallback) {
+  // Number(null) é 0: sem isso "sem telemetria" (null) viraria 0
+  if (value === null || value === undefined || value === "") return fallback;
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 }
@@ -69,6 +71,8 @@ export function normalizeCarState(raw) {
     realSpeed: toNumber(telemetry.speed, 0),
     // 0 = BMS sem leitura; so valores positivos contam como nivel real
     battery: battery !== null && battery > 0 ? battery : null,
+    // 0 sem corrente, 1 carregando, 2 carregada, 3 descarregando, 4 bateria baixa
+    batteryState: toNumber(telemetry.battery_state, null),
     sensors: {
       left: toZone(telemetry.left),
       frontLeft: toZone(telemetry.f_left),

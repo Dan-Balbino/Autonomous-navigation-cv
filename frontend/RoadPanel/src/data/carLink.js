@@ -3,7 +3,8 @@
  *
  * GET /api/vehicle_info -> { hud: { route, speed, servo, running, traffic_light_code,
  *   stop_active, right_detour_active, control_mode, ... }, command,
- *   telemetry: { speed, speed1..4, battery, left, f_left, f_right, right, ... }, _ts }
+ *   telemetry: { speed, speed1..4, battery, battery_state, run_button, run_button_presses,
+ *   left, f_left, f_right, right, ... }, _ts }
  *
  * `hud.route` espelha `nav.route` (core/navigation.py) como texto, ex.: "A → B → C".
  * Tudo aqui é tolerante: servidor fora, JSON vazio, campos ausentes ou _ts parado
@@ -38,6 +39,8 @@ export function apiBase() {
 }
 
 const num = (value, fallback = null) => {
+  // Number(null) é 0: sem isso "sem telemetria" (null) viraria bateria 0%
+  if (value === null || value === undefined || value === '') return fallback;
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 };
@@ -61,6 +64,12 @@ export function normalize(raw) {
     speed: num(telemetry.speed, 0),           // m/s (car.telemetry.speed = média das rodas)
     wheels: [1, 2, 3, 4].map((i) => num(telemetry[`speed${i}`], 0)),
     battery: num(telemetry.battery),
+    // null até o Arduino mandar telemetria; 0 sem corrente, 1 carregando, 2 carregada,
+    // 3 descarregando, 4 bateria baixa (car.telemetry.battery_state)
+    batteryState: num(telemetry.battery_state),
+    // Contador de apertos do botão RUN (o pulso run_btn dura pouco para o polling pegar)
+    runPresses: num(telemetry.run_button_presses),
+    runButton: Boolean(telemetry.run_button),
     // Zonas dos ultrassônicos: 0 livre, 1 longe (~50 cm), 2 perto (~30 cm), 3 crítico (~8 cm)
     proximity: {
       left: num(telemetry.left, 0),
@@ -73,6 +82,8 @@ export function normalize(raw) {
     rightDetour: Boolean(hud.right_detour_active),
     // main.py liga command.stop quando a IA vê uma pessoa
     pedestrian: Boolean(command.stop),
+    // nav.mission_state[0]: 1 coleta, 0 entrega, -1 sem rota/manual (papel do ponto atual)
+    missionState: num(command.mission_state, -1),
     controlMode: typeof hud.control_mode === 'string' ? hud.control_mode : '',
   };
 }

@@ -248,6 +248,37 @@ body:not(.vertical-driving-mode) .top-clock {
     background: var(--border-neon-bright);
 }
 
+/* Estado da bateria (car.telemetry.battery_state): raio ao carregar, pulso enquanto carrega */
+.status-item .battery-bolt {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 10px;
+    height: 10px;
+    fill: #0b1a12;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.status-item[data-state="charging"] .battery-bolt,
+.status-item[data-state="full"] .battery-bolt { opacity: 1; }
+
+.status-item[data-state="charging"] .battery-fill { animation: battery-charge 1.4s ease-in-out infinite; }
+
+.status-item[data-state="charging"] .status-value,
+.status-item[data-state="full"] .status-value { color: var(--cyber-green); }
+
+.status-item[data-state="low"] .status-value { color: #ff3b30; }
+
+@keyframes battery-charge {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .status-item[data-state="charging"] .battery-fill { animation: none; }
+}
+
 /* ============================================
    Sinais (placa de PARE / semáforo / desvio / veículo)
    Mesmo padrão do PWM e do Farol na barra de baixo: ícone em cima,

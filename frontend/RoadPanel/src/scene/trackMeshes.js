@@ -16,7 +16,11 @@ export const COLORS = {
   island: 0xfdfdfe,
   line: 0x0e131b,
   dot: 0x2f7bff,
+  charge: 0x12d97a,        // onda de carga da bateria
 };
+
+// Onda verde quando a bateria começa a carregar: pulsos lentos saindo do carro em loop por 9 s
+export const CHARGE_WAVE_S = 9;
 
 const ISLAND_HEIGHT = 0.022;
 const LINE_OPACITY = 0.58;
@@ -130,6 +134,11 @@ function dotField(center) {
         uBase: { value: new THREE.Color(COLORS.field) },
         uDot: { value: new THREE.Color(COLORS.dot) },
         uSpacing: { value: 0.46 },
+        uCharge: { value: new THREE.Color(COLORS.charge) },
+        uWaveStart: { value: -1e4 },
+        uWaveOrigin: { value: new THREE.Vector2() },
+        uWaveMotion: { value: 1 },
+        uWaveDuration: { value: CHARGE_WAVE_S },
       },
     ]),
     vertexShader: /* glsl */ `
@@ -149,19 +158,46 @@ function dotField(center) {
       uniform vec3 uBase;
       uniform vec3 uDot;
       uniform float uSpacing;
+      uniform vec3 uCharge;
+      uniform float uWaveStart;
+      uniform vec2 uWaveOrigin;
+      uniform float uWaveMotion;
+      uniform float uWaveDuration;
       varying vec2 vWorld;
+      // Anel largo e lento que sai do carro e se dissolve ao abrir (fase 0..1)
+      float ring(float dist, float phase) {
+        float radius = phase * 20.0;
+        float front = exp(-pow((dist - radius) / 1.9, 2.0));
+        float wake = smoothstep(radius - 9.0, radius, dist) * smoothstep(radius + 1.5, radius - 0.5, dist) * 0.3;
+        float fade = 1.0 - smoothstep(0.0, 1.0, phase);
+        return (front + wake) * fade * smoothstep(0.0, 0.08, phase);
+      }
       void main() {
+        // Onda de carga: as bolinhas ficam verdes e anéis passam em loop durante uWaveDuration
+        float wt = uTime - uWaveStart;
+        float charging = step(0.0, wt) * step(wt, uWaveDuration);
+        float tint = charging * smoothstep(0.0, 0.8, wt) * (1.0 - smoothstep(uWaveDuration - 1.6, uWaveDuration, wt));
+        float dist = length(vWorld - uWaveOrigin);
+        float period = 3.2;
+        float rings = (ring(dist, fract(wt / period)) + 0.55 * ring(dist, fract(wt / period + 0.5))) * 0.85;
+        // Foco: halo grande e macio no carro, respirando devagar
+        float focus = exp(-pow(dist / 4.5, 2.0)) * (0.75 + 0.25 * sin(wt * 1.9));
+        rings = (rings + focus) * tint * uWaveMotion;
         vec2 cell = fract(vWorld / uSpacing) - 0.5;
         float d = length(cell) * uSpacing;
         float aa = fwidth(d) * 1.2;
-        float dotMask = 1.0 - smoothstep(0.035 - aa, 0.035 + aa, d);
+        float radius = 0.035 + 0.018 * clamp(rings, 0.0, 1.0);
+        float dotMask = 1.0 - smoothstep(radius - aa, radius + aa, d);
         // Faixas de luz passando em direções diferentes
         float w1 = smoothstep(0.82, 1.0, sin(dot(vWorld, vec2(0.21, 0.08)) - uTime * 0.9));
         float w2 = smoothstep(0.86, 1.0, sin(dot(vWorld, vec2(-0.06, 0.19)) - uTime * 0.6 + 1.7));
         float w3 = smoothstep(0.9, 1.0, sin(length(vWorld - vec2(11.0, 6.0)) * 0.55 - uTime * 1.1));
         float glow = clamp(w1 + w2 * 0.8 + w3 * 0.7, 0.0, 1.0);
-        float strength = dotMask * (0.22 + 0.78 * glow);
-        gl_FragColor = vec4(mix(uBase, uDot, strength), 1.0);
+        float strength = dotMask * (0.22 + 0.78 * max(glow, clamp(rings, 0.0, 1.0)));
+        vec3 dotColor = mix(uDot, uCharge, tint);
+        // Brilho fraco do anel no próprio campo, entre as bolinhas
+        vec3 base = mix(uBase, uCharge, 0.12 * clamp(rings, 0.0, 1.0));
+        gl_FragColor = vec4(mix(base, dotColor, strength), 1.0);
         #include <fog_fragment>
       }
     `,
@@ -235,5 +271,14 @@ export function buildTrack(finish = layoutTrack().finish) {
   startGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   group.add(new THREE.Mesh(startGeometry, new THREE.MeshBasicMaterial({ color: COLORS.line, side: THREE.DoubleSide })));
 
-  return { group, tick: (time) => { field.material.uniforms.uTime.value = time; } };
+  const uniforms = field.material.uniforms;
+  /** `wave`: { start (s), x, z, motion } da onda de carga, ou null. */
+  const tick = (time, wave = null) => {
+    uniforms.uTime.value = time;
+    if (!wave) { uniforms.uWaveStart.value = -1e4; return; }
+    uniforms.uWaveStart.value = wave.start;
+    uniforms.uWaveOrigin.value.set(wave.x, wave.z);
+    uniforms.uWaveMotion.value = wave.motion ? 1 : 0;
+  };
+  return { group, tick };
 }

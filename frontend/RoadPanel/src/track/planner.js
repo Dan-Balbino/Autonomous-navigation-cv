@@ -8,7 +8,7 @@
  *   no sentido da pista) e volta à largada.
  * Rota vazia = volta externa.
  */
-import { walkCarLogic } from './carLogic.js';
+import { walkCarLogic, walkCamera } from './carLogic.js';
 
 const VALID_POINTS = new Set(['A', 'B', 'C']);
 const NODE_TURN_EVENT_DEG = 30;
@@ -39,7 +39,13 @@ const dot = (a, b) => a[0] * b[0] + a[1] * b[1];
  * Monta o plano a partir de `start` = { edgeId, s }.
  * Devolve { edges, line, ranges, events, length, targets, unreachable }.
  */
-export function buildPlan(network, start, queue, { mode = 'shortest', detoursDone = 0 } = {}) {
+export function buildPlan(network, start, queue, { mode = 'shortest', detoursDone = 0, armed = false } = {}) {
+  if (mode === 'camera') {
+    const walk = walkCamera(network, start, queue, armed);
+    const plan = finishPlan(network, start, walk.edges, walk.targets, walk.unreachable, mode);
+    plan.firstBranch = walk.firstBranch;
+    return plan;
+  }
   if (mode === 'car') {
     const walk = walkCarLogic(network, start, queue, detoursDone);
     return finishPlan(network, start, walk.edges, walk.targets, walk.unreachable, mode);

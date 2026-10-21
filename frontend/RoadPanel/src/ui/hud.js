@@ -32,7 +32,16 @@ export function formatDistance(meters) {
   return `${meters.toFixed(1).replace('.', ',')} m`;
 }
 
-const roleOf = (index, total) => roleName(index, total);
+const roleOf = (mission, index) => roleName(mission.roles[index]);
+
+// car.telemetry.battery_state (mesma ordem do ctrl_panel.py)
+const BATTERY_STATES = [
+  { label: 'Sem corrente', kind: 'idle' },
+  { label: 'Carregando', kind: 'charging' },
+  { label: 'Carregada', kind: 'full' },
+  { label: 'Descarregando', kind: 'discharging' },
+  { label: 'Bateria baixa', kind: 'low' },
+];
 
 /** Escolhe a próxima coisa que o motorista precisa saber, como nos mapas de carro. */
 export function pickManeuver(plan, s, mission, missionDone) {
@@ -48,7 +57,7 @@ export function pickManeuver(plan, s, mission, missionDone) {
   if (next.type === 'stop') return { kind: 'stop', icon: 'stop', label: 'Placa PARE', distancePx };
   if (next.type === 'traffic-light') return { kind: 'light', icon: 'light', label: 'Semáforo', distancePx };
   const index = mission.all.indexOf(next.point, mission.doneCount);
-  const label = index >= 0 ? roleAhead(index, mission.all.length) : `Ponto ${next.point} à frente`;
+  const label = index >= 0 ? roleAhead(mission.roles[index]) : `Ponto ${next.point} à frente`;
   return { kind: 'point', icon: 'point', point: next.point, label, distancePx };
 }
 
@@ -72,6 +81,8 @@ export class Hud {
       pwm: $('pwmValue'),
       servo: $('servoValue'),
       battery: $('batteryValue'),
+      batteryMetric: $('batteryMetric'),
+      batteryState: $('batteryState'),
       mode: $('modeValue'),
       estimate: $('estimateNote'),
       warning: $('missionWarning'),
@@ -126,20 +137,23 @@ export class Hud {
     this.set('distance', el.distance, m.kind === 'done' ? 'Fim' : formatDistance(m.distancePx * view.metersPerPx));
 
     // Missão: o que veio do código + papel de cada ponto
-    const { all, doneCount, raw, source } = view.mission;
+    const { all, roles, doneCount, raw, source } = view.mission;
     this.set('missionSource', el.missionSource, source);
     this.set('missionRaw', el.missionRaw, raw && all.length ? `Recebido: ${raw}` : 'Nenhuma missão recebida');
-    const missionKey = `${all.join('')}|${doneCount}`;
+    // Parada consumida com o carro ainda travado nela (point_stop_latched): "aguardando"
+    const waitingAt = view.waitingButton ? doneCount - 1 : -1;
+    const missionKey = `${all.join('')}|${roles.join(',')}|${doneCount}|${waitingAt}`;
     if (this.cache.get('mission') !== missionKey) {
       this.cache.set('mission', missionKey);
       el.missionPoints.innerHTML = all.map((p, i) => {
-        const done = i < doneCount;
-        const current = i === doneCount;
-        const cls = done ? 'is-done' : current ? 'is-current' : '';
-        const state = done ? 'concluído' : current ? 'próximo' : 'pendente';
-        return `<li class="${cls}" aria-label="${roleOf(i, all.length)} no ponto ${p}, ${state}">
+        const waiting = i === waitingAt;
+        const done = i < doneCount && !waiting;
+        const current = i === doneCount && waitingAt < 0;
+        const cls = waiting ? 'is-waiting' : done ? 'is-done' : current ? 'is-current' : '';
+        const state = waiting ? 'parado, aguardando o botão RUN' : done ? 'concluído' : current ? 'próximo' : 'pendente';
+        return `<li class="${cls}" aria-label="${roleOf(view.mission, i)} no ponto ${p}, ${state}">
           <span class="route-point">${done ? CHECK : p}</span>
-          <span class="route-role">${roleOf(i, all.length)}${done ? ` ${p}` : ''}</span>
+          <span class="route-role">${roleOf(view.mission, i)}${done ? ` ${p}` : ''}${waiting ? ' · aguardando' : ''}</span>
         </li>`;
       }).join('');
       el.missionEmpty.hidden = all.length > 0;
@@ -149,13 +163,27 @@ export class Hud {
     const data = view.source === 'live' ? view.data : null;
     this.set('pwm', el.pwm, data ? String(Math.round(data.pwm)) : '--');
     this.set('servo', el.servo, data ? `${Math.round(data.servo)}°` : '--');
-    this.set('battery', el.battery, data && data.battery ? `${Math.round(data.battery)}%` : '--');
+    // Bateria vem da telemetria real mesmo na simulação (modo câmera), se o servidor está no ar
+    const live = view.linkStatus === 'live' ? view.data : null;
+    const battery = live && live.battery !== null ? `${Math.round(live.battery)}%` : '--';
+    // Carregamento simulado no debug: mostra "Carregando" enquanto a onda toca
+    const realState = live && BATTERY_STATES[live.batteryState] ? live.batteryState : null;
+    const batteryState = view.simCharging ? 1 : realState;
+    this.set('battery', el.battery, battery);
+    this.set('batteryState', el.batteryState, batteryState === null ? ''
+      : view.simCharging ? 'Carregando (simulado)' : BATTERY_STATES[batteryState].label);
+    this.set('batteryKind', el.batteryMetric.dataset, batteryState === null ? 'none' : BATTERY_STATES[batteryState].kind, 'state');
     let mode = '--';
     if (view.source === 'sim') {
       if (view.missionDone) mode = 'Percurso finalizado';
       else if (view.sim.freeDrive) mode = 'Direção livre';
       else if (view.sim.held) mode = 'Parado na placa';
+      else if (view.waitingButton) mode = 'Aguardando botão';
+      else if (view.sim.camera && !view.sim.cameraLink) mode = 'Sem câmera';
+      else if (view.sim.camera) mode = view.sim.playing ? 'Simulando · câmera' : 'Pausado';
       else mode = view.sim.playing ? 'Simulando' : 'Pausado';
+    } else if (data && view.waitingButton) {
+      mode = 'No ponto · aguardando botão';
     } else if (data) {
       mode = data.controlMode ? data.controlMode.charAt(0) + data.controlMode.slice(1).toLowerCase() : (data.running ? 'Em movimento' : 'Parado');
     }
