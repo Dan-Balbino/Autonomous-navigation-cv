@@ -981,6 +981,19 @@ a.map-button { text-decoration: none; }
   color: var(--ink-2);
 }
 
+/* Linha pronta para colar no Config.h do ESP32 */
+.debug-code {
+  flex: 1 1 100%;
+  margin-top: 8px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: var(--control);
+  font: 12px/1.3 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  color: var(--ink);
+  user-select: all;
+}
+
+
 .slider span { display: flex; justify-content: space-between; }
 .slider output { color: var(--ink); }
 

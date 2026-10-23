@@ -31,6 +31,7 @@ import { Hud } from './ui/hud.js';
 import { DebugPanel } from './ui/debugPanel.js';
 import { SignEditor, loadSavedSigns, loadSavedStart, loadSavedFinish } from './ui/signEditor.js';
 import { loader } from './ui/loader.js';
+import { SPEED_SCALE } from './config/speed.js';
 
 const LIGHT_BY_CODE = { 0: 'red', 1: 'yellow', 2: 'green' };
 const STOP_HOLD_MS = 3000;   // igual a STOP_WAIT_SECONDS do detector de placas
@@ -51,6 +52,10 @@ const state = {
   // 'car': tabela fixa lane_guide_map do navigation.py (só vale com as placas na posição original)
   planMode: 'shortest',
   pwmToMs: 0.004,              // m/s por unidade de PWM quando a telemetria não traz velocidade
+  speedScale: SPEED_SCALE,     // velocidade digital: carro 3D = real × isto (slider no debug)
+  // Trecho andado desde a última referência (marco, ponto, largada ou trajetória nova):
+  // permite recalcular a posição quando o coeficiente muda (anchorS + speedScale × realPx)
+  odo: { plan: null, ref: null, anchorS: 0, realPx: 0 },
   pointConfirmed: false,
   cruiseMs: 0.4,
   liveSpeed: 0,                // velocidade exibida no modo real (suavizada)               // velocidade típica do carro real (para o tempo estimado)       // o servidor confirmou um ponto desde o último quadro
@@ -502,6 +507,27 @@ function updateAwaitButton(data, now) {
   if (!data.running) wait.sawStopped = true;
   else if (wait.sawStopped) return releaseButtonWait();
   if (data.running && data.pwm > 0 && now - wait.at > LATCH_PWM_GRACE_MS) releaseButtonWait();
+}
+
+/** Posição atual vira a referência do trecho andado (zera a distância real desde ela). */
+function anchorOdometry() {
+  const odo = state.odo;
+  odo.plan = state.plan;
+  odo.ref = localizer.ref;
+  odo.anchorS = state.s;
+  odo.realPx = 0;
+}
+
+/**
+ * Coeficiente novo (slider do debug): recalcula o trecho já andado desde a última referência
+ * como se ele valesse desde lá, sem passar de uma placa de desvio ou ponto ainda não confirmados.
+ */
+function setSpeedScale(scale) {
+  state.speedScale = scale;
+  const odo = state.odo;
+  if (state.source !== 'live' || odo.plan !== state.plan) return;
+  const limit = Math.min(localizer.gateLimit(state.plan), state.plan.length - 0.01);
+  state.s = Math.max(0, Math.min(odo.anchorS + scale * odo.realPx, limit));
 }
 
 function releaseButtonWait() {
@@ -977,7 +1003,8 @@ function frame(now) {
 
   if (needsReplan()) replan(true);
 
-  let speedMs = 0;
+  let speedMs = 0;      // velocidade real (número em M/S na tela)
+  let mapSpeedMs = 0;   // velocidade do carro 3D no mapa (SPEED_SCALE no modo real)
   let pose;
   if (state.source === 'sim' && state.freeDrive) {
     speedMs = driveFree(dt);
@@ -996,10 +1023,17 @@ function frame(now) {
       state.liveSpeed += (target - state.liveSpeed) * (1 - Math.exp(-dt * 8));
       if (target === 0 && state.liveSpeed < 0.01) state.liveSpeed = 0;
       speedMs = state.liveSpeed;
-      state.s = localizer.step(state.plan, state.s, data, dt, speedMs, state.metersPerPx, now, {
+      // Velocidade digital (src/config/speed.js, ajustável no debug): só o carro 3D usa
+      mapSpeedMs = speedMs * state.speedScale;
+      const odo = state.odo;
+      if (odo.plan !== state.plan) anchorOdometry();   // trajetória nova: s conhecido
+      state.s = localizer.step(state.plan, state.s, data, dt, mapSpeedMs, state.metersPerPx, now, {
         routeShrank: state.pointConfirmed,
         hasRoute: state.serverRoute.length > 0,
       });
+      // Marco detectado / ponto confirmado / largada: a posição foi corrigida, nova âncora
+      if (localizer.ref !== odo.ref) anchorOdometry();
+      else odo.realPx += (speedMs / state.metersPerPx) * dt;
       state.pointConfirmed = false;
       if (state.s >= state.plan.length) {
         replan(false, START);
@@ -1028,6 +1062,7 @@ function frame(now) {
     const ahead = state.plan.line.sample(state.s + 6);
     pose = { x: p.x, y: p.y, yaw: Math.atan2(ahead.y - p.y, ahead.x - p.x) };
   }
+  if (state.source !== 'live') mapSpeedMs = speedMs;   // simulação e direção livre: sem coeficiente
 
   // Direção suavizada: sem "quinas" de amostragem na trajetória
   state.heading = state.heading === null ? pose.yaw : angleLerp(state.heading, pose.yaw, 1 - Math.exp(-dt * 14));
@@ -1046,7 +1081,8 @@ function frame(now) {
   if (state.source === 'live' && speedMs > 0.05) state.cruiseMs += (speedMs - state.cruiseMs) * Math.min(1, dt * 0.5);
   updateGps(now);
   updateCargoPrompt();
-  updateGuide(now, speedMs);
+  // Voz: antecedência das manobras medida no mapa, então usa a velocidade do carro 3D
+  updateGuide(now, mapSpeedMs);
   updateHazard(now);
   gps.tick(now);
   proximity.update(state.source === 'live' && state.linkStatus === 'live' ? state.liveData?.proximity : null, dt);
@@ -1151,6 +1187,8 @@ const editor = new SignEditor({
 const debug = new DebugPanel({
   state,
   apiBase: apiBase(),
+  defaultSpeedScale: SPEED_SCALE,
+  setSpeedScale,
   setSource: (source) => setSource(source, true),
   setCamera,
   getCamera: () => rig.mode,

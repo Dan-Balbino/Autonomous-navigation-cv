@@ -34,6 +34,11 @@ export class DebugPanel {
       planModeHint: $('planModeHint'),
       pwmToMs: $('pwmToMs'),
       pwmToMsOut: $('pwmToMsOut'),
+      speedScale: $('speedScale'),
+      speedScaleOut: $('speedScaleOut'),
+      speedScaleLine: $('speedScaleLine'),
+      speedScaleCopy: $('speedScaleCopy'),
+      speedScaleReset: $('speedScaleReset'),
     };
     this.lastReadout = 0;
     this.bind();
@@ -109,6 +114,28 @@ export class DebugPanel {
       state.pwmToMs = Number(el.pwmToMs.value);
       this.sync();
     });
+    // Velocidade digital: testa o coeficiente ao vivo e copia a linha para o Config.h do ESP32
+    el.speedScale.addEventListener('input', () => {
+      api.setSpeedScale(Number(el.speedScale.value));   // recalcula o trecho já andado
+      this.sync();
+    });
+    el.speedScaleReset.addEventListener('click', () => {
+      api.setSpeedScale(api.defaultSpeedScale);
+      this.sync();
+    });
+    el.speedScaleCopy.addEventListener('click', async () => {
+      const text = el.speedScaleLine.textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        el.speedScaleCopy.textContent = 'Copiado';
+      } catch {
+        // Sem acesso à área de transferência (página fora de https/localhost): seleciona para Ctrl+C
+        getSelection().selectAllChildren(el.speedScaleLine);
+        el.speedScaleCopy.textContent = 'Use Ctrl+C';
+      }
+      clearTimeout(this.copyTimer);
+      this.copyTimer = setTimeout(() => { el.speedScaleCopy.textContent = 'Copiar'; }, 1600);
+    });
     el.scale.addEventListener('input', () => {
       state.metersPerPx = Number(el.scale.value);
       this.sync();
@@ -155,6 +182,9 @@ export class DebugPanel {
       : 'Menor caminho pelos pontos na ordem, sempre no sentido da pista: desvia só quando compensa e pode dar mais voltas.';
     el.pwmToMs.value = String(state.pwmToMs);
     el.pwmToMsOut.textContent = state.pwmToMs.toFixed(4).replace('.', ',');
+    el.speedScale.value = String(state.speedScale);
+    el.speedScaleOut.textContent = state.speedScale.toFixed(2).replace('.', ',');
+    el.speedScaleLine.textContent = `#define SPEED_SCALE ${state.speedScale.toFixed(2)}f`;
     el.play.textContent = state.playing ? 'Pausar' : 'Andar';
     el.speed.value = String(state.simSpeed);
     el.speedOut.textContent = `${state.simSpeed.toFixed(2).replace('.', ',')} m/s`;

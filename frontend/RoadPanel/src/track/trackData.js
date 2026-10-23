@@ -234,10 +234,13 @@ const TEST_SEGMENTS = [
 const TEST_SIGNS = [
   { id: 'semaforo', kind: 'traffic-light', at: [204, 231], label: 'Semáforo' },
   { id: 'desvio-1', kind: 'detour', at: [403, 158], label: 'Desvio à direita' },
-  { id: 'ponto-A', kind: 'point', point: 'A', at: [411, 361], label: 'Ponto A' },
+  // Na faixa de cima, antes da curva do canto superior direito (mesmo lugar do desvio-2 oficial)
+  { id: 'desvio-2', kind: 'detour', at: [677, 168], label: 'Desvio à direita' },
+  { id: 'ponto-A', kind: 'point', point: 'A', at: [414, 274], label: 'Ponto A' },
   { id: 'pare', kind: 'stop', at: [558, 438], label: 'PARE' },
-  { id: 'ponto-B', kind: 'point', point: 'B', at: [705, 290], label: 'Ponto B' },
-  { id: 'ponto-C', kind: 'point', point: 'C', at: [338, 363], label: 'Ponto C' },
+  { id: 'ponto-B', kind: 'point', point: 'B', at: [707, 247], label: 'Ponto B' },
+  // B e C na mesma ilha (a da direita), C mais embaixo
+  { id: 'ponto-C', kind: 'point', point: 'C', at: [713, 382], label: 'Ponto C' },
 ];
 
 const BOUNDARY_SET = IS_TEST ? TEST_BOUNDARIES : RAW_BOUNDARIES;

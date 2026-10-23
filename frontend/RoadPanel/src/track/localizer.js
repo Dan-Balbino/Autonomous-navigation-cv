@@ -110,6 +110,16 @@ export class Localizer {
     return next;
   }
 
+  /**
+   * Até onde a estimativa pode ir sem confirmação: o próximo portão (placa de desvio ou
+   * ponto-alvo ainda não confirmados) + folga. Usado ao recalcular o trecho já andado.
+   */
+  gateLimit(plan) {
+    const gate = plan.events.find((e) => e.s > this.gateFloor + 1 &&
+      (e.type === 'detour' || (e.type === 'point' && e.target)));
+    return gate ? gate.s + GATE_SLACK : Infinity;
+  }
+
   /** Corrige s para o marco `type` mais provável perto da estimativa. */
   snap(plan, s, type, now) {
     let best = null;
