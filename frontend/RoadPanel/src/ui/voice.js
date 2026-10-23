@@ -20,7 +20,6 @@ const PACKS = {
       straight: 'em-frente.mp3',
       pickup: 'coleta.mp3',
       delivery: 'entrega.mp3',
-      delivered: 'mercado-livre-entrega.mp3',
       start: 'start-percurso.mp3',
       finish: 'end-percurso.mp3',
       pedestrian: 'pedestre-detectado.mp3',

@@ -213,6 +213,16 @@
     <section class="debug-section" data-only="live">
       <h3>Localização do carro real</h3>
       <label class="slider">
+        <span>Velocidade digital (SPEED_SCALE) <output id="speedScaleOut">0,35</output></span>
+        <input type="range" id="speedScale" min="0.05" max="1.5" step="0.01" value="0.35">
+      </label>
+      <div class="row">
+        <code class="debug-code" id="speedScaleLine">#define SPEED_SCALE 0.35f</code>
+        <button type="button" class="text-button" id="speedScaleCopy">Copiar</button>
+        <button type="button" class="text-button" id="speedScaleReset">Padrão</button>
+      </div>
+      <p class="debug-hint" id="speedScaleHint">O carro 3D anda a velocidade real × este valor; o M/S da tela continua real. Não fica salvo: quando acertar, copie a linha para o Config.h do ESP32 e o valor para src/config/speed.js.</p>
+      <label class="slider">
         <span>Sem velocidade na telemetria: m/s por PWM <output id="pwmToMsOut">0,0040</output></span>
         <input type="range" id="pwmToMs" min="0" max="0.02" step="0.0005" value="0.004">
       </label>

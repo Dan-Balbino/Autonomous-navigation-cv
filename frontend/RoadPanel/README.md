@@ -38,7 +38,6 @@ ponto de coleta e ponto de entrega à frente. Também toca:
 | Quando | Som |
 |---|---|
 | Carro começa a missão | `start-percurso` |
-| Último ponto confirmado (encomenda entregue) | `mercado-livre-entrega` |
 | Volta à linha de chegada depois da entrega ("Percurso finalizado") | `end-percurso` |
 | Pessoa (`command.stop`) ou obstáculo crítico nos ultrassônicos da frente | `pedestre-detectado` + faixa vermelha |
 
