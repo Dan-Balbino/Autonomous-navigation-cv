@@ -68,15 +68,14 @@ bool receiveCommand(CarCommand &cmd) {
 // ---------- Envio pro CAN ----------
 void processCommand(CarCommand &cmd) {
   // Envia o comando para o módulo de controle via CAN
-  bool parar;
+  bool estado;
   if (cmd.run) {
-    parar = cmd.stop;
+    estado = cmd.vehicleState;
   } else {
-    parar = false;
+    estado = true;
   }
 
-  // Mantive cmd.stop como estava. Se a intenção for usar o `parar`, troque aqui.
-  sendMotorCommand(MOTOR_COMMAND, (int16_t)(cmd.servo - 90), cmd.speed, cmd.reverse, cmd.stop, cmd.vehicleState);
+  sendMotorCommand(MOTOR_COMMAND, (int16_t)(cmd.servo - 90), cmd.speed, cmd.reverse, cmd.stop, estado);
 }
 
 // ---------- Telemetria ----------
@@ -111,7 +110,9 @@ void sendTelemetry(const Telemetry &telemetry) {
 }
 
 // ---------- Leitura da Serial1 ----------
-void readSerial1(uint8_t &battery, uint8_t &current, uint8_t &percentage, uint8_t &battery_state) {
+bool readSerial1(uint8_t &battery, uint8_t &current, uint8_t &percentage, uint8_t &battery_state) {
+  bool received = false;
+
   while (Serial1.available()) {
     char c = Serial1.read();
 
@@ -128,6 +129,7 @@ void readSerial1(uint8_t &battery, uint8_t &current, uint8_t &percentage, uint8_
           current       = constrain(cur, 0, 255);
           percentage    = constrain(pct, 0, 100);
           battery_state = constrain(st, 0, 255);
+          received = true;
         }
       }
       serial1_index = 0;
@@ -140,4 +142,6 @@ void readSerial1(uint8_t &battery, uint8_t &current, uint8_t &percentage, uint8_
       serial1_overflow = true;  // linha grande demais — descarta até o próximo '\n'
     }
   }
+
+  return received;
 }

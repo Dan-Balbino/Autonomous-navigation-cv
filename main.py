@@ -7,6 +7,7 @@ import threading
 import time
 
 import cv2
+import pygame
 import serial
 
 from config.setup import (
@@ -142,6 +143,7 @@ def _read_source_frame():
 frame_lock = threading.Lock()
 sign_lock = threading.Lock()
 
+
 if _image_test_mode:
     COM = None
     camera, camera_idx = None, -1
@@ -152,6 +154,24 @@ else:
     camera, camera_idx = open_camera(_usb_cams)
     camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
+COM_esp = input("COM da esp: ")
+
+esp32_tx_queue = queue.Queue(maxsize=1)
+esp32_serial = None
+
+if COM_esp:
+    try:
+        esp32_serial = serial.Serial(
+            COM_esp,
+            SERIAL_BAUDRATE,
+            timeout=0
+        )
+        print(f"[ESP32] Conectada em {COM_esp}")
+    except (serial.SerialException, OSError) as e:
+        print(f"[ESP32] Falha ao conectar: {e}")
+        COM_esp = ""
+else:
+    print("[ESP32] Ignorada — nenhuma conexão será iniciada.")
 
 # ── Inicialização da cãmera ────────────────────────────
 if _image_test_mode:
@@ -181,6 +201,7 @@ if not _image_test_mode:
     allow_dashboard_firewall_rule(DASHBOARD_PORT)
 
 
+
 # ── Inicialização dos objetos ───────────────
 corrector = FisheyeCorrector("calibration/fisheye_calibration.npz", width, height, balance=0.63, offset_x=-90)
 sign_det = ObjectDetector("model/modelo_7.pt")
@@ -192,6 +213,12 @@ panel = ControlPanel(width, height, test_mode=(COM is None),
                      twin_path=_twin_path if os.path.exists(_twin_path) else "",
                      camera_idx=camera_idx,
                      car=car, nav=nav, remote_control=rc)
+operation_mode = panel.operation_mode
+
+
+
+# Inicializa o mixer
+pygame.mixer.init()
 
 # ── Inicialização dos PIDs ───────────────
 pid_straight  = PID(Kp=0, Ki=0, Kd=0, output_limit=90.0)
@@ -280,6 +307,7 @@ def pidHub(erro, pid_straight, pid_curve, pid_close_curve, dt=0.2):
 # ── Loop principal ───────────────
 def mainLoop():
     global camera, camera_idx
+    global operation_mode
     global shared_frame, shared_frame_id, right_detour, flag_person_detected, flag_point_detected, lane_reset_standby, reset_request, flag_stop_point  # noqa: PLW0602
 
     error = 0
@@ -298,6 +326,8 @@ def mainLoop():
     point_stop_saw_stopped = False
 
     while True:
+        operation_mode = panel.operation_mode
+
         # ── Reconexão dinâmica (solicitada pelo painel) ───────────────
         req = panel.get_connection()
         if not req:
@@ -465,8 +495,8 @@ def mainLoop():
             route_stop_requested.clear()
             if not remote_control_active:
                 point_stop_latched = True
+                set_lane_preference("neutral")
                 point_stop_saw_stopped = False
-                set_lane_preference("right")
 
         if remote_control_active:
             point_stop_latched = False
@@ -527,28 +557,34 @@ def mainLoop():
             reset_request = None
         
         # ── Dtecções da IA ──────────────────────────────────────────────
-        if (not run or flag_stop or flag_tl == 0 or pwm_value < MIN_MOVING_PWM
-                or flag_person_detected or point_stop_latched):
+        if (not run or flag_stop or pwm_value < MIN_MOVING_PWM
+                or flag_person_detected or point_stop_latched or flag_tl == 0):
             effective_pwm = 0
+            if flag_tl == 0:
+                car.command.stop = True
+            else:
+                car.command.stop = False
         elif flag_tl == 1:
             effective_pwm = yellow_pwm
         else:
             curve_speed_error = panel.get( "PARÂMETROS DO CARRO","Erro para iniciar velocidade na curva (px)")
             curve_pwm = panel.get("PARÂMETROS DO CARRO", "Velocidade na curva (PWM)")
             
-            
+        
             if lane_detection.preference_lane == "right":
-                effective_pwm = 100
+                effective_pwm = 93
             elif abs(error) >= curve_speed_error:
                 effective_pwm = curve_pwm
             else:
                 effective_pwm = pwm_value
-             
-                            
-        if flag_person_detected:
+         
+        if flag_person_detected or flag_tl == 0:
             car.command.stop = True
         else:
             car.command.stop = False
+
+        if panel.operation_mode == "race" and flag_stop:
+            set_lane_preference("left")
 
         effective_pwm = round(max(0, min(MAX_PWM, effective_pwm)))
         if effective_pwm < MIN_MOVING_PWM:
@@ -611,15 +647,17 @@ def mainLoop():
 
 
             if not remote_control_active:
-                car.command.lights = (car.command.lights | 0b1) if lane_detection.preference_lane == "left" else (car.command.lights & ~0b1)
-                car.command.lights = (car.command.lights | 0b10) if lane_detection.preference_lane == "right" else (car.command.lights & ~0b10)
+                
+                if panel.operation_mode != "race":
+                    car.command.lights = (car.command.lights | 0b1) if lane_detection.preference_lane == "left" else (car.command.lights & ~0b1)
+                    car.command.lights = (car.command.lights | 0b10) if lane_detection.preference_lane == "right" else (car.command.lights & ~0b10)
                 car.command.lights = (car.command.lights | 0b100) if flag_person_detected else (car.command.lights & ~0b100)
                 car.command.lights = (car.command.lights | 0b1000) if effective_pwm == 0 else (car.command.lights & ~0b1000)
                 car.command.lights = (car.command.lights | 0b10000) if True else (car.command.lights & ~0b10000)
                 
             car.command.servo = int(angle + 90)
             car.command.stop = (
-                False if remote_control_active else flag_person_detected
+                False if remote_control_active else flag_person_detected or flag_tl == 0
             )
             car.command.speed = effective_pwm if (run or remote_control_active) else 0
             car.command.reverse = reverse if (run or remote_control_active) else False
@@ -650,11 +688,20 @@ def mainLoop():
                     run_button = car.telemetry.run_button
                     if run_button and not last_telemetry_run_button:
                         point_stop_latched = False
+                        set_lane_preference("right")
+                        
                     last_telemetry_run_button = run_button
                 else:
                     log(f"[SERIAL] Telemetria ignorada: JSON não é objeto: {data}", "warn")
             except (TypeError, ValueError, json.JSONDecodeError):
                 log(f"[SERIAL] Telemetria inválida: {data}", "warn")
+            
+
+        if flag_person_detected:
+            buzina = pygame.mixer.Sound("sounds/buzina.wav")
+            # Toca instantaneamente em segundo plano (não trava nada)
+            buzina.play()
+
 
         # ── Dashboard ──────────────────────────────────────
         route_points = [str(point) for point in getattr(nav, "route", [])]
@@ -718,6 +765,33 @@ def mainLoop():
                 "can": car.telemetry.can,
             },
         })
+        
+        vehicle_info = {
+            "hud": hud,
+            "command": car.command.to_dict(),
+            "telemetry": {
+                "speed": car.telemetry.speed,
+                "battery": car.telemetry.battery,
+                "battery_state": car.telemetry.battery_state,
+                "run_button": car.telemetry.run_button,
+                "run_button_presses": car.telemetry.run_button,
+                "left": car.telemetry.left,
+                "f_left": car.telemetry.f_left,
+                "f_right": car.telemetry.f_right,
+                "right": car.telemetry.right,
+            },
+            "time": time.strftime("%H:%M"),
+        }
+
+        try:
+            esp32_tx_queue.put_nowait(vehicle_info)
+        except queue.Full:
+            try:
+                esp32_tx_queue.get_nowait()
+            except queue.Empty:
+                pass
+            esp32_tx_queue.put_nowait(vehicle_info)
+        
 
         sign_det.draw(sign_view)
         panel.update_frames(img, limiar_bgr, sign_view)
@@ -769,6 +843,24 @@ def sign_thread():
             flag_point_detected = point_detected
             flag_person_detected = person_detected
 
+def esp32_sender_thread():
+    if esp32_serial is None:
+        return
+
+    while True:
+        vehicle_info = esp32_tx_queue.get()
+
+        try:
+            payload = json.dumps(
+                vehicle_info,
+                ensure_ascii=False,
+                separators=(",", ":")
+            )
+
+            esp32_serial.write(payload.encode("utf-8") + b"\n")
+
+        except (serial.SerialException, OSError) as e:
+            log(f"[ESP32] Falha ao enviar: {e}", "warn")
 
 # ── Inicialização das threads ────────────────────────────
 threading.Thread(
@@ -782,6 +874,9 @@ t_sign.start()
 
 t_serial = threading.Thread(target=serial_reader_thread, daemon=True)
 t_serial.start()
+
+t_esp32 = threading.Thread( target=esp32_sender_thread, daemon=True )
+t_esp32.start()
 
 t = threading.Thread(target=mainLoop, daemon=True)
 t.start()

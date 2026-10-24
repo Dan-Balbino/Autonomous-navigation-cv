@@ -275,7 +275,13 @@ class ControlPanel:
 
         self._app = QApplication.instance() or QApplication([])
 
-        self.config_path = "config/config.json"
+        project_dir = os.path.dirname(os.path.abspath(__file__))
+        self._operation_mode_files = {
+            "demo": os.path.join(project_dir, "config", "config_demo.json"),
+            "race": os.path.join(project_dir, "config", "config_race.json"),
+        }
+        self.operation_mode = "demo"
+        self.config_path = self._operation_mode_files[self.operation_mode]
         self.frame_width  = width
         self.frame_height = height
         self.running      = False
@@ -370,16 +376,43 @@ class ControlPanel:
 
     def _resetar(self):
         if not os.path.exists(self.config_path):
-            self.log("[PAINEL] Nenhum config.json encontrado", "error")
+            self.log(f"[PAINEL] Configuração não encontrada: {self.config_path}", "error")
             return
         with open(self.config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
         for key, val in config.items():
             if key in self.vars:
                 self._set_value(key, val)
-        self.log("[PAINEL] Valores restaurados do config.json", "info")
+        self.log(f"[PAINEL] Valores restaurados: {os.path.basename(self.config_path)}", "info")
         if self._dashboard_url and not self._applying_server:
             self._push_all(config)
+
+    def _select_operation_mode(self):
+        mode = self._operation_mode_combo.currentData()
+        config_path = self._operation_mode_files[mode]
+        try:
+            with open(config_path, "r", encoding="utf-8") as config_file:
+                config = json.load(config_file)
+            if not isinstance(config, dict):
+                raise ValueError("o arquivo deve conter um objeto JSON")
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            self._operation_mode_combo.setCurrentIndex(
+                self._operation_mode_combo.findData(self.operation_mode)
+            )
+            self.log(f"[PAINEL] Não foi possível carregar a configuração: {exc}", "error")
+            return
+
+        self.operation_mode = mode
+        self.config_path = config_path
+        for key, value in config.items():
+            if key in self.vars:
+                self._set_value(key, value)
+        if self._dashboard_url:
+            self._push_all(config)
+        self.log(
+            f"[PAINEL] Modo {mode} selecionado: {os.path.basename(config_path)}",
+            "ok",
+        )
 
     def get_connection(self):
         """Retorna (com, cam_idx) se reconexão foi pedida, senão None. com=None = modo teste."""
@@ -556,6 +589,17 @@ class ControlPanel:
         title.setAlignment(Qt.AlignLeft)
         header.addWidget(title)
         header.addStretch()
+        self._operation_mode_combo = QComboBox()
+        self._operation_mode_combo.addItem("Demonstração", "demo")
+        self._operation_mode_combo.addItem("Corrida", "race")
+        self._operation_mode_combo.setCurrentIndex(
+            self._operation_mode_combo.findData(self.operation_mode)
+        )
+        self._operation_mode_combo.setToolTip("Escolha a configuração do carro")
+        header.addWidget(self._operation_mode_combo)
+        apply_mode_button = _btn("Aplicar modo", PURPLE)
+        apply_mode_button.clicked.connect(self._select_operation_mode)
+        header.addWidget(apply_mode_button)
         for label, key, color in (
             ("▶  Iniciar", "iniciar", GREEN),
             ("■  Parar", "parar", RED),

@@ -12,7 +12,7 @@ DIRECTION_DEADZONE = 15
 TRACK_MARGIN = 60
 # Distância máxima (px) de uma faixa até o centro de referência do carro.
 # Faixa mais longe que isso é descartada (metade da largura nominal da pista)
-MAX_LANE_DISTANCE = 130
+MAX_LANE_DISTANCE = 137
 # Faixa aceita pra uma medição de largura (px, bird's eye). Só descarta leitura absurda.
 TRACK_MIN_WIDTH = 80
 TRACK_MAX_WIDTH = 2 * MAX_LANE_DISTANCE  # duas faixas a ≤130 px do centro: no máx. 260
@@ -28,7 +28,7 @@ filtered_error = None
 GLARE_FILTER = True
 # Tem que ser MAIOR que a espessura da linha na bird's eye e MENOR que a mancha (em px)
 GLARE_KERNEL = 30
-LANE_RESET_TIME = 1.0
+LANE_RESET_TIME = 0.6
 
 # Paleta (BGR)
 COLOR_LANE  = (255, 200, 0)    # faixa aceita

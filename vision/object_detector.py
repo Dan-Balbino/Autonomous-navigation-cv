@@ -21,6 +21,9 @@ class ObjectDetector:
     COOLDOWN_SECONDS = 3.0
     LIGHT_TIMEOUT = 2.0
 
+    # SEMÁFORO: só considera caixas cujo centro esteja acima dessa fração da altura (0.5 = metade de cima)
+    LIGHT_MAX_Y_RATIO = 0.67
+
     MIN_STOP_CONF = 0.8
     MIN_STOP_AREA = 1500
 
@@ -56,6 +59,7 @@ class ObjectDetector:
     PERSON_VALID_COLOR = (255, 0, 0)            # Azul
     PERSON_INVALID_COLOR = INVALID_COLOR
     RIGHT_DETOUR_VALID_COLOR = (255, 0, 180)  # Magenta
+    LIGHT_ZONE_COLOR = (0, 255, 255)            # Amarelo (linha da zona do semáforo)
     STOP_POINT_COLORS = {  # noqa: RUF012
         "ponto_a": (255, 128, 0),
         "ponto_b": (0, 200, 255),
@@ -74,6 +78,12 @@ class ObjectDetector:
     RIGHT_DETOUR_REQUIRED_FRAMES = 3
 
     MIN_STOP_POINT_CONF = 0.1
+
+    # PONTOS A/B/C: a diagonal é suavizada (EMA) e o ponto só vale depois de N inferências seguidas.
+    STOP_POINT_REQUIRED_FRAMES = 2  # inferências seguidas vendo o ponto antes de poder valer
+    STOP_POINT_EMA_ALPHA = 0.5      # 1.0 = sem suavização; menor = mais estável (e mais atraso)
+    STOP_POINT_LOST_FRAMES = 3      # inferências sem ver o ponto antes de esquecer a medição
+    STOP_POINT_DEBUG = False       # imprime diag/ema por inferência (use pra calibrar)
 
     def __init__(self, model_path: str, conf_threshold: float | None = None):
         self._traffic_signs_model = None                # Modelo customizado para sinais de trânsito
@@ -97,6 +107,16 @@ class ObjectDetector:
         self._min_stop_point_diagonals = {
             self._normalize_label(label): 0
             for label in self.STOP_POINTS_LABELS
+        }
+        # Estado dos pontos A/B/C (por label normalizado)
+        self._stop_point_ema = {
+            self._normalize_label(label): None for label in self.STOP_POINTS_LABELS
+        }
+        self._stop_point_seen = {
+            self._normalize_label(label): 0 for label in self.STOP_POINTS_LABELS
+        }
+        self._stop_point_lost = {
+            self._normalize_label(label): 0 for label in self.STOP_POINTS_LABELS
         }
         self._min_light_diagonal = 0
         self._min_light_confidence = 0.0
@@ -136,6 +156,7 @@ class ObjectDetector:
                   stop_wait_seconds=None, cooldown_seconds=None,
                   light_timeout_seconds=None, detect_interval=None,
                   min_light_diagonal=None, light_confidence=None,
+                  light_max_y_ratio=None,
                   person_confidence=None, min_person_diagonal=None,
                   person_center_ratio=None,
                   min_person_height=None,
@@ -149,6 +170,9 @@ class ObjectDetector:
                   right_detour_confidence=None,
                   min_right_detour_diagonal=None,
                   right_detour_required_frames=None,
+                  stop_point_required_frames=None,
+                  stop_point_ema_alpha=None,
+                  stop_point_lost_frames=None,
                   stop_point_confidence=None,
                   min_stop_point_diagonal=None,
                   stop_point_a_confidence=None,
@@ -178,6 +202,8 @@ class ObjectDetector:
             self._min_light_diagonal = max(0, int(min_light_diagonal))
         if light_confidence is not None:
             self._min_light_confidence = max(0.0, min(1.0, float(light_confidence)))
+        if light_max_y_ratio is not None:
+            self.LIGHT_MAX_Y_RATIO = max(0.0, min(1.0, float(light_max_y_ratio)))
         if person_confidence is not None:
             self.PERSON_CONF_THRESHOLD = max(0.0, min(1.0, float(person_confidence)))
         if min_person_diagonal is not None:
@@ -218,6 +244,12 @@ class ObjectDetector:
             diagonal = max(0, int(min_stop_point_diagonal))
             for label in self._min_stop_point_diagonals:
                 self._min_stop_point_diagonals[label] = diagonal
+        if stop_point_required_frames is not None:
+            self.STOP_POINT_REQUIRED_FRAMES = max(1, int(stop_point_required_frames))
+        if stop_point_ema_alpha is not None:
+            self.STOP_POINT_EMA_ALPHA = max(0.05, min(1.0, float(stop_point_ema_alpha)))
+        if stop_point_lost_frames is not None:
+            self.STOP_POINT_LOST_FRAMES = max(1, int(stop_point_lost_frames))
 
         point_settings = (
             ("ponto_a", stop_point_a_confidence, min_stop_point_a_diagonal),
@@ -239,6 +271,7 @@ class ObjectDetector:
 
         self._counter = 0
         self._boxes = self._predict(frame)
+        self._update_stop_point_state()
         self._person_boxes = self._predict_people(frame)
         self._update_person_state()
         self._update_traffic_light(frame)
@@ -248,6 +281,7 @@ class ObjectDetector:
 
     def draw(self, img) -> None:
         self._draw_person_roi(img)
+        self._draw_light_zone(img)
 
         for x1, y1, x2, y2, conf in self._person_boxes:
             if conf < self.DISPLAY_CONF_THRESHOLD:
@@ -267,7 +301,7 @@ class ObjectDetector:
             elif self._is_stop_point_label(lbl):
                 normalized = self._normalize_label(lbl)
                 color = (self.STOP_POINT_COLORS[normalized]
-                         if self._is_valid_stop_point(label, x1, y1, x2, y2, conf)
+                         if self._is_confirmed_stop_point(normalized)
                          else self.INVALID_COLOR)
             elif self._is_stop_label(lbl):
                 color = (self.STOP_VALID_COLOR
@@ -288,6 +322,15 @@ class ObjectDetector:
             return
         color = self.PERSON_VALID_COLOR if self._person_confirmed else self.INVALID_COLOR
         cv2.polylines(img, [poly], True, color, 1, cv2.LINE_AA)
+
+    def _draw_light_zone(self, img) -> None:
+        """Desenha a linha-limite da área onde semáforos são considerados (acima dela)."""
+        h, w = img.shape[:2]
+        y = int(h * self.LIGHT_MAX_Y_RATIO)
+        color = self.LIGHT_ZONE_COLOR
+        cv2.line(img, (0, y), (w - 1, y), color, 1, cv2.LINE_AA)
+        cv2.putText(img, "Zona do semaforo", (6, max(12, y - 6)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
 
     @staticmethod
     def _draw_box(img, x1, y1, x2, y2, label, confidence, color) -> None:
@@ -361,6 +404,14 @@ class ObjectDetector:
         return self._yolo_standard_model
 
     # YOLO
+    def _box_rank(self, normalized, x1, y1, x2, y2, conf):
+        """Critério de desempate entre caixas do mesmo label (maior ganha)."""
+        if self._is_right_detour_label(normalized):
+            diagonal = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
+            # primeiro quem passa na confiança mínima, depois a maior diagonal
+            return (conf >= self.MIN_RIGHT_DETOUR_CONF, diagonal)
+        return (conf,)
+
     def _predict(self, frame) -> list:
         model = self._get_traffic_signs_model()
         if model is None:
@@ -381,7 +432,9 @@ class ObjectDetector:
                         or self._is_right_detour_label(normalized)
                         or self._is_stop_point_label(normalized)):
                     current = best_by_label.get(normalized)
-                    if current is None or conf > current[5]:
+                    rank = self._box_rank(normalized, x1, y1, x2, y2, conf)
+                    if current is None or rank > self._box_rank(
+                            normalized, *current[:4], current[5]):
                         best_by_label[normalized] = (x1, y1, x2, y2, label, conf)
                 elif label not in self._ignored_labels:
                     self._ignored_labels.add(label)
@@ -500,33 +553,80 @@ class ObjectDetector:
         return self._person_confirmed
 
     # ── PONTOS A/B/C ──────────────────────────────────────────────────────────
+    def _update_stop_point_state(self) -> None:
+        """Mede a diagonal de cada ponto com EMA, uma vez por inferência."""
+        for label in self._stop_point_ema:
+            diagonal = 0.0
+            for x1, y1, x2, y2, box_label, conf in self._boxes:
+                if (self._normalize_label(box_label) == label
+                        and conf >= self._stop_point_confidences[label]):
+                    diagonal = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
+                    break
+
+            if diagonal > 0.0:
+                previous = self._stop_point_ema[label]
+                alpha = self.STOP_POINT_EMA_ALPHA
+                self._stop_point_ema[label] = (
+                    diagonal if previous is None else alpha * diagonal + (1 - alpha) * previous
+                )
+                self._stop_point_seen[label] += 1
+                self._stop_point_lost[label] = 0
+                if self.STOP_POINT_DEBUG:
+                    print(f"[{label}] diag={diagonal:.0f} ema={self._stop_point_ema[label]:.0f} "
+                          f"vistas={self._stop_point_seen[label]} "
+                          f"alvo={self._min_stop_point_diagonals[label]}")
+                continue
+
+            self._stop_point_lost[label] += 1
+            if self._stop_point_lost[label] >= self.STOP_POINT_LOST_FRAMES:
+                self._stop_point_ema[label] = None
+                self._stop_point_seen[label] = 0
+
+    def _is_confirmed_stop_point(self, label: str) -> bool:
+        """Visto por N inferências seguidas e com diagonal suavizada >= mínima do ponto."""
+        normalized = self._normalize_label(label)
+        ema = self._stop_point_ema.get(normalized)
+        if ema is None:
+            return False
+        return (self._stop_point_seen[normalized] >= self.STOP_POINT_REQUIRED_FRAMES
+                and ema >= self._min_stop_point_diagonals[normalized])
+
     def get_stop_points(self) -> list:
-        """Retorna os pontos detectados na última inferência: [(label, conf, (x1,y1,x2,y2)), ...]"""
+        """Retorna os pontos confirmados na última inferência: [(label, conf, (x1,y1,x2,y2)), ...]"""
         return [
             (label, conf, (x1, y1, x2, y2))
             for x1, y1, x2, y2, label, conf in self._boxes
             if self._is_stop_point_label(label)
-            and self._is_valid_stop_point(label, x1, y1, x2, y2, conf)
+            and self._is_confirmed_stop_point(label)
         ]
 
     def has_valid_stop_point(self, route_point) -> bool:
-        """Verifica se a placa válida corresponde ao destino atual da rota."""
+        """Verifica se o ponto confirmado corresponde ao destino atual da rota."""
         if route_point is None or not str(route_point).strip():
             return False
         expected = self._normalize_label(str(route_point))
         if not expected.startswith("ponto_"):
             expected = f"ponto_{expected}"
-        for x1, y1, x2, y2, label, conf in self._boxes:
-            if (self._normalize_label(label) == expected
-                    and self._is_valid_stop_point(label, x1, y1, x2, y2, conf)):
-                return True
-        return False
+        return self._is_confirmed_stop_point(expected)
+
+    def get_stop_point_progress(self, route_point) -> float:
+        """0.0 = sem o ponto; 1.0 = chegou. Útil pra reduzir a velocidade na aproximação."""
+        if route_point is None or not str(route_point).strip():
+            return 0.0
+        expected = self._normalize_label(str(route_point))
+        if not expected.startswith("ponto_"):
+            expected = f"ponto_{expected}"
+        ema = self._stop_point_ema.get(expected)
+        target = self._min_stop_point_diagonals.get(expected, 0)
+        if ema is None or target <= 0:
+            return 0.0
+        return min(1.0, ema / target)
 
     # ── SEMÁFORO ──────────────────────────────────────────────────────────────
     def _find_traffic_light_box(self):
         """
-        Retorna a caixa do semáforo
-        com maior confiança.
+        Retorna a caixa do semáforo com maior confiança,
+        considerando só a metade de cima da imagem (LIGHT_MAX_Y_RATIO).
         """
         best = None
         for x1, y1, x2, y2, label, conf in self._boxes:
@@ -536,6 +636,9 @@ class ObjectDetector:
                     continue
                 diagonal = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
                 if diagonal < self._min_light_diagonal:
+                    continue
+                # Só semáforos acima da linha-limite (centro da caixa)
+                if self._frame_h and (y1 + y2) / 2 > self._frame_h * self.LIGHT_MAX_Y_RATIO:
                     continue
                 if best is None or conf > best[5]:
                     best = (x1, y1, x2, y2, label, conf)

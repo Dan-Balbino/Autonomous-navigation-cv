@@ -81,7 +81,7 @@ float speed_4 = 0.0;
 // ================= SETUP =================
 
 void setup() {
-  Serial.begin(9600); // matches master baudrate
+  Serial.begin(115200); // matches master baudrate
 
   Wire.begin(8);
   Wire.onReceive(onReceive);

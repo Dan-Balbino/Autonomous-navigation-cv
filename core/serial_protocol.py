@@ -1,6 +1,8 @@
-import time
-import serial
 import json
+import time
+
+import serial
+
 
 class SerialProtocol:
     def __init__(self, port, baudrate=115200, timeout=0.1):

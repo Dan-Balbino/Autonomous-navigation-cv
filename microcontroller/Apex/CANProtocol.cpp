@@ -6,7 +6,7 @@ static CarCommand* command = nullptr;
 static Telemetry* telemetry = nullptr;
 
 CANStatus lastMessage;
-
+ int stop_counter = 0;
 
 void beginCAN(int cs_pin, int interrupt_pin) {
   CAN.setPins(cs_pin, interrupt_pin);
@@ -44,7 +44,21 @@ void receiveUltrasonic(Telemetry* telemetry, CarCommand* command, int packetSize
   telemetry->f_right = (data[0] >> 4) & 0x03;
   telemetry->right   = (data[0] >> 6) & 0x03;
 
-  command->vehicleState = data[1] & 0x01;
+  if (!(data[1] & 0x01)) {
+    stop_counter++;
+  } else {
+    stop_counter = 0;
+  }
+
+  if (stop_counter > 2) {
+    stop_counter = 2;
+  }
+
+ if (stop_counter >= 2) {
+  command->vehicleState = false;
+ } else {
+  command->vehicleState = true;
+ }
 
   lastMessage.ultrasonic = millis();
 }
@@ -91,6 +105,7 @@ void sendCommand(int id, int data) {
   CAN.endPacket();
 }
 
+
 void sendMotorCommand(int id, int16_t ang, int16_t pwm, bool reverse, bool stop, bool vehicle_state) {
   bool stop_car = stop || !vehicle_state;
 
@@ -112,5 +127,9 @@ bool isModuleOnline(unsigned long lastMessage, unsigned long timeout) {
 void updateCANStatus() {
   telemetry->canModules[MOTOR].status = isModuleOnline(lastMessage.motor, 1000);
   telemetry->canModules[ULTRASONIC].status = isModuleOnline(lastMessage.ultrasonic, 1000);
+
+  if (!telemetry->canModules[ULTRASONIC].status) {
+    command->vehicleState = false;
+  }
 }
 

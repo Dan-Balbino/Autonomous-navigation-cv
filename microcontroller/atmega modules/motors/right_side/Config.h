@@ -9,7 +9,7 @@
 #define SIDE_RIGHT 1
 #define SIDE SIDE_RIGHT
 
-#define DIFFERENTIAL_LIMIT 0.15;
+#define DIFFERENTIAL_LIMIT 0.10;
 
 // --- PWM Control ---
 #define OUTPUT_LIMIT 255

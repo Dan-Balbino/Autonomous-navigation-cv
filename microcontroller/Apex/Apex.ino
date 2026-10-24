@@ -17,6 +17,8 @@ unsigned long last = 0;
 unsigned long lastTelemetry = 0;
 bool lastVehicleState = true;
 
+unsigned long lastBatteryMsg = 0;
+bool batteryEverReceived = false;
 
 bool button_was_pressed = false;
 unsigned long button_release_time = 0;
@@ -74,7 +76,12 @@ void loop() {
   }
 
   // Lê Serial1
-  readSerial1(telemetry.battery, telemetry.battery_current, telemetry.battery_percentage, telemetry.battery_state);
+  if (readSerial1(telemetry.battery, telemetry.battery_current, telemetry.battery_percentage, telemetry.battery_state)) {
+    lastBatteryMsg = millis();  // útil pra timeout, igual ao CAN
+    batteryEverReceived = true;
+  }
+
+  telemetry.canModules[BATERY].status = batteryEverReceived && (millis() - lastBatteryMsg < 1000);
 
   testBlock();
   readButton();
